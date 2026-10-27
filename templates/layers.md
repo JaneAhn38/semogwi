@@ -119,64 +119,66 @@ card-01 ~ card-05  (Frame, 1080 × 1350)
 
 ---
 
-## 5. slides.json 데이터 연결 계획
 
-> ⚠️ **주의: 아래 `slides.json` 구조와 필드명은 모두 가정(예시)입니다.**
-> 실제 구조는 아직 확정되지 않았으며, 확정되면 이 문서를 함께 수정합니다.
+## 5. slides.json 규격 (MVP 확정)
 
-### 5.1 예시 구조 (가정)
+> ✅ 2026-10-27 확정. write-copy Skill이 이 규격으로 `slides.json`을 만들고, fill-figma Skill이 이 규격으로 읽습니다. 바꿀 때는 두 Skill과 이 문서를 함께 수정합니다.
+
+### 5.1 구조
 
 ```json
 {
   "series": "세모귀",
+  "topic": "치이카와 서사 정리",
+  "character": "chiikawa",
   "slides": [
     {
       "frame": "card-01",
-      "title": "제목 예시",
-      "body": "본문 예시입니다.",
-      "source": "출처 예시 1",
-      "image": "assets/character-01.png"
-    },
-    {
-      "frame": "card-02",
-      "title": "제목 예시",
-      "body": "본문 예시입니다.",
-      "source": "출처 예시 2",
-      "image": "assets/character-02.png"
+      "title": "제목 (20자 이내)",
+      "body": "본문 (80자 이내)",
+      "source": "출처: 치이카와 공식 X",
+      "image": "assets/characters/chiikawa/cutout/chiikawa-01.png"
     }
   ]
 }
 ```
 
-### 5.2 필드 ↔ 레이어 매핑 (가정)
+- `slides`는 **항상 5개**이며, 순서대로 `card-01` ~ `card-05`에 대응합니다.
+- `card-01`은 표지, `card-02` ~ `card-05`는 본문 카드입니다.
 
-| slides.json 필드 (가정) | 대상 프레임/레이어 | 비고 |
-| --- | --- | --- |
-| `slides[n].frame` | `card-01` ~ `card-05` | 데이터를 넣을 프레임 지정 |
-| `slides[n].title` | `title` | 현재 자동화 |
-| `slides[n].body` | `body` | 현재 자동화 |
-| `slides[n].source` | `source` | 현재 자동화. 필드명 `source`는 가정이며 미확정 |
-| `slides[n].image` | `main-image` | 추후 자동화 |
-| (없음) | `page-number` | 현재 고정. 추후 배열 순서로 생성 가능 |
-| (없음) | `bottom-overlay` | 고정 |
+### 5.2 필드 규칙
 
-### 5.3 연결 흐름 (계획)
+| 필드 | 대상 레이어 | 필수 | 규칙 |
+| --- | --- | --- | --- |
+| `series` | - | ✅ | 항상 `"세모귀"` |
+| `topic` | - | ✅ | 이번 카드뉴스 주제 |
+| `character` | - | ✅ | `assets/characters/` 아래 폴더 이름과 같게 (예: `chiikawa`) |
+| `slides[n].frame` | 프레임 | ✅ | `card-01` ~ `card-05` 중 하나, 중복 불가 |
+| `slides[n].title` | `title` | ✅ | **20자 이내** (공백 포함) |
+| `slides[n].body` | `body` | ✅ | **80자 이내** (공백 포함), 1장 1메시지 |
+| `slides[n].source` | `source` | 선택 | **30자 이내**, `출처: ` 로 시작. 비어 있으면(`""`) 레이어 숨김 |
+| `slides[n].image` | `main-image` | 선택 | `cutout/` 폴더의 누끼 이미지 경로. MVP에서는 `card-01`만 사용 |
 
-1. `slides.json`을 읽습니다.
-2. 각 항목의 `frame` 값(가정)으로 Figma 프레임(`card-01` ~ `card-05`)을 찾습니다.
-3. 프레임 안에서 이름이 `title`, `body`, `source`인 레이어를 찾아 텍스트를 교체합니다. (`source` 레이어에는 `source` 값(가정)을 넣습니다.)
-4. (추후) `main-image` 레이어의 이미지를 `image` 값(가정)으로 교체합니다.
-5. 고정 레이어(`page-number`, `bottom-overlay`)는 건드리지 않습니다.
-6. 결과물을 1080 × 1350 px 이미지로 내보냅니다.
+- 글자 수를 넘기면 write-copy 단계에서 줄여서 다시 씁니다. fill-figma는 넘친 텍스트를 자르지 않습니다.
+- `image`에 쓰는 이미지는 반드시 `sources.md`에 출처가 기록되어 있어야 합니다.
 
-### 5.4 확인 필요 사항
+### 5.3 연결 흐름
 
-- [ ] `slides.json` 최종 필드명 확정 (출처 필드명 `source` 포함)
-- [ ] `source` 값이 비어 있는 카드의 처리 방식 (레이어 숨김 / 빈 텍스트 유지)
-- [ ] `source` 최대 글자 수 및 줄바꿈 규칙
-- [ ] 프레임 지정 방식 확정 (`frame` 필드 사용 vs. 배열 순서 사용)
-- [ ] `title` / `body` 최대 글자 수 및 줄바꿈 규칙
-- [ ] 텍스트 교체 시 Jua / Gowun Dodum 폰트가 로드되는지 확인
-- [ ] `main-image` 자동화 시 이미지 소스 형식 (로컬 경로 / URL)
-- [ ] `page-number` 자동 생성 여부
-- [ ] 카드 수가 5장이 아닐 때의 처리 방식
+1. `projects/날짜_주제/slides.json`을 읽습니다.
+2. 원본 템플릿을 복제하고, 복제본에서 `frame` 값으로 프레임(`card-01` ~ `card-05`)을 찾습니다.
+3. 프레임 안의 `title`, `body`, `source` 레이어 텍스트를 교체합니다. `source`가 비어 있으면 레이어를 숨깁니다.
+4. `card-01`에 `image`가 있으면 `main-image`를 교체합니다.
+5. 고정 레이어(`page-number`, `bottom-overlay`)와 배경은 건드리지 않습니다.
+6. 각 프레임을 1080 × 1350 px PNG로 `projects/날짜_주제/png/`에 내보냅니다.
+
+### 5.4 확정 사항 / 남은 확인
+
+- [x] 카드 수: **5장 고정** (6~7장은 확장 단계)
+- [x] 필드명: `frame`, `title`, `body`, `source`, `image`
+- [x] 프레임 지정: `frame` 필드 사용
+- [x] 글자 수: 제목 20자, 본문 80자, 출처 30자
+- [x] 출처가 빈 카드: `source` 레이어 숨김
+- [x] `page-number`: 현재 고정 유지
+- [x] `main-image`: 로컬 경로, MVP는 표지(`card-01`)만
+- [ ] 텍스트 교체 시 Jua / Gowun Dodum 폰트가 로드되는지 확인 (fill-figma 테스트 때)
+- [ ] 제목·본문 줄바꿈 기준 (실제 템플릿에 넣어 보고 확정)
