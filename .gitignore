@@ -1,2 +1,13 @@
 __pycache__/
 *.pyc
+
+# 사용 허가가 확인되지 않은 테스트 이미지 (sources.md에서 '확인 필요')
+# 이름이 test로 시작하는 파일만 제외합니다. 정상 콘텐츠 이미지는 test로 시작하지 않게 이름을 짓습니다.
+assets/characters/*/original/test.*
+assets/characters/*/original/test-*
+assets/characters/*/cutout/test.*
+assets/characters/*/cutout/test-*
+
+# 테스트 프로젝트(폴더 이름이 _테스트로 끝남)의 PNG 출력물
+# 실제 카드뉴스 프로젝트의 png/ 폴더는 제외하지 않습니다.
+projects/*_테스트/png/
