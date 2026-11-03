@@ -45,7 +45,7 @@ LAYERS = {
 }
 FRAME_SIZE = (1080, 1350)
 MAIN_IMAGE_SIZE = (908, 780)
-IMAGE_FRAMES = {"card-01"}  # MVP: 표지만 이미지 사용. image가 빈 카드는 Figma에서 main-image를 숨김
+IMAGE_FRAMES = set(FRAMES)  # card-01 ~ card-05 모두 이미지 사용 가능. image가 빈 카드는 Figma에서 main-image를 숨김
 
 # --- 글자 수 규칙 (줄바꿈 문자 \n은 세지 않음) ---
 TITLE_MAX = 20
@@ -122,9 +122,13 @@ EXT_FORMATS = {".png": "png", ".jpg": "jpeg", ".jpeg": "jpeg", ".webp": "webp", 
 # ---------------------------------------------------------------------------
 # sources.md 조회
 # ---------------------------------------------------------------------------
-def find_source_row(image_rel: str):
-    """sources.md 이미지 목록에서 누끼 경로(또는 원본 경로)가 일치하는 행을 찾습니다."""
-    sources = ROOT / "sources.md"
+def find_source_row(image_rel: str, sources: Path = None):
+    """sources.md 이미지 목록에서 누끼 경로(또는 원본 경로)가 일치하는 행을 찾습니다.
+
+    sources를 주지 않으면 공용 sources.md(프로젝트 루트)를 봅니다.
+    사용자 지정 카드 이미지는 프로젝트 폴더의 sources.md를 넘깁니다 (assign_images.py가 기록).
+    """
+    sources = sources or ROOT / "sources.md"
     if not sources.is_file():
         return None
     for line in sources.read_text(encoding="utf-8").splitlines():
@@ -249,7 +253,7 @@ def validate(slides_path: Path, check_output: bool = True):
         # image
         img_state = "-"
         if image:
-            img_state = check_image(fr, image, character, errors, warnings)
+            img_state = check_image(fr, image, character, errors, warnings, slides_path.parent)
         rows.append({"frame": fr, "title": t, "body": b, "bodyLines": len(body_lines), "source": src,
                      "sourceHidden": src == 0, "image": image, "imageState": img_state})
 
@@ -262,15 +266,22 @@ def validate(slides_path: Path, check_output: bool = True):
     return {"pageName": page_name, "errors": errors, "warnings": warnings, "rows": rows}
 
 
-def check_image(fr, image, character, errors, warnings):
+def check_image(fr, image, character, errors, warnings, project_dir: Path = None):
     if fr not in IMAGE_FRAMES:
-        errors.append(f"{fr}: MVP에서는 {sorted(IMAGE_FRAMES)}에만 image를 넣습니다")
+        errors.append(f"{fr}: {sorted(IMAGE_FRAMES)}에만 image를 넣을 수 있습니다")
     if Path(image).is_absolute() or ".." in Path(image).parts:
         errors.append(f"{fr}: image는 프로젝트 루트 기준 상대 경로여야 합니다: {image}")
         return "INVALID"
-    expected_prefix = f"assets/characters/{character}/cutout/"
-    if not image.replace("\\", "/").startswith(expected_prefix):
-        errors.append(f"{fr}: image는 {expected_prefix} 아래의 누끼 이미지여야 합니다")
+    image_posix = image.replace("\\", "/")
+    asset_prefix = f"assets/characters/{character}/cutout/"
+    project_prefix = None
+    if project_dir is not None and project_dir.is_relative_to(ROOT):
+        project_prefix = f"{project_dir.relative_to(ROOT).as_posix()}/input/"
+    # 사용자 지정 카드 이미지(assign_images.py 결과)는 프로젝트 input/ 아래, 출처는 프로젝트 sources.md
+    is_project_image = bool(project_prefix) and image_posix.startswith(project_prefix)
+    if not is_project_image and not image_posix.startswith(asset_prefix):
+        allowed = asset_prefix + (f" 또는 {project_prefix}" if project_prefix else "")
+        errors.append(f"{fr}: image는 {allowed} 아래의 이미지여야 합니다")
     path = ROOT / image
     if not path.is_file():
         errors.append(f"{fr}: image 파일이 없습니다: {image}")
@@ -283,7 +294,7 @@ def check_image(fr, image, character, errors, warnings):
     ext_fmt = EXT_FORMATS.get(path.suffix.lower())
     if ext_fmt != fmt:
         warnings.append(f"{fr}: 확장자({path.suffix})와 실제 형식({fmt})이 다릅니다. 업로드 Content-Type은 실제 형식({FIGMA_FORMATS[fmt]})으로 보냅니다")
-    if fmt != "png":
+    if fmt != "png" and not is_project_image:
         warnings.append(f"{fr}: 누끼 이미지는 투명 배경 PNG가 기준입니다 (현재: {fmt})")
     if path.stat().st_size > 10 * 1024 * 1024:
         errors.append(f"{fr}: 이미지가 10MB를 넘어 Figma에 업로드할 수 없습니다")
@@ -298,9 +309,20 @@ def check_image(fr, image, character, errors, warnings):
                 f"{fr}: 이미지 {w}x{h}가 main-image({MAIN_IMAGE_SIZE[0]}x{MAIN_IMAGE_SIZE[1]})보다 작아 FIT으로 {scale:.2f}배 확대되어 {level}. "
                 f"확대 없이 넣으려면 {MAIN_IMAGE_SIZE[0]}x{MAIN_IMAGE_SIZE[1]} 안에 꽉 차는 크기(이 비율이면 {round(w * scale)}x{round(h * scale)}) 이상이 필요합니다"
             )
-            hint = upscale_hint(image)
+            hint = ("업로드한 이미지가 작습니다. 더 큰 이미지를 다시 지정해 주세요 (원본을 임의로 확대하지 않음)"
+                    if is_project_image else upscale_hint(image))
             if hint:
                 warnings.append(f"{fr}: {hint}")
+
+    if is_project_image:
+        project_sources = project_dir / "sources.md"
+        row = find_source_row(image, project_sources)
+        if row is None:
+            errors.append(f"{fr}: 프로젝트 sources.md에 이 이미지의 출처가 없습니다: {image}")
+        elif row["permission"] != "허가됨":
+            # 사용자 지정 이미지는 사용 권한이 확인된 것만 카드에 쓴다 (업로드만으로 허가로 보지 않음)
+            errors.append(f"{fr}: 사용 권한이 확인되지 않은 이미지입니다 ('{row['permission']}') — 카드에 쓸 수 없습니다")
+        return state
 
     row = find_source_row(image)
     if row is None:

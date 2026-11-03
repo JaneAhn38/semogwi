@@ -27,7 +27,7 @@
 | --- | --- | --- | --- |
 | `title` | 카드별 제목 | 텍스트 (Jua) | ✅ 자동화 대상 |
 | `body` | 카드별 본문 | 텍스트 (Gowun Dodum) | ✅ 자동화 대상 |
-| `main-image` | 캐릭터 이미지 | 이미지 | ✅ 자동화 대상 (MVP: `card-01`만 삽입, 이미지 없는 카드는 숨김) |
+| `main-image` | 캐릭터 이미지 | 이미지 | ✅ 자동화 대상 (card-01 ~ card-05 카드별 이미지, 이미지 없는 카드는 숨김) |
 | `page-number` | 페이지 번호 | 텍스트 | ⏸ 현재 고정 |
 | `source` | 카드별 자료 출처 | 텍스트 | ✅ 자동화 대상 |
 | `bottom-overlay` | 하단 그라데이션 | 도형 / 그라데이션 | 🔒 고정 |
@@ -46,7 +46,7 @@
 
 - **main-image**
   - 카드의 중심이 되는 캐릭터 이미지입니다.
-  - `slides.json`의 `image`(로컬 누끼 경로)가 있으면 **FIT** 방식으로 이미지를 채웁니다. MVP에서 이미지 삽입 대상은 `card-01`뿐입니다.
+  - `slides.json`의 `image`(로컬 누끼 경로)가 있으면 **FIT** 방식으로 이미지를 채웁니다. 이미지는 card-01 ~ card-05 어느 카드에나 넣을 수 있고, 사용자가 카드별로 지정합니다 (`templates/card-images.md`).
   - `image`가 빈 카드(`""`)는 레이어를 **숨깁니다**. 레이어를 지우거나 채우기를 바꾸지 않으므로 6개 레이어 구조는 그대로입니다.
 
 - **page-number**
@@ -106,13 +106,12 @@ card-01 ~ card-05  (Frame, 1080 × 1350)
 | `title` | `slides.json`의 제목 값으로 텍스트 교체 |
 | `body` | `slides.json`의 본문 값으로 텍스트 교체 |
 | `source` | `slides.json`의 출처 값으로 텍스트 교체 (빈 값이면 숨김) |
-| `main-image` | `image`가 있으면 FIT으로 이미지 교체 (MVP: `card-01`만), 빈 값이면 숨김 |
+| `main-image` | `image`가 있으면 FIT으로 이미지 교체 (card-01 ~ card-05), 빈 값이면 숨김 |
 
 ### 4.2 추후 단계
 
 | 레이어 | 처리 방식 (계획) |
 | --- | --- |
-| `main-image` | `card-02` ~ `card-05`에도 이미지 삽입 (확장 단계) |
 | `page-number` | 필요 시 카드 순서에 따라 자동 생성 (예: `1/5`) |
 
 ### 4.3 고정 레이어 (자동화 제외)
@@ -160,7 +159,7 @@ card-01 ~ card-05  (Frame, 1080 × 1350)
 | `slides[n].title` | `title` | ✅ | **20자 이내** (공백 포함), 줄바꿈 금지. 한 줄에 들어가도록 **16자 이하 권장** (6장) |
 | `slides[n].body` | `body` | ✅ | **80자 이내** (공백 포함, `\n` 제외), 1장 1메시지. 42자를 넘으면 띄어쓰기 위치에 `\n`, 최대 2줄 (6장) |
 | `slides[n].source` | `source` | 선택 | **30자 이내**, `출처: ` 로 시작, 줄바꿈 금지. 비어 있으면(`""`) 레이어 숨김 |
-| `slides[n].image` | `main-image` | 선택 | `cutout/` 폴더의 누끼 이미지 경로. MVP에서는 `card-01`만 사용. 이미지가 없으면 `""` → `main-image` 숨김 |
+| `slides[n].image` | `main-image` | 선택 | `assets/characters/<캐릭터>/cutout/`의 이미지 또는 사용자 지정 이미지(`projects/<폴더>/input/placed/…`, 출처는 프로젝트 sources.md). card-01 ~ card-05 모두 사용 가능. 이미지가 없으면 `""` → `main-image` 숨김 |
 
 - 글자 수를 넘기면 write-copy 단계에서 줄여서 다시 씁니다. fill-figma는 넘친 텍스트를 자르지 않습니다.
 - `image`에 쓰는 이미지는 반드시 `sources.md`에 출처가 기록되어 있어야 합니다.
@@ -171,7 +170,7 @@ card-01 ~ card-05  (Frame, 1080 × 1350)
 1. `projects/날짜_주제/slides.json`을 읽습니다.
 2. 같은 Figma 파일 안에 새 페이지(`세모귀_<프로젝트 폴더 이름>`)를 만들고 원본 `Page 1`의 `card-01` ~ `card-05`를 그 페이지로 복제합니다. 같은 이름의 페이지가 있으면 중단합니다. 이후 단계는 **새 페이지 안에서만** `frame` 값으로 프레임을 찾습니다. 원본 `Page 1`은 건드리지 않습니다.
 3. 프레임 안의 `title`, `body`, `source` 레이어 텍스트를 교체합니다. `source`가 비어 있으면 레이어를 숨깁니다.
-4. `image`가 있는 카드(MVP: `card-01`)는 `main-image`의 이미지 채우기를 **FIT**(전체 보임, 잘림 없음) 방식으로 교체하고, `image`가 빈 카드는 `main-image` 레이어를 숨깁니다.
+4. `image`가 있는 카드(card-01 ~ card-05)는 `main-image`의 이미지 채우기를 **FIT**(전체 보임, 잘림 없음) 방식으로 교체하고, `image`가 빈 카드는 `main-image` 레이어를 숨깁니다.
 5. 고정 레이어(`page-number`, `bottom-overlay`)와 배경은 건드리지 않습니다.
 6. 각 프레임을 1080 × 1350 px PNG로 `projects/날짜_주제/png/card-01.png` ~ `card-05.png`에 내보냅니다.
 
@@ -185,13 +184,13 @@ card-01 ~ card-05  (Frame, 1080 × 1350)
 - [x] 글자 수: 제목 20자, 본문 80자, 출처 30자
 - [x] 출처가 빈 카드: `source` 레이어 숨김
 - [x] `page-number`: 현재 고정 유지
-- [x] `main-image`: 로컬 경로, MVP는 표지(`card-01`)만
+- [x] `main-image`: 로컬 경로, card-01 ~ card-05 카드별 지정 (2026-11-03 확장, `scripts/assign_images.py`)
 - [x] `main-image` 맞춤 방식: **FIT**
 - [x] 복제 방식: 같은 파일 안에 새 페이지를 만들어 5개 프레임 복제, 원본 `Page 1`은 수정하지 않음
 - [x] `source`: 기존 레이어 유지·텍스트만 교체 (현재 `@세모귀`는 임시 텍스트), 레이어 구성은 6개 유지
 - [x] 텍스트 교체 시 Jua / Gowun Dodum 폰트 로드: 정상 (2026-10-29 테스트)
 - [x] 제목·본문 줄바꿈 기준: 6장 (2026-10-29 테스트 실측 기반)
-- [x] `image`가 빈 카드의 `main-image`: 레이어 **숨김** (회색 자리표시가 내보내지지 않음). 이미지 삽입 대상은 MVP 동안 `card-01`만
+- [x] `image`가 빈 카드의 `main-image`: 레이어 **숨김** (회색 자리표시가 내보내지지 않음). 이미지는 사용자가 카드별로 지정
 
 ---
 

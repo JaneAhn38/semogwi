@@ -11,7 +11,7 @@ description: 세모귀 카드뉴스 4단계. 승인된 outline.md와 brief.md, c
 
 - `projects/날짜_주제/outline.md`: **`상태: 승인됨`** 이어야 한다. 승인 대기면 진행하지 말고 승인부터 받으라고 안내한다.
 - `projects/날짜_주제/brief.md`: 사실 확인과 출처용
-- `projects/날짜_주제/cutout-check.md`: cutout-image 결과. 카드별 `image` 경로를 여기서 가져온다. 이미지가 필요 없는 구성(card-01 이미지 열이 `-`)이면 없어도 된다.
+- `projects/날짜_주제/cutout-check.md`: cutout-image 결과. 카드별 `image` 경로를 여기서 가져온다. 사용자가 이미지를 하나도 지정하지 않았으면 없어도 된다 (모든 카드 `image: ""`).
 
 ## 문구 규칙
 
@@ -20,12 +20,12 @@ description: 세모귀 카드뉴스 4단계. 승인된 outline.md와 brief.md, c
 | 제목 `title` | **16자 이하**(공백 포함), **줄바꿈 금지**. 한 카드의 핵심을 한눈에 |
 | 본문 `body` | **80자 이내**(공백 포함, `\n` 제외). 1장 1메시지, 2~3문장. **42자를 넘으면 띄어쓰기 위치에 `\n`**을 넣어 **최대 2줄**, 각 줄 42자 이하 |
 | 출처 `source` | **30자 이내**, `출처: `로 시작. 표지(card-01)는 `""`(빈 값 → 레이어 숨김) |
-| 이미지 `image` | card-01만 `cutout-check.md`의 **"결과 파일 (slides.json `image`)" 칸 경로를 그대로**. 이미지가 없는 카드와 card-02 ~ card-05는 `""` |
+| 이미지 `image` | **카드마다** `cutout-check.md`의 **"결과 파일 (slides.json `image`)" 칸 경로를 그대로** (card-01 ~ card-05). 이미지가 없거나 건너뜀·차단·실패인 카드는 `""` |
 
 - 글자 수는 **직접 세서** 확인한다. 넘으면 줄여서 다시 쓴다. 자르거나 말줄임표(…)로 끝내지 않는다.
 - 제목이 2줄이 되면 본문과 겹치고, Figma는 한글을 글자 단위로 줄바꿈해 단어 중간이 끊긴다(`templates/layers.md` 6장). `\n` 앞뒤에 공백을 남기지 않는다.
-- `image`에는 **`sources.md`에 출처가 기록된 이미지만** 쓴다. cutout-image가 만든 경로는 이미 sources.md에 기록되어 있으므로, cutout-check.md의 경로를 고치지 않고 옮겨 쓴다.
-- cutout-check.md가 없거나, card-01 결과가 실패·건너뜀·보류이면 card-01 `image`도 `""`로 두고 "누끼 이미지 필요(cutout-image)"라고 알린다. 경로를 지어내지 않는다.
+- `image`에는 **출처가 기록된 이미지만** 쓴다 (공용 `sources.md` 또는 사용자 지정 이미지는 프로젝트 `sources.md`). cutout-image·`assign_images.py`가 만든 경로는 이미 기록되어 있으므로, cutout-check.md의 경로를 고치지 않고 옮겨 쓴다.
+- cutout-check.md가 없거나, 어떤 카드의 결과가 실패·건너뜀·차단이면 그 카드의 `image`는 `""`로 두고, 차단·실패한 카드가 있으면 사용자에게 알린다. 경로를 지어내지 않는다.
 - 굿즈 소개·팝업스토어 일정·콜라보 내용의 **날짜·가격·장소·운영 시간**은 brief.md 표기를 그대로 옮긴다. 줄이려고 숫자나 날짜 형식을 바꾸지 않는다.
 
 ## 유형별 문구
@@ -68,7 +68,7 @@ outline.md의 `유형`에 맞춰 쓴다. 작품 줄거리·서사는 어떤 유�
 1. outline.md가 승인됨인지 확인한다.
 2. 카드별로 outline의 핵심 메시지와 brief 항목을 보고 `title`, `body`를 쓴다.
 3. `source`는 해당 brief 항목의 출처 ID를 출처 표에서 찾아 짧게 쓴다. 예: `출처: 공식 홈페이지`, `출처: 나가노 X`
-4. `image`는 cutout-check.md의 card-01 "결과 파일" 칸을 읽어 그대로 쓰고, 나머지 카드는 `""`로 둔다 (위 문구 규칙의 `image` 항목).
+4. `image`는 cutout-check.md의 카드별 "결과 파일" 칸을 읽어 card-01 ~ card-05에 그대로 쓴다. 결과가 `""`인 카드는 `""`로 둔다 (위 문구 규칙의 `image` 항목).
 5. 아래 형식으로 `projects/날짜_주제/slides.json`을 쓴다(UTF-8).
 6. `py scripts/fill_figma.py validate projects/날짜_주제/slides.json`으로 검사한다. **통과해야 끝낼 수 있다**(아래 "validate 검사" 참고).
 7. **자체 검사**를 하고, 결과를 `projects/날짜_주제/copy-check.md`에 표로 남긴다.
