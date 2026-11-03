@@ -11,3 +11,6 @@ assets/characters/*/cutout/test-*
 # 테스트 프로젝트(폴더 이름이 _테스트로 끝남)의 PNG 출력물
 # 실제 카드뉴스 프로젝트의 png/ 폴더는 제외하지 않습니다.
 projects/*_테스트/png/
+
+# Claude Code가 만드는 git worktree (각자 로컬 작업용, 공유하지 않음)
+.claude/worktrees/
