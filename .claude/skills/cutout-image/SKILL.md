@@ -39,6 +39,22 @@ description: 세모귀 카드뉴스 이미지 준비 단계. 승인된 구성안
 - 이름을 `test`로 시작하지 않는다. `.gitignore`가 `test.*`, `test-*`를 테스트 이미지로 보고 제외한다.
 - 원본·누끼·as-is 파일은 같은 `<캐릭터>-<YYYYMMDD>-<nn>`을 써서 짝을 알 수 있게 한다.
 
+### 사용자 제공 사진 (Git 제외)
+
+원본이 **사용자 제공 사진**이면 (`projects/*/input/`에 있는 사진, 또는 사용자가 직접 찍었거나 가진 사진이라고 한 것) 세 파일 이름 모두 앞에 **`user-`**를 붙인다.
+
+| 산출물 | 이름 |
+| --- | --- |
+| 원본 보관 | `original/user-<캐릭터>-<YYYYMMDD>-<nn>.<확장자>` |
+| 누끼 | `cutout/user-<캐릭터>-<YYYYMMDD>-<nn>.png` |
+| 그대로 사용(as-is) | `cutout/user-<캐릭터>-<YYYYMMDD>-<nn>-asis.<원본 확장자>` |
+
+- `.gitignore`가 `assets/characters/*/original/user-*`, `assets/characters/*/cutout/user-*`를 제외하므로 저장소에 올라가지 않는다. 로컬에서는 그대로 있어서 write-copy·fill-figma가 평소처럼 쓴다.
+- 파일을 만든 직후 `git check-ignore -v <경로>`로 **제외되는지 확인한다.** 제외되지 않으면(출력이 없으면) 다음 단계로 가지 말고 보고한다.
+- `nn` 번호는 `user-`가 없는 파일과 함께 센다 (같은 날짜·캐릭터 안에서 겹치지 않게).
+- sources.md의 원본 출처 URL 칸에는 `사용자 제공 사진`이라고 쓰고, 사용 허가는 사용자에게 확인받은 값을 쓴다.
+- 반대로, 사용자 사진이 아닌 정상 콘텐츠 이미지는 이름을 `user-`로 시작하지 않는다.
+
 ## 도구
 
 | 용도 | 도구 |
@@ -173,6 +189,7 @@ py -X utf8 -c "import sys,json; from PIL import Image; p=sys.argv[1]; a=Image.op
 - [ ] sources.md에는 행을 추가만 한다. 다른 행은 고치지 않는다.
 - [ ] slides.json, outline.md, 다른 Skill, Figma 템플릿은 고치지 않는다.
 - [ ] 오류가 나면 다른 방법으로 바꿔 시도하지 않는다 (예: 다른 모델로 자동 전환, 이미지 축소 후 재시도). 원인을 보고하고 지시를 기다린다.
+- [ ] 사용자 제공 사진에서 나온 파일은 이름 앞에 `user-`를 붙이고, `git check-ignore`로 제외되는지 확인한다.
 - [ ] Git commit·push는 하지 않는다. 사용 허가가 확인되지 않은 이미지가 저장소에 올라가지 않도록, 커밋은 사용자가 결정한다.
 
 ## 오류 처리

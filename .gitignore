@@ -12,5 +12,13 @@ assets/characters/*/cutout/test-*
 # 실제 카드뉴스 프로젝트의 png/ 폴더는 제외하지 않습니다.
 projects/*_테스트/png/
 
+# 이미지 입력(analyze-image)으로 받은 사용자 제공 사진 원본
+projects/*/input/
+
+# 사용자 제공 사진에서 나온 파일 (cutout-image가 이름 앞에 user-를 붙임)
+# 원본 보관본, 누끼, 그대로 복사본(-asis) 모두 제외합니다. 정상 콘텐츠 이미지는 user-로 시작하지 않게 이름을 짓습니다.
+assets/characters/*/original/user-*
+assets/characters/*/cutout/user-*
+
 # Claude Code가 만드는 git worktree (각자 로컬 작업용, 공유하지 않음)
 .claude/worktrees/

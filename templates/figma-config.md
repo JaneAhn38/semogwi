@@ -142,6 +142,11 @@
 - 사용 허가가 확인되지 않은 테스트 이미지(`assets/characters/*/original|cutout/test.*`, `test-*`)와 테스트 프로젝트 PNG(`projects/*_테스트/png/`)는 `.gitignore`로 제외합니다.
 - 정상 콘텐츠 이미지는 이름을 `test`로 시작하지 않게 짓고, 실제 프로젝트 폴더 이름은 `_테스트`로 끝나지 않게 합니다. 그래야 제외 규칙에 걸리지 않습니다.
 - 테스트 프로젝트의 `slides.json`은 이미지가 아니므로 제외하지 않습니다 (레이아웃 검사 기준 데이터로 커밋).
+- **사용자 제공 사진**(이미지 입력)은 저장소에 올리지 않습니다.
+  - analyze-image가 받은 사진: `projects/*/input/`
+  - cutout-image가 사용자 사진으로 만든 파일: 이름 앞에 `user-`를 붙여 `assets/characters/*/original/user-*`, `assets/characters/*/cutout/user-*`로 제외
+  - 정상 콘텐츠 이미지는 이름을 `user-`로 시작하지 않게 짓습니다.
+- `cutout/test.png`는 2026-11-03 사용 허가 확인 후 `git add -f`로 이 파일만 추가했습니다 (규칙상 제외 대상이지만 추적 중). 이미 추적 중인 파일에는 `.gitignore`가 적용되지 않습니다.
 - 2026-10-29 확인: Git 기록 전체에 이미지 파일(png/jpg/webp/gif)이 커밋된 적이 없어 추적 해제(`git rm --cached`)할 파일은 없습니다. `git check-ignore -v <경로>`로 규칙이 적용되는지 확인할 수 있습니다.
-  - 제외됨: `cutout/test.png`, `original/test.png`, `original/test-02.jpg`, `projects/2026-10-29_테스트/png/*.png`, `projects/2026-11-03_테스트/png/*.png`
+  - 제외됨: `original/test.png`, `original/test-02.jpg`, `projects/2026-10-29_테스트/png/*.png`, `projects/2026-11-03_테스트/png/*.png`, `projects/*/input/*`, `original/user-chiikawa-20261104-01.jpg`, `cutout/user-chiikawa-20261104-01.png`, `cutout/user-chiikawa-20261104-02-asis.jpg`
   - 제외되지 않음: `cutout/chiikawa-01.png`, `original/latest.png`, `projects/2026-11-05_치이카와-서사-정리/png/card-01.png`

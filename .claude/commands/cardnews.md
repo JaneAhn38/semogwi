@@ -1,6 +1,6 @@
 ---
-description: 세모귀 카드뉴스 전체 실행. 주제·캐릭터·유형·참고 자료를 받아 brief → 구성안(승인) → 누끼 → 문구 → 피그마 채우기 → PNG 5장까지 순서대로 진행한다.
-argument-hint: [주제] [캐릭터] [유형] [참고 자료 링크...]
+description: 세모귀 카드뉴스 전체 실행. 주제·캐릭터·유형·참고 자료를 받거나, 캐릭터·굿즈·행사 사진을 받아 분석(확인)한 뒤 brief → 구성안(승인) → 누끼 → 문구 → 피그마 채우기 → PNG 5장까지 순서대로 진행한다.
+argument-hint: [주제] [캐릭터] [유형] [참고 자료 링크...]  또는  [이미지 경로...] [유형(선택)] [참고 자료(선택)]
 ---
 
 # /cardnews
@@ -10,20 +10,31 @@ argument-hint: [주제] [캐릭터] [유형] [참고 자료 링크...]
 세모귀 카드뉴스 1세트(5장)를 아래 순서로 만든다. 각 단계는 해당 Skill의 SKILL.md를 따른다. 단계마다 결과 파일을 `projects/YYYY-MM-DD_주제/`에 저장하고, 다음 단계는 그 파일을 읽어서 진행한다.
 
 ```
-research-topic → plan-cardnews(승인) → cutout-image → write-copy → fill-figma
-   brief.md        outline.md          cutout-check.md   slides.json    png/card-01~05.png
+[주제 입력]                          research-topic → plan-cardnews(승인) → cutout-image → write-copy → fill-figma
+[이미지 입력] analyze-image(확인) →     brief.md        outline.md          cutout-check.md   slides.json    png/card-01~05.png
+              image-analysis.md
 ```
 
 ## 0. 입력 확인
-- 주제, 캐릭터(`assets/characters/` 폴더 이름), 유형(캐릭터 소개 / 굿즈 소개 / 팝업스토어 일정 / 콜라보 내용), 참고 자료가 모두 있는지 확인한다. 없으면 물어보고 시작하지 않는다.
+- **입력에 이미지 파일 경로(`.png .jpg .jpeg .webp`)가 있으면 이미지 입력**으로 보고 아래 "0-A"부터 진행한다. 없으면 지금처럼 주제 입력으로 진행한다.
+- 주제 입력: 주제, 캐릭터(`assets/characters/` 폴더 이름), 유형(캐릭터 소개 / 굿즈 소개 / 팝업스토어 일정 / 콜라보 내용), 참고 자료가 모두 있는지 확인한다. 없으면 물어보고 시작하지 않는다.
 - 표지 원본 이미지와 그 출처(URL·저작권자·사용 허가)는 지금 받아도 되고, 3단계에서 받아도 된다.
 - 시작 시각을 기록한다.
 - 같은 주제 폴더에 이미 결과 파일이 있으면, 어느 단계부터 다시 할지 사용자에게 묻는다.
 
+## 0-A. analyze-image → image-analysis.md (이미지 입력일 때만)
+- 사진을 분석해 이미지에서 확인한 요소(`[이미지]`), 식별 결과(확신도), 추정(`[추정]`)을 나누고 주제·유형·중심 대상·중심 키워드를 제안한다.
+- 분석 결과를 보여 주고 **멈춘다. 사용자가 확인(`상태: 확인됨`)하기 전에는 1단계로 넘어가지 않는다.**
+- 확인되면 주제·캐릭터·유형은 image-analysis.md의 확인값을 쓴다. 참고 자료는 사용자가 준 자료와 image-analysis.md의 "식별 확인 출처"에서 시작하고, research-topic이 중심 대상의 공식 출처를 웹에서 더 찾을 수 있다.
+- 사진 속 가격·날짜·장소는 `[이미지]` 기록일 뿐 사실이 아니다. 카드에는 공식 출처로 확인된 값만 쓴다.
+
 ## 1. research-topic → brief.md
+- 이미지 입력이면 image-analysis.md(`상태: 확인됨`)를 함께 읽고, **중심 대상에 관한 공식 정보**를 모은다. 사진과 관계없는 일반 정보로 핵심 내용을 채우지 않는다.
+
 ## 2. plan-cardnews → outline.md
 - 구성안 표를 보여 주고 **멈춘다. 사용자가 승인하기 전에는 3단계로 넘어가지 않는다.**
 - 수정 요청이 오면 해당 카드만 고쳐서 다시 보여 준다.
+- 이미지 입력이면 plan-cardnews의 "이미지 관련성 검사"를 통과해야 한다 (표지와 본문 대부분이 중심 대상을 다룸).
 
 ## 3. cutout-image → 누끼 PNG + cutout-check.md
 - 승인된 outline.md의 **이미지** 열에서 이미지가 필요한 카드만 처리한다. 값이 `-`인 카드는 건너뛴다.
@@ -31,6 +42,7 @@ research-topic → plan-cardnews(승인) → cutout-image → write-copy → fil
 - 원본 이미지나 출처 정보가 없으면 멈추고 요청한다. 사용자가 이미지 없이 진행하겠다고 하면 card-01도 건너뛴다(`image`는 `""`).
 - 같은 원본·같은 설정으로 만든 누끼가 `sources.md`에 이미 있으면 새로 만들지 않고 그 경로를 쓴다.
 - 출처가 `sources.md`에 기록되지 않은 이미지는 쓰지 않는다. 사용 허가가 `허가됨`이 아니면 cutout-image의 규칙대로 멈추고 확인받는다.
+- 이미지 입력에서 사용자가 입력 사진을 카드 이미지로 쓰기로 했으면, `projects/<폴더>/input/`의 사진을 원본으로 넘긴다. sources.md 출처는 "사용자 제공 사진", 사용 허가는 사용자에게 확인받는다. 이때 cutout-image는 원본 보관본·누끼·as-is 파일 이름 앞에 `user-`를 붙여 Git에서 제외되게 한다 (cutout-image "사용자 제공 사진" 규칙).
 - 결과: `assets/characters/<캐릭터>/cutout/`의 누끼 파일, `sources.md` 행 추가, `projects/YYYY-MM-DD_주제/cutout-check.md`
 
 ## 4. write-copy → slides.json
@@ -53,3 +65,5 @@ research-topic → plan-cardnews(승인) → cutout-image → write-copy → fil
 ## 규칙
 - 아직 없는 Skill이 있으면 그 단계에서 멈추고, 어떤 Skill이 없는지 알린다. 다른 방법으로 대신하지 않는다.
 - 참고 자료에 없는 내용을 만들지 않는다. 카드에는 공식 출처로 확인된 정보만 쓰고, 가격·일정·장소는 임의로 만들지 않는다.
+- 이미지 입력은 **두 번 멈춘다**: 0-A 분석 확인, 2단계 구성안 승인. 어느 쪽도 건너뛰지 않는다.
+- 이미지 입력에서 `[이미지]`·`[추정]` 정보는 카드에 쓰지 않는다.
