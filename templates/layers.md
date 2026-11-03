@@ -132,7 +132,7 @@ card-01 ~ card-05  (Frame, 1080 × 1350)
 ```json
 {
   "series": "세모귀",
-  "topic": "치이카와 서사 정리",
+  "topic": "치이카와 굿즈 소개",
   "character": "chiikawa",
   "slides": [
     {
