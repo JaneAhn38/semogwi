@@ -8,6 +8,7 @@ Figma에 직접 접속하지 않으며, 표준 라이브러리만 사용합니�
     py scripts/fill_figma.py validate   projects/날짜_주제/slides.json
     py scripts/fill_figma.py render     <단계> projects/날짜_주제/slides.json
     py scripts/fill_figma.py verify-png projects/날짜_주제/png
+    py scripts/fill_figma.py open-png   projects/날짜_주제/png
 
     validate   : slides.json 규격, 글자 수, 줄바꿈 위험, 이미지 파일·해상도·출처, 출력 폴더를 검사합니다.
                  오류가 있으면 종료 코드 1, 경고만 있으면 0을 반환합니다.
@@ -16,6 +17,8 @@ Figma에 직접 접속하지 않으며, 표준 라이브러리만 사용합니�
                  slides.json 규격 오류가 있으면 코드를 만들지 않고 종료 코드 1을 반환합니다.
                  (png/ 폴더에 PNG가 이미 있는지는 보지 않습니다. 내보낸 뒤 signature 단계에서도 쓰기 때문입니다.)
     verify-png : card-01.png ~ card-05.png가 모두 있고 1080x1350 PNG인지 검사합니다.
+    open-png   : verify-png와 같은 검사를 다시 하고, 통과하면 Windows 탐색기로 png 폴더를 엽니다.
+                 검사 실패면 열지 않고 종료 코드 1, Windows가 아니면 열지 않고 0을 반환합니다.
 
     프로젝트 루트(semogwi)에서 실행합니다.
 """
@@ -427,6 +430,27 @@ def verify_png(png_dir: Path) -> int:
     return 0 if ok else 1
 
 
+# ---------------------------------------------------------------------------
+# open-png
+# ---------------------------------------------------------------------------
+def open_png(png_dir: Path) -> int:
+    """PNG 5장을 다시 검사하고, 통과했을 때만 Windows 탐색기로 png 폴더를 엽니다."""
+    if verify_png(png_dir) != 0:
+        print("PNG 검사에 실패해서 폴더를 열지 않습니다.")
+        return 1
+    if sys.platform != "win32":
+        print(f"Windows가 아니라서 폴더를 열지 않습니다: {png_dir}")
+        return 0
+    import os
+    try:
+        os.startfile(png_dir)
+    except OSError as e:
+        print(f"[경고] 폴더를 열지 못했습니다: {e}")
+        return 0
+    print(f"폴더를 열었습니다: {png_dir}")
+    return 0
+
+
 def main() -> int:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
@@ -441,6 +465,8 @@ def main() -> int:
     r.add_argument("slides")
     p = sub.add_parser("verify-png", help="PNG 출력물 검사")
     p.add_argument("png_dir")
+    o = sub.add_parser("open-png", help="PNG 검사 통과 시 png 폴더 열기 (Windows)")
+    o.add_argument("png_dir")
     args = parser.parse_args()
 
     if args.cmd == "validate":
@@ -453,6 +479,8 @@ def main() -> int:
     if args.cmd == "render":
         print(render(args.step, Path(args.slides).resolve()))
         return 0
+    if args.cmd == "open-png":
+        return open_png(Path(args.png_dir).resolve())
     return verify_png(Path(args.png_dir).resolve())
 
 

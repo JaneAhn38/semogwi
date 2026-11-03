@@ -84,6 +84,7 @@ write-copy가 만든 `slides.json`을 Figma 템플릿에 채우고 PNG로 내보
 10. **PNG 검증**: `py scripts/fill_figma.py verify-png projects/<폴더>/png` — 5장 모두 PNG, 1080×1350이어야 한다.
 11. **원본 보존 확인 (읽기 전용)**: `render signature` → `use_figma`. `page1Signature.hash`가 3단계 값과 다르면 즉시 보고한다 (자동으로 되돌리지 않는다).
 12. **보고**: 아래 "보고 형식"대로 짧게 알린다. 다음 단계나 게시는 자동으로 시작하지 않는다.
+    - 1 ~ 11단계가 모두 성공했을 때만, 보고 직전에 `py scripts/fill_figma.py open-png projects/<폴더>/png`를 실행한다. PNG 5장을 다시 검사하고 통과하면 Windows 탐색기로 png 폴더를 연다 (Windows가 아니면 열지 않음). 중간에 멈춘 경우에는 실행하지 않는다.
 
 ## 규칙
 
