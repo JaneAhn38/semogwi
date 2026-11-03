@@ -28,7 +28,11 @@ for (const s of INPUT.slides) {
     if (!imageFill) problems.push(`${s.frame}: main-image에 이미지가 없습니다`);
     else if (imageFill.scaleMode !== 'FIT') problems.push(`${s.frame}: main-image 맞춤 방식이 ${imageFill.scaleMode}입니다 (FIT이어야 함)`);
     if (img.name !== 'main-image') problems.push(`${s.frame}: main-image 레이어 이름이 바뀌었습니다`);
-  } else if (imageFill) problems.push(`${s.frame}: 이미지가 없어야 하는데 main-image에 이미지가 있습니다`);
+    if (!img.visible) problems.push(`${s.frame}: image가 있는데 main-image가 숨겨져 있습니다`);
+  } else {
+    if (img.visible) problems.push(`${s.frame}: image가 비었는데 main-image가 보입니다 (숨김이어야 함)`);
+    if (imageFill) problems.push(`${s.frame}: 이미지가 없어야 하는데 main-image에 이미지가 있습니다`);
+  }
   exportFrames.push({ frame: s.frame, id: fr.id, w: Math.round(fr.width), h: Math.round(fr.height) });
 }
 return { ok: problems.length === 0, pageId: page.id, problems, exportFrames };

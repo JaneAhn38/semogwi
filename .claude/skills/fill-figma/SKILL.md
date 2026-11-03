@@ -1,6 +1,6 @@
 ---
 name: fill-figma
-description: 세모귀 카드뉴스 마지막 단계. slides.json 경로를 받아 Figma 템플릿(Page 1)을 새 페이지로 복제하고 title·body·source 텍스트와 표지 이미지를 넣은 뒤 card-01 ~ card-05를 1080×1350 PNG로 내보낸다. write-copy가 slides.json을 만든 다음에 쓰거나, "피그마에 넣어줘", "카드뉴스 PNG 뽑아줘"라는 요청에 쓴다.
+description: 세모귀 카드뉴스 마지막 단계. slides.json 경로를 받아 Figma 템플릿(Page 1)을 새 페이지로 복제하고 title·body·source 텍스트와 표지 이미지를 넣은 뒤(이미지가 없는 카드는 main-image 숨김) card-01 ~ card-05를 1080×1350 PNG로 내보낸다. write-copy가 slides.json을 만든 다음에 쓰거나, "피그마에 넣어줘", "카드뉴스 PNG 뽑아줘"라는 요청에 쓴다.
 ---
 
 # fill-figma: slides.json → Figma → PNG 5장
@@ -55,9 +55,11 @@ write-copy가 만든 `slides.json`을 Figma 템플릿에 채우고 PNG로 내보
 4. **복제 (첫 쓰기 = 편집 권한 확인)**: `render clone` → `use_figma`
    - 권한 오류면 중단하고 `whoami`의 팀·좌석(View/Full)을 함께 보고한다.
    - 결과의 `pageId`, 각 프레임 ID, `card-01`의 `main-image` ID를 기록한다.
-5. **텍스트 교체 + 레이아웃 검사**: `render fill-text` → `use_figma`
+5. **텍스트 교체 + 이미지 자리 정리 + 레이아웃 검사**: `render fill-text` → `use_figma`
    - title·body·source만 바꾸고, source가 `""`이면 그 레이어만 숨긴다.
-   - `ok: false`면 중단한다. 각 프레임의 `errors`(제목 2줄, title-body 겹침, 하단 여백 침범, source-page-number 겹침, 고정 요소 변경)를 그대로 보고한다. 텍스트를 줄이거나 레이어를 옮겨서 맞추지 않는다.
+   - `image`가 `""`인 카드는 `main-image` 레이어를 숨긴다. `image`가 있는 카드(MVP: card-01)는 보이게 두고 6단계에서 채운다. main-image의 채우기·위치·크기는 바꾸지 않는다.
+   - title·body 텍스트 크기 조절이 `HEIGHT`가 아니면 아무것도 바꾸지 않고 오류로 끝난다 (3단계에서 이미 걸러야 정상).
+   - `ok: false`면 중단한다. 각 프레임의 `errors`(제목 2줄, title-body 겹침, 하단 여백 침범, source-page-number 겹침, 고정 요소 변경, main-image 표시 상태)를 그대로 보고한다. 텍스트를 줄이거나 레이어를 옮겨서 맞추지 않는다.
 6. **표지 이미지 교체** (`card-01`에 `image`가 있을 때만)
    - `upload_assets`: `count: 1`, `nodeIds: [<card-01 main-image ID>]`, `scaleMode: "FIT"`, `currentPageId: <pageId>`
    - 받은 `submitUrl`로 파일 원본 바이트를 보낸다. multipart 방식은 파일 이름이 레이어 이름으로 바뀔 수 있으므로 쓰지 않는다.
@@ -67,6 +69,7 @@ write-copy가 만든 `slides.json`을 Figma 템플릿에 채우고 PNG로 내보
      Content-Type은 validate가 알려 준 실제 형식(png → `image/png`, jpeg → `image/jpeg`, webp → `image/webp`)을 쓴다.
    - 응답의 `success: true`와 `placedOnNodeId`가 main-image ID와 같은지 확인한다.
 7. **결과 검증 (읽기 전용)**: `render verify` → `use_figma`
+   - 레이어 수·이름, 텍스트, source 표시 여부와 함께, image가 있는 카드는 main-image가 보이고 FIT 이미지이며 레이어 이름이 그대로인지, image가 빈 카드는 main-image가 숨겨지고 이미지가 없는지 확인한다.
    - `ok: false`면 중단하고 `problems`를 보고한다.
    - `exportFrames`(프레임 ID 5개)를 기록한다.
 8. **스크린샷 확인**: 5개 프레임에 `get_screenshot`을 한 번에(병렬로) 호출하고, 받은 URL을 `curl`로 세션 임시 폴더에 받아 직접 본다.
@@ -88,7 +91,8 @@ write-copy가 만든 `slides.json`을 Figma 템플릿에 채우고 PNG로 내보
 - [ ] **기존 테스트 페이지(`세모귀_2026-10-29_테스트` 등)도 지우거나 덮어쓰지 않는다.** 대상 페이지가 이미 있으면 3단계에서 멈춘다.
 - [ ] **이미 있는 페이지·PNG는 덮어쓰지 않는다.** 같은 이름의 페이지가 있거나 `png/`에 카드 PNG가 이미 있으면 멈추고 사용자에게 묻는다.
 - [ ] 레이어는 템플릿의 **6개 구조 그대로** 둔다. 추가·삭제·이름 변경·이동·크기 변경을 하지 않는다.
-- [ ] `page-number`, `bottom-overlay`, 배경(프레임 채우기)은 바꾸지 않는다. card-02 ~ card-05의 `main-image`도 그대로 둔다 (MVP).
+- [ ] `page-number`, `bottom-overlay`, 배경(프레임 채우기)은 바꾸지 않는다.
+- [ ] `main-image`: `image`가 있는 카드는 FIT으로 채우고, `image`가 빈 카드는 레이어를 **숨기기만** 한다 (지우거나 채우기·위치·크기를 바꾸지 않음). MVP에서 이미지 삽입 대상은 card-01뿐이다.
 - [ ] `source` 레이어는 텍스트만 바꾼다. 템플릿의 `@세모귀`는 임시 텍스트다. 빈 값이면 숨기기만 한다.
 - [ ] slides.json의 문구를 고치거나, 넘친 텍스트를 자르거나, 폰트 크기를 줄이지 않는다.
 - [ ] 이미지를 확대·편집·덮어쓰지 않는다. 해상도가 부족하면 경고만 하고, 새 누끼는 다른 파일 이름으로 만든다.
@@ -143,6 +147,7 @@ write-copy가 만든 `slides.json`을 Figma 템플릿에 채우고 PNG로 내보
 | 프레임 | ID | title | body 줄 수 | source | 이미지 | PNG |
 | --- | --- | --- | --- | --- | --- | --- |
 | card-01 | 24:3 | 1줄 | 1 | 표시 | FIT ×1.52 | 1080×1350 ✅ |
+| card-02 | 24:10 | 1줄 | 2 | 표시 | 숨김 | 1080×1350 ✅ |
 
 - 경고: (validate·fill-text·스크린샷에서 나온 것)
 - PNG 위치: projects/<폴더>/png/

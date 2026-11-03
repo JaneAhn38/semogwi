@@ -1,5 +1,6 @@
 // [SKILL 5단계 텍스트 교체] 쓰기. 새 페이지에서만 title / body / source 텍스트를 바꾸고, 빈 source는 숨깁니다.
-// page-number, bottom-overlay, main-image, 배경은 건드리지 않으며, 작업 전후로 같은지 확인합니다.
+// image가 빈 카드는 main-image 레이어를 숨깁니다 (이미지가 있는 카드는 6단계에서 FIT으로 채움).
+// page-number, bottom-overlay, 배경과 main-image의 채우기·위치·크기는 건드리지 않으며, 작업 전후로 같은지 확인합니다.
 // 교체 후 실제 Figma 레이아웃(겹침·넘침·줄 수)을 검사해 결과를 돌려줍니다.
 const page = findPageByName(INPUT.pageName);
 if (!page) throw new Error(`대상 페이지가 없습니다: ${INPUT.pageName}`);
@@ -11,13 +12,14 @@ const fixedState = fr => ({
   frame: fillTypes(fr),
   pageNumber: (() => { const n = findOneLayer(fr, 'page-number', 'TEXT'); return `${n.characters}|${n.visible}|${JSON.stringify(bounds(n))}`; })(),
   overlay: (() => { const n = findOneLayer(fr, 'bottom-overlay'); return `${fillTypes(n)}|${n.visible}|${JSON.stringify(bounds(n))}`; })(),
-  mainImage: (() => { const n = findOneLayer(fr, 'main-image'); return `${fillTypes(n)}|${n.visible}|${JSON.stringify(bounds(n))}`; })(),
+  // main-image는 표시 여부만 이 단계에서 바꾸므로 채우기·위치·크기만 비교합니다.
+  mainImage: (() => { const n = findOneLayer(fr, 'main-image'); return `${fillTypes(n)}|${JSON.stringify(bounds(n))}`; })(),
 });
 
 // 대상 노드 확인 + 폰트 로드 (현재 노드가 쓰는 폰트 그대로)
 const targets = INPUT.slides.map(s => {
   const fr = findOneFrame(page, s.frame);
-  return { s, fr, title: findOneLayer(fr, 'title', 'TEXT'), body: findOneLayer(fr, 'body', 'TEXT'), source: findOneLayer(fr, 'source', 'TEXT') };
+  return { s, fr, title: findOneLayer(fr, 'title', 'TEXT'), body: findOneLayer(fr, 'body', 'TEXT'), source: findOneLayer(fr, 'source', 'TEXT'), mainImage: findOneLayer(fr, 'main-image', 'RECTANGLE') };
 });
 // 줄 수·겹침 검사는 너비 고정 + 높이 자동(HEIGHT)일 때만 의미가 있으므로, 어느 프레임도 바꾸기 전에 확인합니다.
 for (const t of targets) for (const n of [t.title, t.body]) {
@@ -32,7 +34,7 @@ await Promise.all([...fonts.values()].map(f => figma.loadFontAsync(f)));
 const mutatedNodeIds = [];
 const report = [];
 let errorCount = 0;
-for (const { s, fr, title, body, source } of targets) {
+for (const { s, fr, title, body, source, mainImage } of targets) {
   const before = fixedState(fr);
   // 템플릿 자리표시 제목(1줄)의 높이. preflight가 실측 1줄 높이의 1.5배 이하임을 확인해 둠
   const titleOneLineHeight = Math.min(title.height, L.titleLineHeight);
@@ -42,6 +44,8 @@ for (const { s, fr, title, body, source } of targets) {
   if (s.source) { source.characters = s.source; source.visible = true; }
   else { source.visible = false; }
   mutatedNodeIds.push(title.id, body.id, source.id);
+  mainImage.visible = s.hasImage;
+  mutatedNodeIds.push(mainImage.id);
 
   const after = fixedState(fr);
   const tb = bounds(title), bb = bounds(body), sb = bounds(source), pb = bounds(findOneLayer(fr, 'page-number'));
@@ -54,7 +58,8 @@ for (const { s, fr, title, body, source } of targets) {
   if (tb.right > fr.width || bb.right > fr.width) errors.push('텍스트가 프레임 너비를 넘습니다');
   if (source.visible && sb.right + L.sideGap > pb.x) errors.push(`source 오른쪽 끝 ${sb.right}이 page-number(${pb.x})와 겹치거나 너무 가깝습니다`);
   if (bodyLines > L.bodyMaxLines) warnings.push(`body가 ${bodyLines}줄입니다 (권장 ${L.bodyMaxLines}줄 이하)`);
+  if (mainImage.visible !== s.hasImage) errors.push(`main-image 표시 상태가 ${mainImage.visible}입니다 (예상 ${s.hasImage})`);
   errorCount += errors.length;
-  report.push({ frame: s.frame, frameId: fr.id, title: tb, body: { ...bb, lines: bodyLines }, source: { ...sb, visible: source.visible }, errors, warnings });
+  report.push({ frame: s.frame, frameId: fr.id, title: tb, body: { ...bb, lines: bodyLines }, source: { ...sb, visible: source.visible }, mainImage: { id: mainImage.id, visible: mainImage.visible }, errors, warnings });
 }
 return { ok: errorCount === 0, pageId: page.id, mutatedNodeIds, fontsLoaded: [...fonts.keys()], report };

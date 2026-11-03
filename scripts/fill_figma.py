@@ -45,7 +45,7 @@ LAYERS = {
 }
 FRAME_SIZE = (1080, 1350)
 MAIN_IMAGE_SIZE = (908, 780)
-IMAGE_FRAMES = {"card-01"}  # MVP: 표지만 이미지 사용
+IMAGE_FRAMES = {"card-01"}  # MVP: 표지만 이미지 사용. image가 빈 카드는 Figma에서 main-image를 숨김
 
 # --- 글자 수 규칙 (줄바꿈 문자 \n은 세지 않음) ---
 TITLE_MAX = 20
