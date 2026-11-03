@@ -13,12 +13,12 @@ write-copy가 만든 `slides.json`을 Figma 템플릿에 채우고 PNG로 내보
 
 | 항목 | 필수 | 예시 |
 | --- | --- | --- |
-| slides.json 경로 | ✅ | `projects/2026-10-29_치이카와-서사-정리/slides.json` |
+| slides.json 경로 | ✅ | `projects/2026-11-05_치이카와-캐릭터-소개/slides.json` |
 
-- 실행 예: `/fill-figma projects/2026-11-05_치이카와-서사-정리/slides.json`
+- 실행 예: `/fill-figma projects/2026-11-05_치이카와-캐릭터-소개/slides.json`
 - 경로를 주지 않았으면 진행하지 말고 물어본다.
 - 대상 Figma 파일은 `figma-config.md`의 File Key(`b7ersPQ6u13fVoCPjuwUs9`)를 쓴다. 사용자가 다른 파일을 지정하지 않는 한 바꾸지 않는다.
-- 새 페이지 이름은 `세모귀_<프로젝트 폴더 이름>`이다 (예: `세모귀_2026-10-29_치이카와-서사-정리`). `scripts/fill_figma.py`가 자동으로 만든다.
+- 새 페이지 이름은 `세모귀_<프로젝트 폴더 이름>`이다 (예: `세모귀_2026-11-05_치이카와-캐릭터-소개`). `scripts/fill_figma.py`가 자동으로 만든다.
 
 ## 도구
 
