@@ -1,6 +1,6 @@
 ---
 name: write-copy
-description: 세모귀 카드뉴스 3단계. 승인된 outline.md와 brief.md를 읽고, 카드 5장의 제목·본문·출처를 세모귀 말투로 써서 slides.json을 만든다. 글자 수와 톤 규칙을 스스로 검사한다. "문구 써줘", "slides.json 만들어줘", /cardnews의 3단계에 쓴다.
+description: 세모귀 카드뉴스 4단계. 승인된 outline.md와 brief.md, cutout-image가 만든 cutout-check.md를 읽고, 카드 5장의 제목·본문·출처를 세모귀 말투로 써서 slides.json을 만든다. 글자 수와 톤 규칙을 스스로 검사한다. "문구 써줘", "slides.json 만들어줘", /cardnews의 4단계에 쓴다.
 ---
 
 # write-copy: outline.md → slides.json
@@ -11,6 +11,7 @@ description: 세모귀 카드뉴스 3단계. 승인된 outline.md와 brief.md를
 
 - `projects/날짜_주제/outline.md`: **`상태: 승인됨`** 이어야 한다. 승인 대기면 진행하지 말고 승인부터 받으라고 안내한다.
 - `projects/날짜_주제/brief.md`: 사실 확인과 출처용
+- `projects/날짜_주제/cutout-check.md`: cutout-image 결과. 카드별 `image` 경로를 여기서 가져온다. 이미지가 필요 없는 구성(card-01 이미지 열이 `-`)이면 없어도 된다.
 
 ## 문구 규칙
 
@@ -19,11 +20,13 @@ description: 세모귀 카드뉴스 3단계. 승인된 outline.md와 brief.md를
 | 제목 `title` | **16자 이하**(공백 포함), **줄바꿈 금지**. 한 카드의 핵심을 한눈에 |
 | 본문 `body` | **80자 이내**(공백 포함, `\n` 제외). 1장 1메시지, 2~3문장. **42자를 넘으면 띄어쓰기 위치에 `\n`**을 넣어 **최대 2줄**, 각 줄 42자 이하 |
 | 출처 `source` | **30자 이내**, `출처: `로 시작. 표지(card-01)는 `""`(빈 값 → 레이어 숨김) |
-| 이미지 `image` | card-01만 `assets/characters/캐릭터명/cutout/` 아래 파일 경로. 없으면 `""`. 나머지 카드는 `""` |
+| 이미지 `image` | card-01만 `cutout-check.md`의 **"결과 파일 (slides.json `image`)" 칸 경로를 그대로**. 이미지가 없는 카드와 card-02 ~ card-05는 `""` |
 
 - 글자 수는 **직접 세서** 확인한다. 넘으면 줄여서 다시 쓴다. 자르거나 말줄임표(…)로 끝내지 않는다.
 - 제목이 2줄이 되면 본문과 겹치고, Figma는 한글을 글자 단위로 줄바꿈해 단어 중간이 끊긴다(`templates/layers.md` 6장). `\n` 앞뒤에 공백을 남기지 않는다.
-- `image`에는 **`sources.md`에 출처가 기록된 이미지만** 쓴다. 조건에 맞는 파일이 없으면 `""`로 두고 "누끼 이미지 필요(cutout-image)"라고 알린다. 경로를 지어내지 않는다.
+- `image`에는 **`sources.md`에 출처가 기록된 이미지만** 쓴다. cutout-image가 만든 경로는 이미 sources.md에 기록되어 있으므로, cutout-check.md의 경로를 고치지 않고 옮겨 쓴다.
+- cutout-check.md가 없거나, card-01 결과가 실패·건너뜀·보류이면 card-01 `image`도 `""`로 두고 "누끼 이미지 필요(cutout-image)"라고 알린다. 경로를 지어내지 않는다.
+- 굿즈 소개·팝업스토어 일정의 **날짜·가격·장소·운영 시간**은 brief.md 표기를 그대로 옮긴다. 줄이려고 숫자나 날짜 형식을 바꾸지 않는다.
 
 ## 세모귀 말투
 
@@ -50,20 +53,21 @@ description: 세모귀 카드뉴스 3단계. 승인된 outline.md와 brief.md를
 1. outline.md가 승인됨인지 확인한다.
 2. 카드별로 outline의 핵심 메시지와 brief 항목을 보고 `title`, `body`를 쓴다.
 3. `source`는 해당 brief 항목의 출처 ID를 출처 표에서 찾아 짧게 쓴다. 예: `출처: 위키백과(일본어)`, `출처: 나가노 X`
-4. 아래 형식으로 `projects/날짜_주제/slides.json`을 쓴다(UTF-8).
-5. `py scripts/fill_figma.py validate projects/날짜_주제/slides.json`으로 검사한다. **통과해야 끝낼 수 있다**(아래 "validate 검사" 참고).
-6. **자체 검사**를 하고, 결과를 `projects/날짜_주제/copy-check.md`에 표로 남긴다.
-7. 사용자에게 5장의 제목·본문을 표로 보여 주고, 검사 결과(통과/수정한 항목)를 알린다. 수정 요청이 오면 해당 카드만 고친다.
+4. `image`는 cutout-check.md의 card-01 "결과 파일" 칸을 읽어 그대로 쓰고, 나머지 카드는 `""`로 둔다 (위 문구 규칙의 `image` 항목).
+5. 아래 형식으로 `projects/날짜_주제/slides.json`을 쓴다(UTF-8).
+6. `py scripts/fill_figma.py validate projects/날짜_주제/slides.json`으로 검사한다. **통과해야 끝낼 수 있다**(아래 "validate 검사" 참고).
+7. **자체 검사**를 하고, 결과를 `projects/날짜_주제/copy-check.md`에 표로 남긴다.
+8. 사용자에게 5장의 제목·본문을 표로 보여 주고, 검사 결과(통과/수정한 항목)를 알린다. 수정 요청이 오면 해당 카드만 고친다.
 
 ## slides.json 형식
 
 ```json
 {
   "series": "세모귀",
-  "topic": "치이카와 서사 정리",
+  "topic": "치이카와 캐릭터 소개",
   "character": "chiikawa",
   "slides": [
-    { "frame": "card-01", "title": "...", "body": "...", "source": "", "image": "assets/characters/chiikawa/cutout/chiikawa-01.png" },
+    { "frame": "card-01", "title": "...", "body": "...", "source": "", "image": "assets/characters/chiikawa/cutout/chiikawa-20261103-01.png" },
     { "frame": "card-02", "title": "...", "body": "...", "source": "출처: 위키백과(일본어)", "image": "" },
     { "frame": "card-03", "title": "...", "body": "...", "source": "출처: 위키백과(일본어)", "image": "" },
     { "frame": "card-04", "title": "...", "body": "...", "source": "출처: 위키백과(일본어)", "image": "" },
