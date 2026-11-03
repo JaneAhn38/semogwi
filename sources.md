@@ -17,4 +17,4 @@
 
 | 캐릭터명 | 원본 파일 경로 | 누끼 제거 파일 경로 | 원본 출처 URL | 저작권자 | 사용 허가 여부 | 비고 |
 |---|---|---|---|---|---|---|
-| 치이카와 | `assets/characters/chiikawa/original/test.png` | `assets/characters/chiikawa/cutout/test.png` | 확인 필요 | 확인 필요 | 확인 필요 | 테스트 이미지. 누끼는 `isnet-anime` 모델로 제거했고, 긴 변 512px 기준으로 축소해 435×512로 저장됨 |
+| 치이카와 | `assets/characters/chiikawa/original/test.png` | `assets/characters/chiikawa/cutout/test.png` | 치이카와 공식 X (게시물 URL 미기록) | 확인 필요 | 허가됨 | 테스트 이미지. 누끼는 `isnet-anime` 모델로 제거했고, 긴 변 512px 기준으로 축소해 435×512로 저장됨. 2026-11-03 공식 X에서 받은 이미지이며 사용 및 GitHub 업로드 허가를 받았다고 확인함(BYR931343). 누끼 파일만 저장소에 올리고 원본은 올리지 않음 |
