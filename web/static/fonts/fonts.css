@@ -1,0 +1,13 @@
+/* 카드 글꼴. 출처: semogwi-cardnews-templates/fonts (SIL Open Font License 1.1, 라이선스 파일 함께 배포) */
+@font-face {
+  font-family: 'Jua';
+  src: url('./Jua-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Gowun Dodum';
+  src: url('./GowunDodum-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: block;
+}

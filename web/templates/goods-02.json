@@ -1,0 +1,495 @@
+{
+  "id": "goods-02",
+  "contentType": "goods",
+  "kind": "body",
+  "label": "라인업 한눈에",
+  "reference": "reference/굿즈 판매 · 02 라인업 한눈에.png",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#FDE7A6",
+    "accent2": "#F5C84C",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "fields": [
+    {
+      "key": "goods",
+      "label": "굿즈",
+      "type": "items",
+      "maxItems": 4,
+      "fields": [
+        {
+          "key": "name",
+          "label": "상품명",
+          "type": "text",
+          "max": 11,
+          "required": true
+        },
+        {
+          "key": "kind",
+          "label": "종류·사이즈",
+          "type": "text",
+          "max": 12
+        },
+        {
+          "key": "price",
+          "label": "가격",
+          "type": "text",
+          "max": 9,
+          "hint": "통화까지 출처 표기 그대로. 예: 1,500원, ¥440"
+        }
+      ],
+      "item": "product_names"
+    },
+    {
+      "key": "price_range",
+      "label": "가격대",
+      "type": "text",
+      "max": 20,
+      "hint": "확인된 최저가 ~ 최고가. 예: 1,500원 ~ 3,000원",
+      "item": "price"
+    }
+  ],
+  "images": [
+    {
+      "key": "goods_image_1",
+      "label": "굿즈 1 사진",
+      "required": false
+    },
+    {
+      "key": "goods_image_2",
+      "label": "굿즈 2 사진",
+      "required": false
+    },
+    {
+      "key": "goods_image_3",
+      "label": "굿즈 3 사진",
+      "required": false
+    },
+    {
+      "key": "goods_image_4",
+      "label": "굿즈 4 사진",
+      "required": false
+    }
+  ],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "굿즈 판매",
+      "tagFill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "라인업 한눈에 보기",
+      "box": {
+        "x": 72,
+        "y": 180,
+        "w": 936,
+        "h": 84
+      },
+      "font": "display",
+      "size": 64,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "if": "goods.0",
+      "box": {
+        "x": 74,
+        "y": 297,
+        "w": 453,
+        "h": 380
+      },
+      "radius": 30,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "image",
+      "if": "goods.0",
+      "slot": "goods_image_1",
+      "box": {
+        "x": 97,
+        "y": 319,
+        "w": 407,
+        "h": 218
+      },
+      "radius": 20,
+      "fill": "accent",
+      "inset": 8
+    },
+    {
+      "type": "text",
+      "field": "goods.0.name",
+      "box": {
+        "x": 97,
+        "y": 550,
+        "w": 407,
+        "h": 46
+      },
+      "font": "display",
+      "size": 34,
+      "minSize": 24,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "goods.0.kind",
+      "box": {
+        "x": 97,
+        "y": 612,
+        "w": 260,
+        "h": 40
+      },
+      "font": "body",
+      "size": 30,
+      "minSize": 22,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "pill",
+      "field": "goods.0.price",
+      "x": 504,
+      "y": 610,
+      "h": 46,
+      "align": "right",
+      "padX": 20,
+      "maxWidth": 200,
+      "fill": "ink",
+      "font": "display",
+      "size": 28,
+      "minSize": 20,
+      "color": "white"
+    },
+    {
+      "type": "rect",
+      "if": "goods.1",
+      "box": {
+        "x": 554,
+        "y": 297,
+        "w": 453,
+        "h": 380
+      },
+      "radius": 30,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "image",
+      "if": "goods.1",
+      "slot": "goods_image_2",
+      "box": {
+        "x": 577,
+        "y": 319,
+        "w": 407,
+        "h": 218
+      },
+      "radius": 20,
+      "fill": "accent",
+      "inset": 8
+    },
+    {
+      "type": "text",
+      "field": "goods.1.name",
+      "box": {
+        "x": 577,
+        "y": 550,
+        "w": 407,
+        "h": 46
+      },
+      "font": "display",
+      "size": 34,
+      "minSize": 24,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "goods.1.kind",
+      "box": {
+        "x": 577,
+        "y": 612,
+        "w": 260,
+        "h": 40
+      },
+      "font": "body",
+      "size": 30,
+      "minSize": 22,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "pill",
+      "field": "goods.1.price",
+      "x": 984,
+      "y": 610,
+      "h": 46,
+      "align": "right",
+      "padX": 20,
+      "maxWidth": 200,
+      "fill": "ink",
+      "font": "display",
+      "size": 28,
+      "minSize": 20,
+      "color": "white"
+    },
+    {
+      "type": "rect",
+      "if": "goods.2",
+      "box": {
+        "x": 74,
+        "y": 705,
+        "w": 453,
+        "h": 380
+      },
+      "radius": 30,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "image",
+      "if": "goods.2",
+      "slot": "goods_image_3",
+      "box": {
+        "x": 97,
+        "y": 727,
+        "w": 407,
+        "h": 218
+      },
+      "radius": 20,
+      "fill": "accent",
+      "inset": 8
+    },
+    {
+      "type": "text",
+      "field": "goods.2.name",
+      "box": {
+        "x": 97,
+        "y": 958,
+        "w": 407,
+        "h": 46
+      },
+      "font": "display",
+      "size": 34,
+      "minSize": 24,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "goods.2.kind",
+      "box": {
+        "x": 97,
+        "y": 1020,
+        "w": 260,
+        "h": 40
+      },
+      "font": "body",
+      "size": 30,
+      "minSize": 22,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "pill",
+      "field": "goods.2.price",
+      "x": 504,
+      "y": 1018,
+      "h": 46,
+      "align": "right",
+      "padX": 20,
+      "maxWidth": 200,
+      "fill": "ink",
+      "font": "display",
+      "size": 28,
+      "minSize": 20,
+      "color": "white"
+    },
+    {
+      "type": "rect",
+      "if": "goods.3",
+      "box": {
+        "x": 554,
+        "y": 705,
+        "w": 453,
+        "h": 380
+      },
+      "radius": 30,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "image",
+      "if": "goods.3",
+      "slot": "goods_image_4",
+      "box": {
+        "x": 577,
+        "y": 727,
+        "w": 407,
+        "h": 218
+      },
+      "radius": 20,
+      "fill": "accent",
+      "inset": 8
+    },
+    {
+      "type": "text",
+      "field": "goods.3.name",
+      "box": {
+        "x": 577,
+        "y": 958,
+        "w": 407,
+        "h": 46
+      },
+      "font": "display",
+      "size": 34,
+      "minSize": 24,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "goods.3.kind",
+      "box": {
+        "x": 577,
+        "y": 1020,
+        "w": 260,
+        "h": 40
+      },
+      "font": "body",
+      "size": 30,
+      "minSize": 22,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "pill",
+      "field": "goods.3.price",
+      "x": 984,
+      "y": 1018,
+      "h": 46,
+      "align": "right",
+      "padX": 20,
+      "maxWidth": 200,
+      "fill": "ink",
+      "font": "display",
+      "size": 28,
+      "minSize": 20,
+      "color": "white"
+    },
+    {
+      "type": "rect",
+      "if": "price_range",
+      "box": {
+        "x": 72,
+        "y": 1123,
+        "w": 935,
+        "h": 88
+      },
+      "radius": 24,
+      "fill": "accent"
+    },
+    {
+      "type": "text",
+      "if": "price_range",
+      "text": "가격대",
+      "box": {
+        "x": 104,
+        "y": 1144,
+        "w": 100,
+        "h": 44
+      },
+      "font": "display",
+      "size": 32,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "price_range",
+      "box": {
+        "x": 204,
+        "y": 1144,
+        "w": 780,
+        "h": 44
+      },
+      "font": "body",
+      "size": 29,
+      "minSize": 22,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "footer",
+      "dy": 6,
+      "parts": [
+        "가격·수량은 공식 판매처 기준",
+        "{source}"
+      ]
+    }
+  ],
+  "sample": {
+    "source": "",
+    "fields": {
+      "goods": [
+        {
+          "name": "[굿즈 이름]",
+          "kind": "[종류·사이즈]",
+          "price": "[가격]원"
+        },
+        {
+          "name": "[굿즈 이름]",
+          "kind": "[종류·사이즈]",
+          "price": "[가격]원"
+        },
+        {
+          "name": "[굿즈 이름]",
+          "kind": "[종류·사이즈]",
+          "price": "[가격]원"
+        },
+        {
+          "name": "[굿즈 이름]",
+          "kind": "[종류·사이즈]",
+          "price": "[가격]원"
+        }
+      ],
+      "price_range": "[최저가]원 ~ [최고가]원"
+    }
+  }
+}

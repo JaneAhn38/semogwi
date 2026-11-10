@@ -1,0 +1,46 @@
+{
+  "id": "character-body",
+  "contentType": "character",
+  "kind": "body",
+  "label": "캐릭터 소개 · 본문(프로필 카드)",
+  "legacy": true,
+  "fonts": { "display": "Jua", "body": "Gowun Dodum" },
+  "palette": {
+    "bg": "#FFF8F0", "ink": "#2E2A35", "inkSoft": "#5A5463", "muted": "#8A8494",
+    "accent": "#F7C6D3", "white": "#FFFFFF", "paper": "#FFF8F0"
+  },
+  "fields": [
+    { "key": "heading", "label": "카드 제목", "type": "text", "max": 14, "required": true, "default": "이 친구를 소개할게요", "example": "이 친구를 소개할게요" },
+    { "key": "profile", "label": "프로필", "type": "pairs", "maxItems": 4, "labelMax": 6, "valueMax": 14,
+      "defaultLabels": ["이름", "생일", "좋아하는 것", "작가"], "example": [{ "label": "이름", "value": "치이카와" }] },
+    { "key": "tags", "label": "특징 태그", "type": "list", "maxItems": 3, "itemMax": 8, "example": ["울보", "노력파"] },
+    { "key": "tmi", "label": "TMI", "type": "multiline", "max": 60, "example": "확인된 짧은 사실 하나" }
+  ],
+  "images": [
+    { "key": "main", "label": "캐릭터 이미지", "required": false, "hint": "배경을 제거한 이미지가 잘 어울려요" }
+  ],
+  "elements": [
+    { "type": "header", "tag": "캐릭터 소개", "tagFill": "accent" },
+    { "type": "text", "field": "heading", "box": { "x": 72, "y": 182, "w": 936, "h": 84 }, "font": "display", "size": 64, "minSize": 46, "color": "ink", "align": "left", "valign": "middle", "maxLines": 1 },
+
+    { "type": "rect", "box": { "x": 74, "y": 305, "w": 932, "h": 550 }, "radius": 40, "fill": "white" },
+    { "type": "rect", "box": { "x": 74, "y": 305, "w": 932, "h": 77 }, "radius": [40, 40, 0, 0], "fill": "accent" },
+    { "type": "line", "x1": 74, "y1": 382, "x2": 1006, "y2": 382, "color": "ink", "lineWidth": 3 },
+    { "type": "rect", "box": { "x": 74, "y": 305, "w": 932, "h": 550 }, "radius": 40, "stroke": "ink", "lineWidth": 3 },
+    { "type": "text", "text": "PROFILE", "box": { "x": 111, "y": 322, "w": 400, "h": 44 }, "font": "display", "size": 30, "color": "ink", "align": "left", "valign": "middle", "maxLines": 1, "letterSpacing": 6 },
+    { "type": "text", "text": "No. {no}", "box": { "x": 700, "y": 322, "w": 268, "h": 44 }, "font": "body", "size": 24, "color": "inkSoft", "align": "right", "valign": "middle", "maxLines": 1 },
+
+    { "type": "image", "slot": "main", "box": { "x": 113, "y": 422, "w": 297, "h": 297 }, "radius": 27, "fill": "paper", "inset": 14 },
+    { "type": "rows", "field": "profile", "x": 449, "y": 443, "rowHeight": 62, "labelWidth": 150, "valueX": 610, "valueWidth": 360, "maxRows": 4, "labelDy": 0, "valueDy": 6,
+      "label": { "font": "display", "size": 30, "color": "inkSoft" },
+      "value": { "font": "body", "size": 30, "minSize": 22, "color": "inkSoft" } },
+    { "type": "chips", "field": "tags", "x": 112, "y": 757, "h": 60, "gap": 20, "padX": 23, "maxWidth": 856, "maxItems": 3, "prefix": "#",
+      "font": "body", "size": 28, "minSize": 22, "fill": "accent", "color": "ink" },
+
+    { "type": "rect", "if": "tmi", "box": { "x": 73, "y": 898, "w": 934, "h": 221 }, "radius": 34, "fill": "ink" },
+    { "type": "text", "if": "tmi", "text": "TMI", "box": { "x": 112, "y": 930, "w": 300, "h": 46 }, "font": "display", "size": 34, "color": "accent", "align": "left", "valign": "middle", "maxLines": 1 },
+    { "type": "text", "field": "tmi", "box": { "x": 112, "y": 988, "w": 856, "h": 112 }, "font": "body", "size": 32, "minSize": 24, "lineHeight": 1.5, "color": "paper", "align": "left", "valign": "top", "maxLines": 2 },
+
+    { "type": "footer", "left": "{source}" }
+  ]
+}

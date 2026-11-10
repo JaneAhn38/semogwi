@@ -1,0 +1,406 @@
+{
+  "id": "collab-03",
+  "contentType": "collab",
+  "kind": "body",
+  "label": "제품·메뉴",
+  "reference": "reference/콜라보 · 03 제품·메뉴.png",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#C9D8F5",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "inherit": [
+    "brand_name",
+    "character_name"
+  ],
+  "fields": [
+    {
+      "key": "menu_intro",
+      "label": "소개 한 줄",
+      "type": "text",
+      "max": 26,
+      "item": "menu"
+    },
+    {
+      "key": "products",
+      "label": "제품·메뉴",
+      "type": "items",
+      "maxItems": 3,
+      "fields": [
+        {
+          "key": "name",
+          "label": "이름",
+          "type": "text",
+          "max": 9,
+          "required": true
+        },
+        {
+          "key": "price",
+          "label": "가격",
+          "type": "text",
+          "max": 9,
+          "hint": "통화까지 출처 표기 그대로"
+        }
+      ],
+      "item": "menu"
+    },
+    {
+      "key": "sale_note",
+      "label": "판매 안내",
+      "type": "text",
+      "max": 24,
+      "item": "how_to_join"
+    }
+  ],
+  "images": [
+    {
+      "key": "product_image_1",
+      "label": "제품·메뉴 1 사진",
+      "required": false
+    },
+    {
+      "key": "product_image_2",
+      "label": "제품·메뉴 2 사진",
+      "required": false
+    },
+    {
+      "key": "product_image_3",
+      "label": "제품·메뉴 3 사진",
+      "required": false
+    }
+  ],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "콜라보",
+      "tagFill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "MENU",
+      "box": {
+        "x": 72,
+        "y": 172,
+        "w": 700,
+        "h": 90
+      },
+      "font": "display",
+      "size": 72,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "if": "brand_name",
+      "text": "{brand_name} × {character_name}",
+      "box": {
+        "x": 640,
+        "y": 216,
+        "w": 367,
+        "h": 40
+      },
+      "font": "body",
+      "size": 26,
+      "minSize": 20,
+      "color": "inkSoft",
+      "align": "right",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "line",
+      "x1": 72,
+      "y1": 272,
+      "x2": 1007,
+      "y2": 272,
+      "color": "ink",
+      "lineWidth": 4
+    },
+    {
+      "type": "text",
+      "field": "menu_intro",
+      "box": {
+        "x": 72,
+        "y": 314,
+        "w": 935,
+        "h": 46
+      },
+      "font": "body",
+      "size": 34,
+      "minSize": 24,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "if": "products.0",
+      "box": {
+        "x": 74,
+        "y": 399,
+        "w": 295,
+        "h": 513
+      },
+      "radius": 30,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "image",
+      "if": "products.0",
+      "slot": "product_image_1",
+      "box": {
+        "x": 92,
+        "y": 417,
+        "w": 258,
+        "h": 378
+      },
+      "radius": 20,
+      "fill": "accent",
+      "inset": 8
+    },
+    {
+      "type": "text",
+      "field": "products.0.name",
+      "box": {
+        "x": 92,
+        "y": 805,
+        "w": 258,
+        "h": 40
+      },
+      "font": "display",
+      "size": 30,
+      "minSize": 20,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "products.0.price",
+      "box": {
+        "x": 92,
+        "y": 857,
+        "w": 258,
+        "h": 40
+      },
+      "font": "body",
+      "size": 26,
+      "minSize": 20,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "if": "products.1",
+      "box": {
+        "x": 393,
+        "y": 399,
+        "w": 295,
+        "h": 513
+      },
+      "radius": 30,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "image",
+      "if": "products.1",
+      "slot": "product_image_2",
+      "box": {
+        "x": 411,
+        "y": 417,
+        "w": 258,
+        "h": 378
+      },
+      "radius": 20,
+      "fill": "accent",
+      "inset": 8
+    },
+    {
+      "type": "text",
+      "field": "products.1.name",
+      "box": {
+        "x": 411,
+        "y": 805,
+        "w": 258,
+        "h": 40
+      },
+      "font": "display",
+      "size": 30,
+      "minSize": 20,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "products.1.price",
+      "box": {
+        "x": 411,
+        "y": 857,
+        "w": 258,
+        "h": 40
+      },
+      "font": "body",
+      "size": 26,
+      "minSize": 20,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "if": "products.2",
+      "box": {
+        "x": 711,
+        "y": 399,
+        "w": 295,
+        "h": 513
+      },
+      "radius": 30,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "image",
+      "if": "products.2",
+      "slot": "product_image_3",
+      "box": {
+        "x": 729,
+        "y": 417,
+        "w": 258,
+        "h": 378
+      },
+      "radius": 20,
+      "fill": "accent",
+      "inset": 8
+    },
+    {
+      "type": "text",
+      "field": "products.2.name",
+      "box": {
+        "x": 729,
+        "y": 805,
+        "w": 258,
+        "h": 40
+      },
+      "font": "display",
+      "size": 30,
+      "minSize": 20,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "products.2.price",
+      "box": {
+        "x": 729,
+        "y": 857,
+        "w": 258,
+        "h": 40
+      },
+      "font": "body",
+      "size": 26,
+      "minSize": 20,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "if": "sale_note",
+      "box": {
+        "x": 72,
+        "y": 950,
+        "w": 935,
+        "h": 88
+      },
+      "radius": 16,
+      "fill": "accent"
+    },
+    {
+      "type": "text",
+      "if": "sale_note",
+      "text": "판매 안내",
+      "box": {
+        "x": 104,
+        "y": 971,
+        "w": 140,
+        "h": 44
+      },
+      "font": "display",
+      "size": 32,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "sale_note",
+      "box": {
+        "x": 244,
+        "y": 971,
+        "w": 740,
+        "h": 44
+      },
+      "font": "body",
+      "size": 28,
+      "minSize": 22,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "footer",
+      "left": "{source}"
+    }
+  ],
+  "sample": {
+    "source": "출처: [브랜드 공식 발표]",
+    "fields": {
+      "brand_name": "[브랜드]",
+      "character_name": "[캐릭터]",
+      "menu_intro": "[이번 콜라보로 나온 한정 제품·메뉴를 소개해요]",
+      "products": [
+        {
+          "name": "[이름]",
+          "price": "[가격]원"
+        },
+        {
+          "name": "[이름]",
+          "price": "[가격]원"
+        },
+        {
+          "name": "[이름]",
+          "price": "[가격]원"
+        }
+      ],
+      "sale_note": "[예: 일부 매장 한정 · 소진 시 조기 종료]"
+    }
+  }
+}

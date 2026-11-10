@@ -1,0 +1,331 @@
+{
+  "id": "collab-05",
+  "contentType": "collab",
+  "kind": "body",
+  "label": "마무리",
+  "reference": "reference/콜라보 · 05 마무리.png",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#C9D8F5",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "fields": [
+    {
+      "key": "period",
+      "label": "기간",
+      "type": "text",
+      "max": 15,
+      "required": true,
+      "item": "period"
+    },
+    {
+      "key": "place",
+      "label": "장소",
+      "type": "text",
+      "max": 16,
+      "item": "place"
+    },
+    {
+      "key": "key_benefit",
+      "label": "핵심 혜택",
+      "type": "text",
+      "max": 16,
+      "item": "perks"
+    }
+  ],
+  "images": [],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "콜라보",
+      "tagFill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "한눈에 정리",
+      "box": {
+        "x": 72,
+        "y": 178,
+        "w": 936,
+        "h": 84
+      },
+      "font": "display",
+      "size": 64,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 74,
+        "y": 297,
+        "w": 932,
+        "h": 321
+      },
+      "radius": 32,
+      "fill": "white"
+    },
+    {
+      "type": "line",
+      "x1": 74,
+      "y1": 404,
+      "x2": 1006,
+      "y2": 404,
+      "color": "ink",
+      "lineWidth": 4
+    },
+    {
+      "type": "line",
+      "x1": 74,
+      "y1": 511,
+      "x2": 1006,
+      "y2": 511,
+      "color": "ink",
+      "lineWidth": 4
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 74,
+        "y": 297,
+        "w": 932,
+        "h": 321
+      },
+      "radius": 32,
+      "stroke": "ink",
+      "lineWidth": 4
+    },
+    {
+      "type": "check",
+      "cx": 135.5,
+      "cy": 351,
+      "r": 25,
+      "lineWidth": 3
+    },
+    {
+      "type": "check",
+      "cx": 135.5,
+      "cy": 458,
+      "r": 25,
+      "lineWidth": 3,
+      "if": "place"
+    },
+    {
+      "type": "check",
+      "cx": 135.5,
+      "cy": 565,
+      "r": 25,
+      "lineWidth": 3,
+      "if": "key_benefit"
+    },
+    {
+      "type": "text",
+      "text": "기간",
+      "box": {
+        "x": 188,
+        "y": 326,
+        "w": 190,
+        "h": 46
+      },
+      "font": "display",
+      "size": 30,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "text": "장소",
+      "box": {
+        "x": 188,
+        "y": 435,
+        "w": 190,
+        "h": 46
+      },
+      "font": "display",
+      "size": 30,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "place"
+    },
+    {
+      "type": "text",
+      "text": "핵심 혜택",
+      "box": {
+        "x": 188,
+        "y": 544,
+        "w": 190,
+        "h": 46
+      },
+      "font": "display",
+      "size": 30,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "key_benefit"
+    },
+    {
+      "type": "text",
+      "field": "period",
+      "box": {
+        "x": 387,
+        "y": 324,
+        "w": 590,
+        "h": 50
+      },
+      "font": "display",
+      "size": 35,
+      "minSize": 24,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "place",
+      "box": {
+        "x": 387,
+        "y": 433,
+        "w": 590,
+        "h": 50
+      },
+      "font": "display",
+      "size": 35,
+      "minSize": 24,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "key_benefit",
+      "box": {
+        "x": 387,
+        "y": 542,
+        "w": 590,
+        "h": 50
+      },
+      "font": "display",
+      "size": 35,
+      "minSize": 24,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 73,
+        "y": 657,
+        "w": 934,
+        "h": 88
+      },
+      "radius": 24,
+      "fill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "출처",
+      "box": {
+        "x": 104,
+        "y": 679,
+        "w": 80,
+        "h": 42
+      },
+      "font": "display",
+      "size": 30,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "text": "{source_text}",
+      "box": {
+        "x": 179,
+        "y": 679,
+        "w": 800,
+        "h": 42
+      },
+      "font": "body",
+      "size": 28,
+      "minSize": 22,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "asset",
+      "src": "mascot",
+      "box": {
+        "x": 456,
+        "y": 864,
+        "w": 168,
+        "h": 148
+      }
+    },
+    {
+      "type": "text",
+      "text": "세상의 모든 귀여운 것들, 또 만나요!",
+      "box": {
+        "x": 90,
+        "y": 1024,
+        "w": 900,
+        "h": 46
+      },
+      "font": "display",
+      "size": 40,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "text": "저장해 두고 필요할 때 꺼내 보세요",
+      "box": {
+        "x": 90,
+        "y": 1088,
+        "w": 900,
+        "h": 36
+      },
+      "font": "body",
+      "size": 26,
+      "color": "inkSoft",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "footer",
+      "left": "세모귀 팔로우하고 소식 받기"
+    }
+  ],
+  "sample": {
+    "source": "출처: [브랜드 공식 계정 · 발표 링크]",
+    "fields": {
+      "period": "[MM.DD] ~ [MM.DD]",
+      "place": "[매장 / 온라인]",
+      "key_benefit": "[한 줄 요약]"
+    }
+  }
+}

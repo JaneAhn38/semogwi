@@ -1,0 +1,351 @@
+{
+  "id": "goods-04",
+  "contentType": "goods",
+  "kind": "body",
+  "label": "구매 방법",
+  "reference": "reference/굿즈 판매 · 04 구매 방법.png",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#FDE7A6",
+    "accent2": "#F5C84C",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "fields": [
+    {
+      "key": "sale_start",
+      "label": "판매 시작",
+      "type": "text",
+      "max": 18,
+      "required": true,
+      "hint": "출처 표기 그대로. 예: 11.20 (금) 11:00",
+      "item": "release_date"
+    },
+    {
+      "key": "seller",
+      "label": "판매처",
+      "type": "text",
+      "max": 18,
+      "item": "seller"
+    },
+    {
+      "key": "delivery",
+      "label": "배송·수령",
+      "type": "text",
+      "max": 18,
+      "item": "shipping"
+    },
+    {
+      "key": "benefit_label",
+      "label": "혜택 제목",
+      "type": "text",
+      "max": 8,
+      "default": "선착순 특전"
+    },
+    {
+      "key": "purchase_benefit",
+      "label": "구매 혜택",
+      "type": "text",
+      "max": 28,
+      "item": "benefits"
+    }
+  ],
+  "images": [],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "굿즈 판매",
+      "tagFill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "이렇게 사요",
+      "box": {
+        "x": 72,
+        "y": 178,
+        "w": 936,
+        "h": 84
+      },
+      "font": "display",
+      "size": 64,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 74,
+        "y": 297,
+        "w": 932,
+        "h": 592
+      },
+      "radius": 32,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "line",
+      "x1": 159,
+      "y1": 424,
+      "x2": 159,
+      "y2": 520,
+      "color": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "line",
+      "x1": 159,
+      "y1": 604,
+      "x2": 159,
+      "y2": 700,
+      "color": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "circle",
+      "cx": 159,
+      "cy": 382,
+      "r": 41,
+      "fill": "accent",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "circle",
+      "cx": 159,
+      "cy": 562,
+      "r": 41,
+      "fill": "accent",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "circle",
+      "cx": 159,
+      "cy": 742,
+      "r": 41,
+      "fill": "accent",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "text",
+      "text": "1",
+      "box": {
+        "x": 119,
+        "y": 358,
+        "w": 80,
+        "h": 50
+      },
+      "font": "display",
+      "size": 40,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "text": "2",
+      "box": {
+        "x": 119,
+        "y": 538,
+        "w": 80,
+        "h": 50
+      },
+      "font": "display",
+      "size": 40,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "text": "3",
+      "box": {
+        "x": 119,
+        "y": 718,
+        "w": 80,
+        "h": 50
+      },
+      "font": "display",
+      "size": 40,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "text": "판매 시작",
+      "box": {
+        "x": 234,
+        "y": 347,
+        "w": 400,
+        "h": 34
+      },
+      "font": "display",
+      "size": 30,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "sale_start",
+      "box": {
+        "x": 234,
+        "y": 391,
+        "w": 740,
+        "h": 52
+      },
+      "font": "display",
+      "size": 44,
+      "minSize": 28,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "text": "판매처",
+      "box": {
+        "x": 234,
+        "y": 527,
+        "w": 400,
+        "h": 34
+      },
+      "font": "display",
+      "size": 30,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "seller"
+    },
+    {
+      "type": "text",
+      "field": "seller",
+      "box": {
+        "x": 234,
+        "y": 571,
+        "w": 740,
+        "h": 52
+      },
+      "font": "display",
+      "size": 44,
+      "minSize": 28,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "text": "배송 · 수령",
+      "box": {
+        "x": 234,
+        "y": 711,
+        "w": 400,
+        "h": 34
+      },
+      "font": "display",
+      "size": 30,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "delivery"
+    },
+    {
+      "type": "text",
+      "field": "delivery",
+      "box": {
+        "x": 234,
+        "y": 756,
+        "w": 740,
+        "h": 52
+      },
+      "font": "display",
+      "size": 44,
+      "minSize": 28,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "if": "purchase_benefit",
+      "box": {
+        "x": 73,
+        "y": 927,
+        "w": 934,
+        "h": 164
+      },
+      "radius": 34,
+      "fill": "ink"
+    },
+    {
+      "type": "text",
+      "if": "purchase_benefit",
+      "text": "{benefit_label}",
+      "box": {
+        "x": 112,
+        "y": 954,
+        "w": 600,
+        "h": 46
+      },
+      "font": "display",
+      "size": 34,
+      "color": "accent",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "purchase_benefit",
+      "box": {
+        "x": 112,
+        "y": 1016,
+        "w": 856,
+        "h": 46
+      },
+      "font": "body",
+      "size": 30,
+      "minSize": 24,
+      "color": "paper",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "footer",
+      "left": "{source}"
+    }
+  ],
+  "sample": {
+    "source": "출처: [공식 판매처 공지]",
+    "fields": {
+      "sale_start": "[MM.DD (요일) HH:MM]",
+      "seller": "[온라인몰 / 오프라인 매장]",
+      "delivery": "[MM월 중순 순차 배송]",
+      "benefit_label": "선착순 특전",
+      "purchase_benefit": "[예: 선착순 300명 한정 엽서 증정]"
+    }
+  }
+}

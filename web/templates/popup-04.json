@@ -1,0 +1,449 @@
+{
+  "id": "popup-04",
+  "contentType": "popup",
+  "kind": "body",
+  "label": "포토존·특전",
+  "reference": "reference/팝업스토어 · 04 포토존·특전.png",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#BFE6D5",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "fields": [
+    {
+      "key": "photo_location",
+      "label": "포토존 위치",
+      "type": "text",
+      "max": 12,
+      "item": "photozone"
+    },
+    {
+      "key": "purchase_perks",
+      "label": "구매 금액별 특전",
+      "type": "items",
+      "maxItems": 3,
+      "fields": [
+        {
+          "key": "condition",
+          "label": "구매 금액",
+          "type": "text",
+          "max": 10,
+          "required": true,
+          "hint": "예: 3만원 이상"
+        },
+        {
+          "key": "reward",
+          "label": "증정품",
+          "type": "text",
+          "max": 14
+        }
+      ],
+      "item": "perks"
+    },
+    {
+      "key": "event",
+      "label": "이벤트",
+      "type": "text",
+      "max": 30,
+      "item": "perks"
+    }
+  ],
+  "images": [
+    {
+      "key": "photo_zone_image",
+      "label": "포토존·대형 조형물 사진",
+      "required": false
+    }
+  ],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "팝업스토어",
+      "tagFill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "포토존 · 특전",
+      "box": {
+        "x": 72,
+        "y": 178,
+        "w": 936,
+        "h": 84
+      },
+      "font": "display",
+      "size": 64,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 72,
+        "y": 295,
+        "w": 935,
+        "h": 319
+      },
+      "radius": 50,
+      "fill": "accent"
+    },
+    {
+      "type": "image",
+      "slot": "photo_zone_image",
+      "box": {
+        "x": 261,
+        "y": 331,
+        "w": 558,
+        "h": 248
+      },
+      "radius": 26,
+      "fill": "white",
+      "inset": 10
+    },
+    {
+      "type": "pill",
+      "field": "photo_location",
+      "x": 100,
+      "y": 537,
+      "h": 54,
+      "align": "left",
+      "padX": 26,
+      "maxWidth": 600,
+      "fill": "ink",
+      "font": "display",
+      "size": 30,
+      "minSize": 22,
+      "color": "white"
+    },
+    {
+      "type": "rect",
+      "if": "purchase_perks",
+      "box": {
+        "x": 74,
+        "y": 655,
+        "w": 932,
+        "h": 327
+      },
+      "radius": 32,
+      "fill": "white"
+    },
+    {
+      "type": "rect",
+      "if": "purchase_perks",
+      "box": {
+        "x": 74,
+        "y": 655,
+        "w": 932,
+        "h": 70
+      },
+      "radius": [
+        32,
+        32,
+        0,
+        0
+      ],
+      "fill": "accent"
+    },
+    {
+      "type": "line",
+      "if": "purchase_perks",
+      "x1": 74,
+      "y1": 725,
+      "x2": 1006,
+      "y2": 725,
+      "color": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "line",
+      "if": "purchase_perks.1",
+      "x1": 74,
+      "y1": 811,
+      "x2": 1006,
+      "y2": 811,
+      "color": "muted",
+      "lineWidth": 2,
+      "dash": [
+        8,
+        6
+      ]
+    },
+    {
+      "type": "line",
+      "if": "purchase_perks.2",
+      "x1": 74,
+      "y1": 896,
+      "x2": 1006,
+      "y2": 896,
+      "color": "muted",
+      "lineWidth": 2,
+      "dash": [
+        8,
+        6
+      ]
+    },
+    {
+      "type": "rect",
+      "if": "purchase_perks",
+      "box": {
+        "x": 74,
+        "y": 655,
+        "w": 932,
+        "h": 327
+      },
+      "radius": 32,
+      "stroke": "ink",
+      "lineWidth": 4
+    },
+    {
+      "type": "text",
+      "if": "purchase_perks",
+      "text": "구매 금액별 특전",
+      "box": {
+        "x": 108,
+        "y": 670,
+        "w": 500,
+        "h": 42
+      },
+      "font": "display",
+      "size": 30,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "purchase_perks.0.condition",
+      "box": {
+        "x": 108,
+        "y": 745,
+        "w": 240,
+        "h": 48
+      },
+      "font": "display",
+      "size": 36,
+      "minSize": 24,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "if": "purchase_perks.0",
+      "text": "→",
+      "box": {
+        "x": 355,
+        "y": 745,
+        "w": 45,
+        "h": 48
+      },
+      "font": "body",
+      "size": 30,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "purchase_perks.0.reward",
+      "box": {
+        "x": 414,
+        "y": 745,
+        "w": 570,
+        "h": 48
+      },
+      "font": "body",
+      "size": 32,
+      "minSize": 24,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "purchase_perks.1.condition",
+      "box": {
+        "x": 108,
+        "y": 830,
+        "w": 240,
+        "h": 48
+      },
+      "font": "display",
+      "size": 36,
+      "minSize": 24,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "if": "purchase_perks.1",
+      "text": "→",
+      "box": {
+        "x": 355,
+        "y": 830,
+        "w": 45,
+        "h": 48
+      },
+      "font": "body",
+      "size": 30,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "purchase_perks.1.reward",
+      "box": {
+        "x": 414,
+        "y": 830,
+        "w": 570,
+        "h": 48
+      },
+      "font": "body",
+      "size": 32,
+      "minSize": 24,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "purchase_perks.2.condition",
+      "box": {
+        "x": 108,
+        "y": 915,
+        "w": 240,
+        "h": 48
+      },
+      "font": "display",
+      "size": 36,
+      "minSize": 24,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "if": "purchase_perks.2",
+      "text": "→",
+      "box": {
+        "x": 355,
+        "y": 915,
+        "w": 45,
+        "h": 48
+      },
+      "font": "body",
+      "size": 30,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "purchase_perks.2.reward",
+      "box": {
+        "x": 414,
+        "y": 915,
+        "w": 570,
+        "h": 48
+      },
+      "font": "body",
+      "size": 32,
+      "minSize": 24,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "if": "event",
+      "box": {
+        "x": 72,
+        "y": 1021,
+        "w": 935,
+        "h": 162
+      },
+      "radius": 34,
+      "fill": "ink"
+    },
+    {
+      "type": "text",
+      "if": "event",
+      "text": "이벤트",
+      "box": {
+        "x": 112,
+        "y": 1052,
+        "w": 400,
+        "h": 44
+      },
+      "font": "display",
+      "size": 34,
+      "color": "accent",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "event",
+      "box": {
+        "x": 112,
+        "y": 1111,
+        "w": 856,
+        "h": 46
+      },
+      "font": "body",
+      "size": 30,
+      "minSize": 22,
+      "color": "paper",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "footer",
+      "left": "{source}"
+    }
+  ],
+  "sample": {
+    "source": "출처: [공식 계정 공지]",
+    "fields": {
+      "photo_location": "[포토존 위치]",
+      "purchase_perks": [
+        {
+          "condition": "[N]만원 이상",
+          "reward": "[증정품]"
+        },
+        {
+          "condition": "[N]만원 이상",
+          "reward": "[증정품]"
+        },
+        {
+          "condition": "[N]만원 이상",
+          "reward": "[증정품]"
+        }
+      ],
+      "event": "[예: SNS 인증 시 스티커 증정 · 소진 시 종료]"
+    }
+  }
+}

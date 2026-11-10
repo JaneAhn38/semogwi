@@ -1,0 +1,209 @@
+{
+  "id": "collab-01",
+  "contentType": "collab",
+  "kind": "cover",
+  "label": "표지",
+  "reference": "reference/콜라보 · 01 표지.png",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#C9D8F5",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "fields": [
+    {
+      "key": "brand_name",
+      "label": "브랜드명",
+      "type": "text",
+      "max": 8,
+      "required": true,
+      "item": "partners"
+    },
+    {
+      "key": "character_name",
+      "label": "캐릭터명",
+      "type": "text",
+      "max": 8,
+      "required": true,
+      "item": "partners"
+    },
+    {
+      "key": "summary",
+      "label": "콜라보 요약",
+      "type": "text",
+      "max": 28,
+      "required": true,
+      "item": "content"
+    },
+    {
+      "key": "period",
+      "label": "기간",
+      "type": "text",
+      "max": 15,
+      "hint": "출처 표기 그대로. 예: 11.20 ~ 12.31",
+      "item": "period"
+    }
+  ],
+  "images": [
+    {
+      "key": "brand_logo",
+      "label": "브랜드 공식 로고",
+      "required": false,
+      "shape": "circle",
+      "hint": "상표 사용 허가를 확인한 이미지만 쓰세요"
+    },
+    {
+      "key": "character_image",
+      "label": "캐릭터 공식 이미지",
+      "required": true,
+      "shape": "circle"
+    }
+  ],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "콜라보",
+      "tagFill": "accent"
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 72,
+        "y": 186,
+        "w": 935,
+        "h": 982
+      },
+      "radius": 50,
+      "fill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "COLLABORATION",
+      "box": {
+        "x": 240,
+        "y": 336,
+        "w": 600,
+        "h": 42
+      },
+      "font": "display",
+      "size": 33,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1,
+      "letterSpacing": 11
+    },
+    {
+      "type": "image",
+      "slot": "brand_logo",
+      "shape": "circle",
+      "box": {
+        "x": 134,
+        "y": 425,
+        "w": 339,
+        "h": 339
+      },
+      "emptyFill": "white",
+      "inset": 40
+    },
+    {
+      "type": "image",
+      "slot": "character_image",
+      "shape": "circle",
+      "box": {
+        "x": 607,
+        "y": 425,
+        "w": 339,
+        "h": 339
+      },
+      "emptyFill": "white",
+      "inset": 30
+    },
+    {
+      "type": "text",
+      "text": "×",
+      "box": {
+        "x": 490,
+        "y": 555,
+        "w": 100,
+        "h": 80
+      },
+      "font": "body",
+      "size": 84,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "text": "{brand_name} × {character_name}",
+      "box": {
+        "x": 82,
+        "y": 811,
+        "w": 916,
+        "h": 110
+      },
+      "font": "display",
+      "size": 96,
+      "minSize": 52,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "summary",
+      "box": {
+        "x": 92,
+        "y": 966,
+        "w": 896,
+        "h": 56
+      },
+      "font": "body",
+      "size": 36,
+      "minSize": 26,
+      "color": "inkSoft",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "pill",
+      "field": "period",
+      "x": 73,
+      "y": 1210,
+      "h": 66,
+      "align": "left",
+      "padX": 36,
+      "maxWidth": 600,
+      "stroke": "ink",
+      "lineWidth": 3,
+      "font": "display",
+      "size": 34,
+      "minSize": 24,
+      "color": "ink"
+    },
+    {
+      "type": "footer",
+      "dy": -16
+    }
+  ],
+  "sample": {
+    "source": "",
+    "fields": {
+      "brand_name": "[브랜드]",
+      "character_name": "[캐릭터]",
+      "summary": "[콜라보 한 줄 요약 — 예: 한정판 음료와 굿즈가 나와요]",
+      "period": "[MM.DD] ~ [MM.DD]"
+    }
+  }
+}

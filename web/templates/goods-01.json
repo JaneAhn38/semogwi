@@ -1,0 +1,271 @@
+{
+  "id": "goods-01",
+  "contentType": "goods",
+  "kind": "cover",
+  "label": "표지",
+  "reference": "reference/굿즈 판매 · 01 표지.png",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#FDE7A6",
+    "accent2": "#F5C84C",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "fields": [
+    {
+      "key": "character_name",
+      "label": "캐릭터명",
+      "type": "text",
+      "max": 10,
+      "required": true,
+      "item": "product_names"
+    },
+    {
+      "key": "lineup_name",
+      "label": "굿즈 라인업",
+      "type": "text",
+      "max": 12,
+      "required": true,
+      "item": "product_names"
+    },
+    {
+      "key": "is_new",
+      "label": "신상품으로 확인됨",
+      "type": "flag",
+      "hint": "공식 출처에 신상품·신규 출시로 나와 있을 때만 켭니다. 켜면 '신상 굿즈 출시'와 NEW가 표시돼요"
+    },
+    {
+      "key": "release_date",
+      "label": "발매일",
+      "type": "text",
+      "max": 16,
+      "hint": "출처 표기 그대로. 예: 11.20 (금)",
+      "item": "release_date"
+    },
+    {
+      "key": "seller",
+      "label": "판매처",
+      "type": "text",
+      "max": 16,
+      "item": "seller"
+    }
+  ],
+  "images": [
+    {
+      "key": "main_goods_image",
+      "label": "대표 굿즈 사진",
+      "required": true
+    }
+  ],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "굿즈 판매",
+      "tagFill": "accent"
+    },
+    {
+      "type": "rect",
+      "if": "is_new",
+      "box": {
+        "x": 72,
+        "y": 182,
+        "w": 206,
+        "h": 53
+      },
+      "radius": 10,
+      "fill": "ink"
+    },
+    {
+      "type": "text",
+      "if": "is_new",
+      "text": "신상 굿즈 출시",
+      "box": {
+        "x": 72,
+        "y": 182,
+        "w": 206,
+        "h": 53
+      },
+      "font": "display",
+      "size": 29,
+      "color": "white",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "text": "{character_name} {lineup_name} 나왔어요!",
+      "box": {
+        "x": 72,
+        "y": 250,
+        "w": 945,
+        "h": 220
+      },
+      "font": "display",
+      "size": 96,
+      "minSize": 60,
+      "lineHeight": 1.12,
+      "color": "ink",
+      "align": "left",
+      "valign": "top",
+      "maxLines": 2
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 72,
+        "y": 496,
+        "w": 935,
+        "h": 545
+      },
+      "radius": 50,
+      "fill": "accent"
+    },
+    {
+      "type": "image",
+      "slot": "main_goods_image",
+      "box": {
+        "x": 263,
+        "y": 510,
+        "w": 556,
+        "h": 514
+      },
+      "rotate": -2.6,
+      "radius": 27,
+      "fill": "white",
+      "inset": 18
+    },
+    {
+      "type": "star",
+      "if": "is_new",
+      "cx": 869,
+      "cy": 624,
+      "r": 98,
+      "inner": 0.6,
+      "points": 7,
+      "fill": "accent2",
+      "stroke": "ink",
+      "lineWidth": 3,
+      "text": "NEW",
+      "font": "display",
+      "size": 46,
+      "color": "ink",
+      "textDy": -10
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 73,
+        "y": 1076,
+        "w": 456,
+        "h": 128
+      },
+      "radius": 28,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 551,
+        "y": 1076,
+        "w": 456,
+        "h": 128
+      },
+      "radius": 28,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "text",
+      "text": "발매일",
+      "box": {
+        "x": 104,
+        "y": 1094,
+        "w": 300,
+        "h": 32
+      },
+      "font": "display",
+      "size": 25,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "release_date"
+    },
+    {
+      "type": "text",
+      "text": "판매처",
+      "box": {
+        "x": 582,
+        "y": 1094,
+        "w": 300,
+        "h": 32
+      },
+      "font": "display",
+      "size": 25,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "seller"
+    },
+    {
+      "type": "text",
+      "field": "release_date",
+      "box": {
+        "x": 104,
+        "y": 1133,
+        "w": 400,
+        "h": 46
+      },
+      "font": "display",
+      "size": 40,
+      "minSize": 26,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "seller",
+      "box": {
+        "x": 582,
+        "y": 1133,
+        "w": 400,
+        "h": 46
+      },
+      "font": "display",
+      "size": 40,
+      "minSize": 26,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "footer",
+      "left": "라인업 보러 가기 →"
+    }
+  ],
+  "sample": {
+    "source": "",
+    "fields": {
+      "character_name": "[캐릭터]",
+      "lineup_name": "[굿즈 라인업]",
+      "is_new": true,
+      "release_date": "[MM.DD (요일)]",
+      "seller": "[온라인몰 / 매장]"
+    }
+  }
+}

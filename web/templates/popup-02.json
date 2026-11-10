@@ -1,0 +1,437 @@
+{
+  "id": "popup-02",
+  "contentType": "popup",
+  "kind": "body",
+  "label": "운영 정보",
+  "reference": "reference/팝업스토어 · 02 운영 정보.png",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#BFE6D5",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "fields": [
+    {
+      "key": "period",
+      "label": "기간",
+      "type": "text",
+      "max": 22,
+      "required": true,
+      "hint": "출처 표기 그대로. 예: 2026.11.20 ~ 12.31",
+      "item": "period"
+    },
+    {
+      "key": "hours",
+      "label": "운영시간",
+      "type": "text",
+      "max": 20,
+      "item": "hours"
+    },
+    {
+      "key": "place",
+      "label": "장소",
+      "type": "text",
+      "max": 22,
+      "item": "place"
+    },
+    {
+      "key": "entry_method",
+      "label": "입장 방식",
+      "type": "text",
+      "max": 22,
+      "item": "entry"
+    },
+    {
+      "key": "closed_days",
+      "label": "휴무",
+      "type": "text",
+      "max": 18,
+      "item": "closed_days"
+    },
+    {
+      "key": "entry_tips",
+      "label": "입장 팁",
+      "type": "list",
+      "maxItems": 3,
+      "itemMax": 26,
+      "item": "notices"
+    }
+  ],
+  "images": [],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "팝업스토어",
+      "tagFill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "가기 전에 꼭 확인!",
+      "box": {
+        "x": 72,
+        "y": 178,
+        "w": 936,
+        "h": 84
+      },
+      "font": "display",
+      "size": 64,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 74,
+        "y": 297,
+        "w": 932,
+        "h": 543
+      },
+      "radius": 32,
+      "fill": "white"
+    },
+    {
+      "type": "line",
+      "x1": 74,
+      "y1": 406,
+      "x2": 1006,
+      "y2": 406,
+      "color": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "line",
+      "x1": 74,
+      "y1": 514,
+      "x2": 1006,
+      "y2": 514,
+      "color": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "line",
+      "x1": 74,
+      "y1": 622,
+      "x2": 1006,
+      "y2": 622,
+      "color": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "line",
+      "x1": 74,
+      "y1": 731,
+      "x2": 1006,
+      "y2": 731,
+      "color": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 74,
+        "y": 297,
+        "w": 932,
+        "h": 543
+      },
+      "radius": 32,
+      "stroke": "ink",
+      "lineWidth": 4
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 112,
+        "y": 325,
+        "w": 180,
+        "h": 53
+      },
+      "radius": 14,
+      "fill": "accent"
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 112,
+        "y": 433,
+        "w": 180,
+        "h": 53
+      },
+      "radius": 14,
+      "fill": "accent"
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 112,
+        "y": 542,
+        "w": 180,
+        "h": 53
+      },
+      "radius": 14,
+      "fill": "accent"
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 112,
+        "y": 651,
+        "w": 180,
+        "h": 53
+      },
+      "radius": 14,
+      "fill": "accent"
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 112,
+        "y": 759,
+        "w": 180,
+        "h": 53
+      },
+      "radius": 14,
+      "fill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "기간",
+      "box": {
+        "x": 112,
+        "y": 325,
+        "w": 180,
+        "h": 53
+      },
+      "font": "display",
+      "size": 29,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "text": "운영시간",
+      "box": {
+        "x": 112,
+        "y": 433,
+        "w": 180,
+        "h": 53
+      },
+      "font": "display",
+      "size": 29,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "hours"
+    },
+    {
+      "type": "text",
+      "text": "장소",
+      "box": {
+        "x": 112,
+        "y": 542,
+        "w": 180,
+        "h": 53
+      },
+      "font": "display",
+      "size": 29,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "place"
+    },
+    {
+      "type": "text",
+      "text": "입장 방식",
+      "box": {
+        "x": 112,
+        "y": 651,
+        "w": 180,
+        "h": 53
+      },
+      "font": "display",
+      "size": 29,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "entry_method"
+    },
+    {
+      "type": "text",
+      "text": "휴무",
+      "box": {
+        "x": 112,
+        "y": 759,
+        "w": 180,
+        "h": 53
+      },
+      "font": "display",
+      "size": 29,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "closed_days"
+    },
+    {
+      "type": "text",
+      "field": "period",
+      "box": {
+        "x": 323,
+        "y": 327,
+        "w": 660,
+        "h": 50
+      },
+      "font": "display",
+      "size": 38,
+      "minSize": 24,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "hours",
+      "box": {
+        "x": 323,
+        "y": 435,
+        "w": 660,
+        "h": 50
+      },
+      "font": "display",
+      "size": 38,
+      "minSize": 24,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "place",
+      "box": {
+        "x": 323,
+        "y": 544,
+        "w": 660,
+        "h": 50
+      },
+      "font": "body",
+      "size": 34,
+      "minSize": 24,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "entry_method",
+      "box": {
+        "x": 323,
+        "y": 653,
+        "w": 660,
+        "h": 50
+      },
+      "font": "body",
+      "size": 34,
+      "minSize": 24,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "closed_days",
+      "box": {
+        "x": 323,
+        "y": 761,
+        "w": 660,
+        "h": 50
+      },
+      "font": "body",
+      "size": 34,
+      "minSize": 24,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "if": "entry_tips",
+      "box": {
+        "x": 72,
+        "y": 879,
+        "w": 935,
+        "h": 284
+      },
+      "radius": 34,
+      "fill": "ink"
+    },
+    {
+      "type": "text",
+      "if": "entry_tips",
+      "text": "입장 팁",
+      "box": {
+        "x": 112,
+        "y": 910,
+        "w": 400,
+        "h": 44
+      },
+      "font": "display",
+      "size": 34,
+      "color": "accent",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "bullets",
+      "field": "entry_tips",
+      "x": 114,
+      "y": 993,
+      "pitch": 59.5,
+      "textX": 135,
+      "width": 840,
+      "maxItems": 3,
+      "bullet": "·",
+      "font": "body",
+      "size": 30,
+      "minSize": 24,
+      "color": "paper"
+    },
+    {
+      "type": "footer",
+      "left": "{source}"
+    }
+  ],
+  "sample": {
+    "source": "출처: [공식 계정 공지]",
+    "fields": {
+      "period": "[YYYY.MM.DD] ~ [MM.DD]",
+      "hours": "[00:00] ~ [00:00]",
+      "place": "[건물명 층 · 상세 위치]",
+      "entry_method": "[사전예약 / 현장대기 / 자유입장]",
+      "closed_days": "[휴무일 또는 '없음']",
+      "entry_tips": [
+        "[예약 링크 · 오픈 시간]",
+        "[평균 대기 시간]",
+        "[가까운 출구 · 주차]"
+      ]
+    }
+  }
+}

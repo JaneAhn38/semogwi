@@ -1,0 +1,207 @@
+{
+  "id": "popup-01",
+  "contentType": "popup",
+  "kind": "cover",
+  "label": "표지",
+  "reference": "reference/팝업스토어 · 01 표지.png",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#BFE6D5",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "fields": [
+    {
+      "key": "character_name",
+      "label": "캐릭터명",
+      "type": "text",
+      "max": 10,
+      "required": true,
+      "item": "popup_name"
+    },
+    {
+      "key": "start_date",
+      "label": "시작일",
+      "type": "text",
+      "max": 8,
+      "required": true,
+      "hint": "출처 표기 그대로. 예: 11.20",
+      "item": "period"
+    },
+    {
+      "key": "end_date",
+      "label": "종료일",
+      "type": "text",
+      "max": 8,
+      "item": "period"
+    },
+    {
+      "key": "location",
+      "label": "장소",
+      "type": "text",
+      "max": 14,
+      "item": "place"
+    }
+  ],
+  "images": [
+    {
+      "key": "poster_image",
+      "label": "팝업 공식 포스터·현장 사진",
+      "required": true
+    }
+  ],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "팝업스토어",
+      "tagFill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "POP-UP STORE",
+      "box": {
+        "x": 72,
+        "y": 177,
+        "w": 600,
+        "h": 36
+      },
+      "font": "display",
+      "size": 30,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1,
+      "letterSpacing": 10
+    },
+    {
+      "type": "text",
+      "text": "{character_name} 팝업스토어",
+      "box": {
+        "x": 72,
+        "y": 229,
+        "w": 935,
+        "h": 84
+      },
+      "font": "display",
+      "size": 83,
+      "minSize": 50,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "line",
+      "x1": 72,
+      "y1": 350,
+      "x2": 1007,
+      "y2": 350,
+      "color": "ink",
+      "lineWidth": 4
+    },
+    {
+      "type": "text",
+      "field": "start_date",
+      "box": {
+        "x": 73,
+        "y": 367,
+        "w": 560,
+        "h": 160
+      },
+      "font": "display",
+      "size": 150,
+      "minSize": 90,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "if": "end_date",
+      "text": "~ {end_date}",
+      "box": {
+        "x": 640,
+        "y": 422,
+        "w": 358,
+        "h": 92
+      },
+      "font": "display",
+      "size": 72,
+      "minSize": 46,
+      "color": "inkSoft",
+      "align": "right",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "line",
+      "x1": 72,
+      "y1": 543,
+      "x2": 1007,
+      "y2": 543,
+      "color": "ink",
+      "lineWidth": 4
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 72,
+        "y": 577,
+        "w": 935,
+        "h": 631
+      },
+      "radius": 50,
+      "fill": "accent"
+    },
+    {
+      "type": "image",
+      "slot": "poster_image",
+      "box": {
+        "x": 232,
+        "y": 694,
+        "w": 616,
+        "h": 397
+      },
+      "radius": 30,
+      "fill": "white",
+      "inset": 12
+    },
+    {
+      "type": "pill",
+      "field": "location",
+      "icon": "pin",
+      "x": 105,
+      "y": 1107,
+      "h": 69,
+      "align": "left",
+      "padX": 26,
+      "maxWidth": 860,
+      "fill": "ink",
+      "font": "display",
+      "size": 32,
+      "minSize": 24,
+      "color": "white"
+    },
+    {
+      "type": "footer",
+      "left": "운영 정보 보러 가기 →"
+    }
+  ],
+  "sample": {
+    "source": "",
+    "fields": {
+      "character_name": "[캐릭터]",
+      "start_date": "[MM.DD]",
+      "end_date": "[MM.DD]",
+      "location": "[장소 · 지역]"
+    }
+  }
+}

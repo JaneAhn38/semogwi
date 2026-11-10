@@ -1,0 +1,334 @@
+{
+  "id": "character-02",
+  "contentType": "character",
+  "kind": "body",
+  "label": "프로필",
+  "reference": "reference/캐릭터 소개 · 02 프로필.png",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#F7C6D3",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "fields": [
+    {
+      "key": "character_name",
+      "label": "이름",
+      "type": "text",
+      "max": 12,
+      "required": true,
+      "item": "official_name"
+    },
+    {
+      "key": "birthday",
+      "label": "생일",
+      "type": "text",
+      "max": 12,
+      "item": "birthday"
+    },
+    {
+      "key": "favorite_things",
+      "label": "좋아하는 것",
+      "type": "text",
+      "max": 14,
+      "item": "favorite"
+    },
+    {
+      "key": "creator",
+      "label": "작가",
+      "type": "text",
+      "max": 14,
+      "item": "creator"
+    },
+    {
+      "key": "feature_tags",
+      "label": "특징 태그",
+      "type": "list",
+      "maxItems": 3,
+      "itemMax": 8,
+      "item": "personality"
+    },
+    {
+      "key": "debut_year",
+      "label": "첫 등장 연도",
+      "type": "text",
+      "max": 8,
+      "hint": "예: 2020년. 모르면 비워 두세요",
+      "item": "debut"
+    },
+    {
+      "key": "debut_work",
+      "label": "첫 등장 작품·플랫폼",
+      "type": "text",
+      "max": 16,
+      "item": "debut"
+    },
+    {
+      "key": "profile_no",
+      "label": "소개 순번 (No.)",
+      "type": "text",
+      "max": 6,
+      "demo": "",
+      "hint": "세모귀 캐릭터 소개 시리즈의 순번. 모르면 비워 두세요"
+    }
+  ],
+  "images": [
+    {
+      "key": "character_image",
+      "label": "캐릭터 이미지",
+      "required": false,
+      "hint": "배경을 제거한 이미지가 잘 어울려요"
+    }
+  ],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "캐릭터 소개",
+      "tagFill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "이 친구를 소개할게요",
+      "box": {
+        "x": 72,
+        "y": 182,
+        "w": 936,
+        "h": 84
+      },
+      "font": "display",
+      "size": 64,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 74,
+        "y": 305,
+        "w": 932,
+        "h": 550
+      },
+      "radius": 40,
+      "fill": "white"
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 74,
+        "y": 305,
+        "w": 932,
+        "h": 77
+      },
+      "radius": [
+        40,
+        40,
+        0,
+        0
+      ],
+      "fill": "accent"
+    },
+    {
+      "type": "line",
+      "x1": 74,
+      "y1": 382,
+      "x2": 1006,
+      "y2": 382,
+      "color": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 74,
+        "y": 305,
+        "w": 932,
+        "h": 550
+      },
+      "radius": 40,
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "text",
+      "text": "PROFILE",
+      "box": {
+        "x": 111,
+        "y": 322,
+        "w": 400,
+        "h": 44
+      },
+      "font": "display",
+      "size": 30,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1,
+      "letterSpacing": 6
+    },
+    {
+      "type": "text",
+      "if": "profile_no",
+      "text": "No. {profile_no}",
+      "box": {
+        "x": 700,
+        "y": 322,
+        "w": 268,
+        "h": 44
+      },
+      "font": "body",
+      "size": 24,
+      "color": "inkSoft",
+      "align": "right",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "image",
+      "slot": "character_image",
+      "box": {
+        "x": 113,
+        "y": 422,
+        "w": 297,
+        "h": 297
+      },
+      "radius": 27,
+      "fill": "paper",
+      "inset": 14
+    },
+    {
+      "type": "rows",
+      "x": 449,
+      "y": 443,
+      "rowHeight": 62,
+      "labelWidth": 150,
+      "valueX": 610,
+      "valueWidth": 360,
+      "maxRows": 4,
+      "labelDy": 0,
+      "valueDy": 6,
+      "items": [
+        {
+          "label": "이름",
+          "field": "character_name"
+        },
+        {
+          "label": "생일",
+          "field": "birthday"
+        },
+        {
+          "label": "좋아하는 것",
+          "field": "favorite_things"
+        },
+        {
+          "label": "작가",
+          "field": "creator"
+        }
+      ],
+      "label": {
+        "font": "display",
+        "size": 30,
+        "color": "inkSoft"
+      },
+      "value": {
+        "font": "body",
+        "size": 30,
+        "minSize": 22,
+        "color": "inkSoft"
+      }
+    },
+    {
+      "type": "chips",
+      "field": "feature_tags",
+      "x": 112,
+      "y": 757,
+      "h": 60,
+      "gap": 20,
+      "padX": 23,
+      "maxWidth": 856,
+      "maxItems": 3,
+      "prefix": "#",
+      "font": "body",
+      "size": 28,
+      "minSize": 22,
+      "fill": "accent",
+      "color": "ink"
+    },
+    {
+      "type": "rect",
+      "if": "debut_work",
+      "box": {
+        "x": 73,
+        "y": 897,
+        "w": 934,
+        "h": 175
+      },
+      "radius": 34,
+      "fill": "ink"
+    },
+    {
+      "type": "text",
+      "if": "debut_work",
+      "text": "데뷔",
+      "box": {
+        "x": 112,
+        "y": 933,
+        "w": 300,
+        "h": 42
+      },
+      "font": "display",
+      "size": 34,
+      "color": "accent",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "if": "debut_work",
+      "text": "{debut_year} {debut_work}에서 처음 등장했어요",
+      "box": {
+        "x": 112,
+        "y": 990,
+        "w": 856,
+        "h": 46
+      },
+      "font": "body",
+      "size": 32,
+      "minSize": 24,
+      "color": "paper",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "footer",
+      "left": "{source}"
+    }
+  ],
+  "sample": {
+    "source": "출처: [공식 계정 / 홈페이지]",
+    "fields": {
+      "character_name": "[캐릭터 이름]",
+      "birthday": "[MM월 DD일]",
+      "favorite_things": "[좋아하는 것]",
+      "creator": "[작가 / 출처]",
+      "feature_tags": [
+        "[특징1]",
+        "[특징2]",
+        "[특징3]"
+      ],
+      "debut_year": "[YYYY년]",
+      "debut_work": "[작품 · 플랫폼]",
+      "profile_no": "[회차]"
+    }
+  }
+}

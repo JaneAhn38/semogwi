@@ -1,0 +1,272 @@
+{
+  "id": "character-03",
+  "contentType": "character",
+  "kind": "body",
+  "label": "성격과 특징",
+  "reference": "reference/캐릭터 소개 · 03 성격·특징.png",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#F7C6D3",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "fields": [
+    {
+      "key": "traits",
+      "label": "성격과 특징",
+      "type": "items",
+      "maxItems": 2,
+      "fields": [
+        {
+          "key": "label",
+          "label": "배지",
+          "type": "text",
+          "max": 6,
+          "default": "공식 설정",
+          "hint": "공식 출처에서 확인한 설정일 때만 '공식 설정'"
+        },
+        {
+          "key": "keyword",
+          "label": "특징 키워드",
+          "type": "text",
+          "max": 10,
+          "required": true
+        },
+        {
+          "key": "description",
+          "label": "설명",
+          "type": "multiline",
+          "max": 30
+        }
+      ],
+      "item": "personality"
+    },
+    {
+      "key": "footer_note",
+      "label": "아래 안내 문구",
+      "type": "text",
+      "max": 14,
+      "default": "공식 설정만 담았어요",
+      "hint": "공식 출처만 썼을 때만 남겨 두세요"
+    }
+  ],
+  "images": [
+    {
+      "key": "trait_image_1",
+      "label": "특징 1 장면 이미지",
+      "required": false
+    },
+    {
+      "key": "trait_image_2",
+      "label": "특징 2 장면 이미지",
+      "required": false
+    }
+  ],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "캐릭터 소개",
+      "tagFill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "이런 성격이에요",
+      "box": {
+        "x": 72,
+        "y": 178,
+        "w": 936,
+        "h": 84
+      },
+      "font": "display",
+      "size": 64,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "if": "traits.0",
+      "box": {
+        "x": 74,
+        "y": 297,
+        "w": 932,
+        "h": 360
+      },
+      "radius": 36,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "image",
+      "if": "traits.0",
+      "slot": "trait_image_1",
+      "box": {
+        "x": 104,
+        "y": 327,
+        "w": 339,
+        "h": 300
+      },
+      "radius": 26,
+      "fill": "accent"
+    },
+    {
+      "type": "pill",
+      "field": "traits.0.label",
+      "x": 476,
+      "y": 377,
+      "h": 38,
+      "align": "left",
+      "padX": 17,
+      "radius": 8,
+      "fill": "accent",
+      "font": "display",
+      "size": 23,
+      "color": "ink"
+    },
+    {
+      "type": "text",
+      "field": "traits.0.keyword",
+      "box": {
+        "x": 476,
+        "y": 428,
+        "w": 500,
+        "h": 52
+      },
+      "font": "display",
+      "size": 40,
+      "minSize": 28,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "traits.0.description",
+      "box": {
+        "x": 476,
+        "y": 496,
+        "w": 484,
+        "h": 92
+      },
+      "font": "body",
+      "size": 30,
+      "minSize": 24,
+      "lineHeight": 1.4,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "top",
+      "maxLines": 2
+    },
+    {
+      "type": "rect",
+      "if": "traits.1",
+      "box": {
+        "x": 74,
+        "y": 697,
+        "w": 932,
+        "h": 360
+      },
+      "radius": 36,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "image",
+      "if": "traits.1",
+      "slot": "trait_image_2",
+      "box": {
+        "x": 636,
+        "y": 727,
+        "w": 339,
+        "h": 300
+      },
+      "radius": 26,
+      "fill": "accent"
+    },
+    {
+      "type": "pill",
+      "field": "traits.1.label",
+      "x": 104,
+      "y": 777,
+      "h": 38,
+      "align": "left",
+      "padX": 17,
+      "radius": 8,
+      "fill": "accent",
+      "font": "display",
+      "size": 23,
+      "color": "ink"
+    },
+    {
+      "type": "text",
+      "field": "traits.1.keyword",
+      "box": {
+        "x": 104,
+        "y": 828,
+        "w": 500,
+        "h": 52
+      },
+      "font": "display",
+      "size": 40,
+      "minSize": 28,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "traits.1.description",
+      "box": {
+        "x": 104,
+        "y": 896,
+        "w": 484,
+        "h": 92
+      },
+      "font": "body",
+      "size": 30,
+      "minSize": 24,
+      "lineHeight": 1.4,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "top",
+      "maxLines": 2
+    },
+    {
+      "type": "footer",
+      "parts": [
+        "{footer_note}",
+        "{source}"
+      ]
+    }
+  ],
+  "sample": {
+    "source": "출처: [공식 계정]",
+    "fields": {
+      "traits": [
+        {
+          "label": "공식 설정",
+          "keyword": "[특징 키워드]",
+          "description": "[이 특징이 드러나는 공식 장면을 한두 줄로]"
+        },
+        {
+          "label": "공식 설정",
+          "keyword": "[특징 키워드]",
+          "description": "[이 특징이 드러나는 공식 장면을 한두 줄로]"
+        }
+      ],
+      "footer_note": "공식 설정만 담았어요"
+    }
+  }
+}
