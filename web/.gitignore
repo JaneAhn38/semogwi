@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 업로드 이미지와 작업 기록 (로컬 전용)
+data/

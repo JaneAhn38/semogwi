@@ -7,6 +7,23 @@ MVP 기준일: 2026-11-03
 
 ---
 
+## 웹앱 (web/)
+
+브라우저에서 주제와 이미지를 넣고 구성안 승인 → 디자인 승인 → PNG·ZIP 다운로드까지 하는 로컬 웹앱입니다. 자세한 설명은 [`web/README.md`](web/README.md)를 보세요.
+
+**빠른 실행 (Windows)**
+
+1. Python 3.11 이상을 설치합니다 (`py` 실행기 포함).
+2. `web\run.bat`을 더블클릭합니다. 처음 한 번 `web\.venv`를 만들고 `web\requirements.txt`의 패키지를 설치합니다.
+3. 브라우저에서 http://127.0.0.1:8000 을 엽니다.
+
+선택 기능:
+
+- **배경 제거:** 시스템 Python에 `py -m pip install "rembg[cpu]" pillow`를 설치하고 모델을 한 번 내려받습니다 (`web/README.md`의 "배경 제거 준비").
+- **실제 AI 조사:** Claude Code CLI를 설치하고 `claude auth login`으로 로그인합니다. 없으면 데모 모드로 동작합니다.
+
+업로드 이미지와 작업 기록(`web/data/`), 가상환경(`web/.venv/`)은 Git에 올리지 않습니다.
+
 ## 1. MVP 기능과 검증 상태
 
 | 기능 | 구현 | 실제 통합 테스트 (Figma·PNG까지) | 근거 프로젝트 |

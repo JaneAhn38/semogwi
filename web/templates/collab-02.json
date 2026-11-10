@@ -1,0 +1,311 @@
+{
+  "id": "collab-02",
+  "contentType": "collab",
+  "kind": "body",
+  "label": "어떤 콜라보",
+  "reference": "reference/콜라보 · 02 어떤 콜라보.png",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#C9D8F5",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "inherit": [
+    "brand_name",
+    "character_name"
+  ],
+  "fields": [
+    {
+      "key": "intro",
+      "label": "공식 소개",
+      "type": "multiline",
+      "max": 60,
+      "required": true,
+      "hint": "누가, 무엇을, 어디서 하는지 공식 발표 내용만 2줄로",
+      "item": "content"
+    },
+    {
+      "key": "period",
+      "label": "기간",
+      "type": "text",
+      "max": 15,
+      "item": "period"
+    },
+    {
+      "key": "place",
+      "label": "장소",
+      "type": "text",
+      "max": 12,
+      "item": "place"
+    },
+    {
+      "key": "main_content",
+      "label": "주요 내용",
+      "type": "text",
+      "max": 16,
+      "item": "menu"
+    }
+  ],
+  "images": [
+    {
+      "key": "collab_image",
+      "label": "콜라보 제품·공식 비주얼",
+      "required": false
+    }
+  ],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "콜라보",
+      "tagFill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "COLLAB NOTE",
+      "box": {
+        "x": 72,
+        "y": 172,
+        "w": 700,
+        "h": 90
+      },
+      "font": "display",
+      "size": 72,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "if": "brand_name",
+      "text": "{brand_name} × {character_name}",
+      "box": {
+        "x": 640,
+        "y": 216,
+        "w": 367,
+        "h": 40
+      },
+      "font": "body",
+      "size": 26,
+      "minSize": 20,
+      "color": "inkSoft",
+      "align": "right",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "line",
+      "x1": 72,
+      "y1": 272,
+      "x2": 1007,
+      "y2": 272,
+      "color": "ink",
+      "lineWidth": 4
+    },
+    {
+      "type": "text",
+      "field": "intro",
+      "box": {
+        "x": 72,
+        "y": 311,
+        "w": 935,
+        "h": 112
+      },
+      "font": "body",
+      "size": 36,
+      "minSize": 26,
+      "lineHeight": 1.55,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "top",
+      "maxLines": 2
+    },
+    {
+      "type": "image",
+      "slot": "collab_image",
+      "box": {
+        "x": 73,
+        "y": 458,
+        "w": 934,
+        "h": 299
+      },
+      "radius": 34,
+      "fill": "accent",
+      "inset": 12
+    },
+    {
+      "type": "text",
+      "text": "기간",
+      "box": {
+        "x": 74,
+        "y": 790,
+        "w": 300,
+        "h": 34
+      },
+      "font": "display",
+      "size": 26,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "period"
+    },
+    {
+      "type": "text",
+      "field": "period",
+      "box": {
+        "x": 74,
+        "y": 828,
+        "w": 280,
+        "h": 92
+      },
+      "font": "display",
+      "size": 35,
+      "minSize": 24,
+      "lineHeight": 1.3,
+      "color": "ink",
+      "align": "left",
+      "valign": "top",
+      "maxLines": 2
+    },
+    {
+      "type": "text",
+      "text": "어디서",
+      "box": {
+        "x": 74,
+        "y": 937,
+        "w": 300,
+        "h": 34
+      },
+      "font": "display",
+      "size": 26,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "place"
+    },
+    {
+      "type": "text",
+      "field": "place",
+      "box": {
+        "x": 74,
+        "y": 974,
+        "w": 310,
+        "h": 46
+      },
+      "font": "display",
+      "size": 35,
+      "minSize": 24,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 405,
+        "y": 794,
+        "w": 601,
+        "h": 264
+      },
+      "radius": 24,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "text",
+      "text": "콜라보 한눈에",
+      "box": {
+        "x": 439,
+        "y": 820,
+        "w": 500,
+        "h": 44
+      },
+      "font": "display",
+      "size": 32,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "if": "brand_name",
+      "text": "· 누가: {brand_name}",
+      "box": {
+        "x": 439,
+        "y": 878,
+        "w": 540,
+        "h": 44
+      },
+      "font": "body",
+      "size": 28,
+      "minSize": 22,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "if": "character_name",
+      "text": "· 누구와: {character_name}",
+      "box": {
+        "x": 439,
+        "y": 932,
+        "w": 540,
+        "h": 44
+      },
+      "font": "body",
+      "size": 28,
+      "minSize": 22,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "if": "main_content",
+      "text": "· 무엇을: {main_content}",
+      "box": {
+        "x": 439,
+        "y": 987,
+        "w": 540,
+        "h": 44
+      },
+      "font": "body",
+      "size": 28,
+      "minSize": 22,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "footer",
+      "left": "{source}"
+    }
+  ],
+  "sample": {
+    "source": "출처: [브랜드 공식 발표]",
+    "fields": {
+      "brand_name": "[브랜드]",
+      "character_name": "[캐릭터]",
+      "intro": "[이번 콜라보가 어떤 내용인지 2~3줄로 소개해요. 누가, 무엇을, 어디서 하는지 위주로 공식 발표 내용만 정리합니다.]",
+      "period": "[MM.DD] ~ [MM.DD]",
+      "place": "[매장 / 온라인]",
+      "main_content": "[메뉴 · 제품 종류]"
+    }
+  }
+}

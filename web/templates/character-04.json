@@ -1,0 +1,308 @@
+{
+  "id": "character-04",
+  "contentType": "character",
+  "kind": "body",
+  "label": "친구와 TMI",
+  "reference": "reference/캐릭터 소개 · 04 친구들·TMI.png",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#F7C6D3",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "fields": [
+    {
+      "key": "friends",
+      "label": "친구 캐릭터",
+      "type": "items",
+      "maxItems": 3,
+      "fields": [
+        {
+          "key": "name",
+          "label": "이름",
+          "type": "text",
+          "max": 8,
+          "required": true
+        },
+        {
+          "key": "relation",
+          "label": "관계",
+          "type": "text",
+          "max": 8
+        }
+      ],
+      "item": "friends"
+    },
+    {
+      "key": "tmi_items",
+      "label": "TMI",
+      "type": "list",
+      "maxItems": 3,
+      "itemMax": 26,
+      "item": "tmi"
+    }
+  ],
+  "images": [
+    {
+      "key": "friend_image_1",
+      "label": "친구 1 이미지",
+      "required": false,
+      "shape": "circle"
+    },
+    {
+      "key": "friend_image_2",
+      "label": "친구 2 이미지",
+      "required": false,
+      "shape": "circle"
+    },
+    {
+      "key": "friend_image_3",
+      "label": "친구 3 이미지",
+      "required": false,
+      "shape": "circle"
+    }
+  ],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "캐릭터 소개",
+      "tagFill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "친구들 & TMI",
+      "box": {
+        "x": 72,
+        "y": 178,
+        "w": 936,
+        "h": 84
+      },
+      "font": "display",
+      "size": 64,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "image",
+      "if": "friends.0",
+      "slot": "friend_image_1",
+      "shape": "circle",
+      "box": {
+        "x": 100,
+        "y": 295,
+        "w": 240,
+        "h": 240
+      },
+      "fill": "accent",
+      "inset": 18
+    },
+    {
+      "type": "text",
+      "field": "friends.0.name",
+      "box": {
+        "x": 70,
+        "y": 546,
+        "w": 300,
+        "h": 44
+      },
+      "font": "display",
+      "size": 35,
+      "minSize": 24,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "pill",
+      "field": "friends.0.relation",
+      "x": 220,
+      "y": 603,
+      "h": 46,
+      "align": "center",
+      "padX": 16,
+      "maxWidth": 300,
+      "stroke": "ink",
+      "lineWidth": 3,
+      "font": "body",
+      "size": 27,
+      "minSize": 20,
+      "color": "ink"
+    },
+    {
+      "type": "image",
+      "if": "friends.1",
+      "slot": "friend_image_2",
+      "shape": "circle",
+      "box": {
+        "x": 420,
+        "y": 295,
+        "w": 240,
+        "h": 240
+      },
+      "fill": "accent",
+      "inset": 18
+    },
+    {
+      "type": "text",
+      "field": "friends.1.name",
+      "box": {
+        "x": 390,
+        "y": 546,
+        "w": 300,
+        "h": 44
+      },
+      "font": "display",
+      "size": 35,
+      "minSize": 24,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "pill",
+      "field": "friends.1.relation",
+      "x": 540,
+      "y": 603,
+      "h": 46,
+      "align": "center",
+      "padX": 16,
+      "maxWidth": 300,
+      "stroke": "ink",
+      "lineWidth": 3,
+      "font": "body",
+      "size": 27,
+      "minSize": 20,
+      "color": "ink"
+    },
+    {
+      "type": "image",
+      "if": "friends.2",
+      "slot": "friend_image_3",
+      "shape": "circle",
+      "box": {
+        "x": 740,
+        "y": 295,
+        "w": 240,
+        "h": 240
+      },
+      "fill": "accent",
+      "inset": 18
+    },
+    {
+      "type": "text",
+      "field": "friends.2.name",
+      "box": {
+        "x": 710,
+        "y": 546,
+        "w": 300,
+        "h": 44
+      },
+      "font": "display",
+      "size": 35,
+      "minSize": 24,
+      "color": "ink",
+      "align": "center",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "pill",
+      "field": "friends.2.relation",
+      "x": 860,
+      "y": 603,
+      "h": 46,
+      "align": "center",
+      "padX": 16,
+      "maxWidth": 300,
+      "stroke": "ink",
+      "lineWidth": 3,
+      "font": "body",
+      "size": 27,
+      "minSize": 20,
+      "color": "ink"
+    },
+    {
+      "type": "rect",
+      "if": "tmi_items",
+      "box": {
+        "x": 73,
+        "y": 686,
+        "w": 934,
+        "h": 280
+      },
+      "radius": 34,
+      "fill": "ink"
+    },
+    {
+      "type": "text",
+      "if": "tmi_items",
+      "text": "TMI",
+      "box": {
+        "x": 112,
+        "y": 719,
+        "w": 300,
+        "h": 42
+      },
+      "font": "display",
+      "size": 34,
+      "color": "accent",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "bullets",
+      "field": "tmi_items",
+      "x": 113,
+      "y": 799,
+      "pitch": 57,
+      "textX": 138,
+      "width": 830,
+      "maxItems": 3,
+      "bullet": "·",
+      "font": "body",
+      "size": 30,
+      "minSize": 24,
+      "color": "paper"
+    },
+    {
+      "type": "footer",
+      "left": "{source}"
+    }
+  ],
+  "sample": {
+    "source": "출처: [공식 계정 / 홈페이지]",
+    "fields": {
+      "friends": [
+        {
+          "name": "[이름]",
+          "relation": "[관계]"
+        },
+        {
+          "name": "[이름]",
+          "relation": "[관계]"
+        },
+        {
+          "name": "[이름]",
+          "relation": "[관계]"
+        }
+      ],
+      "tmi_items": [
+        "[팬들이 좋아하는 깨알 정보 1]",
+        "[깨알 정보 2]",
+        "[깨알 정보 3]"
+      ]
+    }
+  }
+}

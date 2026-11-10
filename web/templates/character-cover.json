@@ -1,0 +1,28 @@
+{
+  "id": "character-cover",
+  "contentType": "character",
+  "kind": "cover",
+  "label": "캐릭터 소개 · 표지",
+  "legacy": true,
+  "fonts": { "display": "Jua", "body": "Gowun Dodum" },
+  "palette": {
+    "bg": "#FFF8F0", "ink": "#2E2A35", "inkSoft": "#5A5463", "muted": "#8A8494",
+    "accent": "#F7C6D3", "white": "#FFFFFF", "paper": "#FFF8F0"
+  },
+  "fields": [
+    { "key": "name", "label": "캐릭터 이름", "type": "text", "max": 12, "required": true, "example": "치이카와" },
+    { "key": "tagline", "label": "한 줄 소개", "type": "text", "max": 28, "required": true, "example": "작고 귀여운 친구예요" }
+  ],
+  "images": [
+    { "key": "main", "label": "대표 캐릭터 이미지", "required": true, "hint": "배경을 제거한 이미지가 잘 어울려요" }
+  ],
+  "elements": [
+    { "type": "header", "tag": "캐릭터 소개", "tagFill": "accent" },
+    { "type": "circle", "cx": 540, "cy": 539, "r": 320, "fill": "accent" },
+    { "type": "image", "slot": "main", "box": { "x": 321, "y": 321, "w": 438, "h": 438 }, "radius": 30, "emptyFill": "white" },
+    { "type": "text", "text": "오늘의 캐릭터", "box": { "x": 240, "y": 896, "w": 600, "h": 44 }, "font": "display", "size": 34, "color": "inkSoft", "align": "center", "valign": "middle", "maxLines": 1 },
+    { "type": "text", "field": "name", "box": { "x": 60, "y": 966, "w": 960, "h": 128 }, "font": "display", "size": 120, "minSize": 64, "color": "ink", "align": "center", "valign": "middle", "maxLines": 1 },
+    { "type": "text", "field": "tagline", "box": { "x": 80, "y": 1116, "w": 920, "h": 58 }, "font": "body", "size": 34, "minSize": 26, "color": "inkSoft", "align": "center", "valign": "middle", "maxLines": 1 },
+    { "type": "footer", "left": "넘겨서 알아보기 →" }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "restricted": [
+    {
+      "domain": "chiikawamarket.jp",
+      "name": "치이카와 마켓",
+      "reason": "이용규약이 허가 없이 자동화된 수단으로 상품 페이지 정보를 취득하는 행위를 금지합니다",
+      "termsUrl": "https://chiikawamarket.jp/ko/pages/terms",
+      "checked": "2026-11-03 저장본 (2026-05-13 개정)"
+    }
+  ],
+  "official": []
+}

@@ -1,0 +1,321 @@
+{
+  "id": "goods-03",
+  "contentType": "goods",
+  "kind": "body",
+  "label": "주목할 굿즈",
+  "reference": "reference/굿즈 판매 · 03 주목할 굿즈.png",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#FDE7A6",
+    "accent2": "#F5C84C",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "fields": [
+    {
+      "key": "featured_name",
+      "label": "대표 상품명",
+      "type": "text",
+      "max": 14,
+      "required": true,
+      "item": "product_names"
+    },
+    {
+      "key": "featured_price",
+      "label": "가격",
+      "type": "text",
+      "max": 10,
+      "hint": "통화까지 출처 표기 그대로",
+      "item": "price"
+    },
+    {
+      "key": "size",
+      "label": "사이즈",
+      "type": "text",
+      "max": 12,
+      "item": "size"
+    },
+    {
+      "key": "material",
+      "label": "소재",
+      "type": "text",
+      "max": 12,
+      "item": "material"
+    },
+    {
+      "key": "components",
+      "label": "구성품",
+      "type": "text",
+      "max": 12,
+      "item": "components"
+    }
+  ],
+  "images": [
+    {
+      "key": "featured_image",
+      "label": "주목 굿즈 사진",
+      "required": false
+    }
+  ],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "굿즈 판매",
+      "tagFill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "이건 꼭 봐야 해요",
+      "box": {
+        "x": 72,
+        "y": 178,
+        "w": 936,
+        "h": 84
+      },
+      "font": "display",
+      "size": 64,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 72,
+        "y": 295,
+        "w": 935,
+        "h": 540
+      },
+      "radius": 50,
+      "fill": "accent"
+    },
+    {
+      "type": "image",
+      "slot": "featured_image",
+      "box": {
+        "x": 283,
+        "y": 346,
+        "w": 516,
+        "h": 435
+      },
+      "rotate": 1.9,
+      "radius": 27,
+      "fill": "white",
+      "inset": 16
+    },
+    {
+      "type": "star",
+      "cx": 189,
+      "cy": 404,
+      "r": 81,
+      "inner": 0.6,
+      "points": 7,
+      "fill": "accent2",
+      "stroke": "ink",
+      "lineWidth": 3,
+      "text": "PICK",
+      "font": "display",
+      "size": 40,
+      "color": "ink",
+      "textDy": -6
+    },
+    {
+      "type": "text",
+      "field": "featured_name",
+      "box": {
+        "x": 72,
+        "y": 870,
+        "w": 780,
+        "h": 64
+      },
+      "font": "display",
+      "size": 56,
+      "minSize": 36,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "pill",
+      "field": "featured_price",
+      "x": 1007,
+      "y": 881,
+      "h": 46,
+      "align": "right",
+      "padX": 20,
+      "maxWidth": 220,
+      "fill": "ink",
+      "font": "display",
+      "size": 28,
+      "minSize": 20,
+      "color": "white"
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 73,
+        "y": 973,
+        "w": 297,
+        "h": 127
+      },
+      "radius": 28,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 391,
+        "y": 973,
+        "w": 297,
+        "h": 127
+      },
+      "radius": 28,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 710,
+        "y": 973,
+        "w": 297,
+        "h": 127
+      },
+      "radius": 28,
+      "fill": "white",
+      "stroke": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "text",
+      "text": "사이즈",
+      "box": {
+        "x": 99,
+        "y": 992,
+        "w": 240,
+        "h": 32
+      },
+      "font": "display",
+      "size": 24,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "size"
+    },
+    {
+      "type": "text",
+      "text": "소재",
+      "box": {
+        "x": 417,
+        "y": 992,
+        "w": 240,
+        "h": 32
+      },
+      "font": "display",
+      "size": 24,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "material"
+    },
+    {
+      "type": "text",
+      "text": "구성품",
+      "box": {
+        "x": 736,
+        "y": 992,
+        "w": 240,
+        "h": 32
+      },
+      "font": "display",
+      "size": 24,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "components"
+    },
+    {
+      "type": "text",
+      "field": "size",
+      "box": {
+        "x": 99,
+        "y": 1032,
+        "w": 250,
+        "h": 44
+      },
+      "font": "display",
+      "size": 34,
+      "minSize": 22,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "material",
+      "box": {
+        "x": 417,
+        "y": 1032,
+        "w": 250,
+        "h": 44
+      },
+      "font": "display",
+      "size": 34,
+      "minSize": 22,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "components",
+      "box": {
+        "x": 736,
+        "y": 1032,
+        "w": 250,
+        "h": 44
+      },
+      "font": "display",
+      "size": 34,
+      "minSize": 22,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "footer",
+      "parts": [
+        "정보는 공식 판매처 기준",
+        "{source}"
+      ]
+    }
+  ],
+  "sample": {
+    "source": "",
+    "fields": {
+      "featured_name": "[굿즈 이름]",
+      "featured_price": "[가격]원",
+      "size": "[가로×세로]",
+      "material": "[소재]",
+      "components": "[구성]"
+    }
+  }
+}

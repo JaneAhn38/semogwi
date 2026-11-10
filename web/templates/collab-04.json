@@ -1,0 +1,406 @@
+{
+  "id": "collab-04",
+  "contentType": "collab",
+  "kind": "body",
+  "label": "혜택·이벤트",
+  "reference": "reference/콜라보 · 04 혜택·이벤트.png",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#C9D8F5",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "inherit": [
+    "brand_name",
+    "character_name"
+  ],
+  "fields": [
+    {
+      "key": "benefits",
+      "label": "혜택",
+      "type": "items",
+      "maxItems": 3,
+      "fields": [
+        {
+          "key": "title",
+          "label": "혜택 이름",
+          "type": "text",
+          "max": 12,
+          "required": true
+        },
+        {
+          "key": "condition",
+          "label": "받는 조건",
+          "type": "text",
+          "max": 24
+        }
+      ],
+      "item": "perks"
+    },
+    {
+      "key": "stores",
+      "label": "참여 매장",
+      "type": "text",
+      "max": 12,
+      "item": "place"
+    },
+    {
+      "key": "purchase_condition",
+      "label": "구매 조건",
+      "type": "text",
+      "max": 12,
+      "item": "perk_conditions"
+    }
+  ],
+  "images": [],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "콜라보",
+      "tagFill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "BENEFIT",
+      "box": {
+        "x": 72,
+        "y": 172,
+        "w": 700,
+        "h": 90
+      },
+      "font": "display",
+      "size": 72,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "if": "brand_name",
+      "text": "{brand_name} × {character_name}",
+      "box": {
+        "x": 640,
+        "y": 216,
+        "w": 367,
+        "h": 40
+      },
+      "font": "body",
+      "size": 26,
+      "minSize": 20,
+      "color": "inkSoft",
+      "align": "right",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "line",
+      "x1": 72,
+      "y1": 272,
+      "x2": 1007,
+      "y2": 272,
+      "color": "ink",
+      "lineWidth": 4
+    },
+    {
+      "type": "text",
+      "if": "benefits.0",
+      "text": "01",
+      "box": {
+        "x": 72,
+        "y": 342,
+        "w": 140,
+        "h": 96
+      },
+      "font": "display",
+      "size": 80,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "benefits.0.title",
+      "box": {
+        "x": 222,
+        "y": 340,
+        "w": 760,
+        "h": 46
+      },
+      "font": "display",
+      "size": 40,
+      "minSize": 26,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "benefits.0.condition",
+      "box": {
+        "x": 222,
+        "y": 397,
+        "w": 760,
+        "h": 42
+      },
+      "font": "body",
+      "size": 30,
+      "minSize": 22,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "line",
+      "if": "benefits.1",
+      "x1": 72,
+      "y1": 469,
+      "x2": 1007,
+      "y2": 469,
+      "color": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "text",
+      "if": "benefits.1",
+      "text": "02",
+      "box": {
+        "x": 72,
+        "y": 503,
+        "w": 140,
+        "h": 96
+      },
+      "font": "display",
+      "size": 80,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "benefits.1.title",
+      "box": {
+        "x": 222,
+        "y": 501,
+        "w": 760,
+        "h": 46
+      },
+      "font": "display",
+      "size": 40,
+      "minSize": 26,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "benefits.1.condition",
+      "box": {
+        "x": 222,
+        "y": 558,
+        "w": 760,
+        "h": 42
+      },
+      "font": "body",
+      "size": 30,
+      "minSize": 22,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "line",
+      "if": "benefits.2",
+      "x1": 72,
+      "y1": 629,
+      "x2": 1007,
+      "y2": 629,
+      "color": "ink",
+      "lineWidth": 3
+    },
+    {
+      "type": "text",
+      "if": "benefits.2",
+      "text": "03",
+      "box": {
+        "x": 72,
+        "y": 663,
+        "w": 140,
+        "h": 96
+      },
+      "font": "display",
+      "size": 80,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "benefits.2.title",
+      "box": {
+        "x": 222,
+        "y": 661,
+        "w": 760,
+        "h": 46
+      },
+      "font": "display",
+      "size": 40,
+      "minSize": 26,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "benefits.2.condition",
+      "box": {
+        "x": 222,
+        "y": 718,
+        "w": 760,
+        "h": 42
+      },
+      "font": "body",
+      "size": 30,
+      "minSize": 22,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 72,
+        "y": 825,
+        "w": 458,
+        "h": 120
+      },
+      "radius": 28,
+      "fill": "accent"
+    },
+    {
+      "type": "rect",
+      "box": {
+        "x": 550,
+        "y": 825,
+        "w": 457,
+        "h": 120
+      },
+      "radius": 28,
+      "fill": "accent"
+    },
+    {
+      "type": "text",
+      "text": "참여 매장",
+      "box": {
+        "x": 100,
+        "y": 843,
+        "w": 300,
+        "h": 32
+      },
+      "font": "display",
+      "size": 24,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "stores"
+    },
+    {
+      "type": "text",
+      "text": "구매 조건",
+      "box": {
+        "x": 578,
+        "y": 843,
+        "w": 300,
+        "h": 32
+      },
+      "font": "display",
+      "size": 24,
+      "color": "inkSoft",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1,
+      "if": "purchase_condition"
+    },
+    {
+      "type": "text",
+      "field": "stores",
+      "box": {
+        "x": 100,
+        "y": 879,
+        "w": 410,
+        "h": 44
+      },
+      "font": "display",
+      "size": 34,
+      "minSize": 22,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "text",
+      "field": "purchase_condition",
+      "box": {
+        "x": 578,
+        "y": 879,
+        "w": 410,
+        "h": 44
+      },
+      "font": "display",
+      "size": 34,
+      "minSize": 22,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "footer",
+      "parts": [
+        "혜택은 소진 시 조기 종료될 수 있어요",
+        "{source}"
+      ]
+    }
+  ],
+  "sample": {
+    "source": "",
+    "fields": {
+      "brand_name": "[브랜드]",
+      "character_name": "[캐릭터]",
+      "benefits": [
+        {
+          "title": "[증정 굿즈]",
+          "condition": "[받는 조건 — 예: 세트 메뉴 구매 시]"
+        },
+        {
+          "title": "[구매 혜택]",
+          "condition": "[조건과 내용]"
+        },
+        {
+          "title": "[응모 이벤트]",
+          "condition": "[참여 방법 · 발표일]"
+        }
+      ],
+      "stores": "[전 매장 / 일부 매장]",
+      "purchase_condition": "[조건]"
+    }
+  }
+}
