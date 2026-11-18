@@ -117,7 +117,7 @@ card-01 ~ card-05  (Frame, 1080 × 1350)
 ### 4.3 고정 레이어 (자동화 제외)
 
 - `bottom-overlay`
-- 배경 (파스텔 그라데이션)
+- 배경 (파스텔 그라데이션). 단, 프로젝트에 `backgrounds.json`이 있으면 승인된 card-02 ~ card-05의 **복제본 프레임 채우기만** 이미지로 교체합니다 (`templates/backgrounds.md`). card-01과 원본 `Page 1`은 그대로이며, 레이어는 6개를 유지합니다.
 
 ---
 
@@ -171,7 +171,7 @@ card-01 ~ card-05  (Frame, 1080 × 1350)
 2. 같은 Figma 파일 안에 새 페이지(`세모귀_<프로젝트 폴더 이름>`)를 만들고 원본 `Page 1`의 `card-01` ~ `card-05`를 그 페이지로 복제합니다. 같은 이름의 페이지가 있으면 중단합니다. 이후 단계는 **새 페이지 안에서만** `frame` 값으로 프레임을 찾습니다. 원본 `Page 1`은 건드리지 않습니다.
 3. 프레임 안의 `title`, `body`, `source` 레이어 텍스트를 교체합니다. `source`가 비어 있으면 레이어를 숨깁니다.
 4. `image`가 있는 카드(card-01 ~ card-05)는 `main-image`의 이미지 채우기를 **FIT**(전체 보임, 잘림 없음) 방식으로 교체하고, `image`가 빈 카드는 `main-image` 레이어를 숨깁니다.
-5. 고정 레이어(`page-number`, `bottom-overlay`)와 배경은 건드리지 않습니다.
+5. 고정 레이어(`page-number`, `bottom-overlay`)는 건드리지 않습니다. 배경은 `backgrounds.json`에서 승인된 card-02 ~ card-05 복제본만 **FILL**로 교체하고, 그 밖의 카드는 건드리지 않습니다.
 6. 각 프레임을 1080 × 1350 px PNG로 `projects/날짜_주제/png/card-01.png` ~ `card-05.png`에 내보냅니다.
 
 자세한 실행 절차는 `.claude/skills/fill-figma/SKILL.md`를 따릅니다.
@@ -190,6 +190,7 @@ card-01 ~ card-05  (Frame, 1080 × 1350)
 - [x] `source`: 기존 레이어 유지·텍스트만 교체 (현재 `@세모귀`는 임시 텍스트), 레이어 구성은 6개 유지
 - [x] 텍스트 교체 시 Jua / Gowun Dodum 폰트 로드: 정상 (2026-10-29 테스트)
 - [x] 제목·본문 줄바꿈 기준: 6장 (2026-10-29 테스트 실측 기반)
+- [x] 배경 교체: `slides.json`은 그대로 두고 별도 파일 `backgrounds.json`으로 card-02 ~ card-05만 지정 (2026-11-06, `templates/backgrounds.md`)
 - [x] `image`가 빈 카드의 `main-image`: 레이어 **숨김** (회색 자리표시가 내보내지지 않음). 이미지는 사용자가 카드별로 지정
 
 ---

@@ -1,4 +1,5 @@
 """세모귀 웹 (로컬 전용). 실행: run.bat 또는 uvicorn app.main:app --host 127.0.0.1 --port 8000
+팀원 공유: share.bat + cloudflared (공개 주소는 접속 코드 확인, app/access.py 참고)
 
 작업 파일을 다루는 라우트는 모두 async입니다. 이벤트 루프 하나에서 순서대로 처리해 job.json이 엉키지 않게 합니다.
 """
@@ -6,16 +7,16 @@
 import json
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import asyncio
 
-from . import claude_cli, cutout, jobs, site_policy, templates
+from . import access, claude_cli, cutout, detail_images, jobs, research_library, site_policy, templates
 from .outline import CardEdit
 from .provider import CONTENT_TYPES, DEFAULT_THEME, THEMES
 
@@ -37,26 +38,73 @@ CSP = (
 )
 
 app = FastAPI(title="세모귀 웹", docs_url=None, redoc_url=None, openapi_url=None)
+access.announce()
+
+
+def _security_headers(response, csp: str = CSP):
+    response.headers["Content-Security-Policy"] = csp
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+def _login_response(html: str, status_code: int = 200):
+    # no-referrer 문서에서 보낸 양식 POST는 브라우저가 Origin을 null로 보내 출처 검사에 걸립니다. 접속 화면만 same-origin으로 둡니다
+    response = _security_headers(HTMLResponse(html, status_code=status_code), access.LOGIN_CSP)
+    response.headers["Referrer-Policy"] = "same-origin"
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+async def _access_gate(request: Request) -> Response | None:
+    """Cloudflare Tunnel로 들어온 요청은 접속 코드를 확인합니다. 통과하면 None을 돌려줍니다."""
+    path = request.url.path
+    if path == access.LOGIN_PATH:
+        if request.method == "POST":
+            key = access.client_key(request)
+            if access.locked(key):
+                return _login_response(access.login_page("/", "시도가 너무 많아요. 10분 뒤에 다시 시도해 주세요."), 429)
+            code, next_path = access.read_form(await request.body())
+            if not access.check_code(code):
+                access.record_failure(key)
+                return _login_response(access.login_page(next_path, "접속 코드가 맞지 않아요."), 401)
+            response = RedirectResponse(next_path, status_code=303)
+            response.set_cookie(access.COOKIE, access._token(), max_age=access.COOKIE_MAX_AGE, httponly=True, secure=True, samesite="lax")
+            return _security_headers(response)
+        next_path = access.safe_next(request.query_params.get("next", "/"))
+        return _login_response(access.login_page(next_path))
+    if access.authorized(request.cookies):
+        return None
+    if path.startswith("/api/") or request.method not in ("GET", "HEAD"):
+        return _security_headers(JSONResponse({"detail": "접속 코드를 먼저 입력해 주세요"}, status_code=401))
+    target = path + (f"?{request.url.query}" if request.url.query else "")
+    return _security_headers(RedirectResponse(f"{access.LOGIN_PATH}?{urlencode({'next': access.safe_next(target)})}", status_code=303))
 
 
 @app.middleware("http")
 async def local_only(request: Request, call_next):
-    # 다른 사이트가 브라우저를 통해 이 서버를 호출하지 못하게 합니다 (DNS rebinding, CSRF 방지)
+    # 다른 사이트가 브라우저를 통해 이 서버를 호출하지 못하게 합니다 (DNS rebinding, CSRF 방지).
+    # 로컬 주소는 그대로 받고, 공유 모드에서 허용한 공개 주소(Cloudflare Tunnel)만 접속 코드를 확인해 받습니다
     host = request.headers.get("host", "")
-    if urlparse(f"//{host}").hostname not in ALLOWED_HOSTS:
+    hostname = access.hostname(host)
+    local = access.is_local(hostname, request.headers)
+    if not local and not (access.share_host(hostname) or (hostname in ALLOWED_HOSTS and access.SETTINGS.enabled)):
         return JSONResponse({"detail": "로컬 주소로만 접속할 수 있어요"}, status_code=403)
     origin = request.headers.get("origin")
     if request.method not in ("GET", "HEAD") and origin and urlparse(origin).netloc != host:
         return JSONResponse({"detail": "다른 사이트에서 보낸 요청은 받지 않아요"}, status_code=403)
+    if not local:
+        blocked = await _access_gate(request)
+        if blocked is not None:
+            return blocked
     response = await call_next(request)
     if not request.url.path.startswith("/api/"):
         # 화면 파일은 매번 ETag로 새 버전인지 확인합니다. 헤더가 없으면 브라우저가 옛 renderer.js를 캐시에서 꺼내
         # 새 app.js와 섞어 실행할 수 있습니다 (renderTemplate is not a function).
         response.headers["Cache-Control"] = "no-cache"
-    response.headers["Content-Security-Policy"] = CSP
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Referrer-Policy"] = "no-referrer"
-    return response
+    if not local:
+        response.headers["Cache-Control"] = "private, no-store" if request.url.path.startswith("/api/") else "private, no-cache"
+    return _security_headers(response)
 
 
 class Strict(BaseModel):
@@ -69,6 +117,8 @@ class InputBody(Strict):
     url: str = ""
     notes: str = Field(default="", max_length=4000)  # 사용자가 직접 입력한 참고 자료
     mode: Literal["demo", "ai"] = "demo"
+    researchMode: Literal["new", "saved"] = "new"  # 새로 조사하기 / 저장된 자료 사용
+    researchVersion: str | None = Field(default=None, max_length=40)
 
 
 class AssetPatch(Strict):
@@ -123,6 +173,8 @@ class TemplateCardEdit(Strict):
     role: str = Field(max_length=50)
     fields: dict[str, bool | str | list[str] | list[dict[str, str]]]  # bool: 체크 항목(신상품 여부 등)
     source: str = Field(default="", max_length=200)
+    # 항목을 지우거나 순서를 바꿨을 때 항목별 이미지가 따라가도록 저장 전 번호를 보냅니다 (예: {"friends": [0, 2]})
+    itemOrder: dict[str, list[int]] | None = None
 
 
 def _detect_image(head: bytes) -> tuple[str, str] | None:
@@ -260,16 +312,96 @@ async def update_input(job_id: str, body: InputBody):
 async def start_job(job_id: str, body: InputBody):
     topic, content_type, url = _check_input(body.topic, body.contentType, body.url)
     _call(jobs.update_input, job_id, topic, content_type, url, body.notes.strip())
-    return _call(jobs.start, job_id, body.mode)
+    return _call(jobs.start, job_id, body.mode, body.researchMode, body.researchVersion)
+
+
+# ---------- 조사 자료 보관함 ----------
+@app.get("/api/research-library")
+async def research_library_versions(topic: str = "", contentType: str = ""):
+    """같은 유형·주제로 저장된 조사 버전 목록 (최근 것부터). 유형이 '자동'이면 모든 유형에서 찾습니다."""
+    topic = topic.strip()
+    if not topic or len(topic) > TOPIC_MAX:
+        return {"versions": []}
+    types = [contentType] if contentType in CONTENT_TYPES else list(CONTENT_TYPES)
+    found = [v for t in types for v in jobs.research_versions(t, topic)]
+    found.sort(key=lambda v: (v["createdAt"], v["number"]), reverse=True)
+    return {"versions": found}
+
+
+@app.get("/api/research-library/{version_id}")
+async def research_library_version(version_id: str):
+    version = research_library.get(version_id)
+    if version is None:
+        raise HTTPException(404, "저장된 조사 자료를 찾을 수 없어요")
+    research = version["research"]
+    return {**version, "research": {"items": research.get("items") or [], "facts": research.get("facts", []), "missing": research.get("missing", []),
+                                    "sources": version["sources"]}}
 
 
 @app.post("/api/jobs/{job_id}/material")
 async def submit_material(job_id: str, body: MaterialBody):
-    # 확인되지 않은 내용을 채우지 않도록 최소한의 자료가 있어야 합니다
+    # 확인되지 않은 내용을 채우지 않도록 최소한의 자료가 있어야 합니다. 상세 이미지를 올렸으면 이미지만으로도 됩니다
+    job = jobs.load(job_id)
+    if job is None:
+        raise HTTPException(404, "작업을 찾을 수 없어요")
+    empty = not any(v.strip() for v in body.model_dump().values())
+    if empty and job["detailImages"]:
+        return _call(jobs.submit_material, job_id, None)
     if len(body.pasted) < 20 and not (body.name and body.features):
-        raise HTTPException(400, "이름과 특징을 함께 적거나, 공식 페이지 내용을 붙여 넣어 주세요")
+        raise HTTPException(400, "이름과 특징을 함께 적거나, 공식 페이지 내용을 붙여 넣거나, 상세페이지 이미지를 올려 주세요")
     material = {**body.model_dump(), "sourceUrl": _clean_url(body.sourceUrl)}
     return _call(jobs.submit_material, job_id, material)
+
+
+# ---------- 상세페이지 이미지 (자료 조사용) ----------
+@app.post("/api/jobs/{job_id}/detail-images", status_code=201)
+async def upload_detail_images(job_id: str, images: list[UploadFile] = File(...)):
+    """사용자가 상세페이지 스크린샷이나 이미지 파일을 올립니다. 카드에 넣는 이미지가 아니라 자료로만 씁니다."""
+    if not images:
+        raise HTTPException(400, "이미지를 골라 주세요")
+    _call(jobs.check_detail_upload, job_id, len(images))
+    prepared = [await _read_image(upload) for upload in images]  # 모두 검사한 뒤 저장합니다
+    saved = [jobs.new_detail_image(job_id, name, data, ext, mime, "upload") for name, data, ext, mime in prepared]
+    return _call(jobs.add_detail_images, job_id, saved)
+
+
+@app.post("/api/jobs/{job_id}/detail-images/fetch")
+async def fetch_detail_images(job_id: str):
+    """참고 URL 페이지에서 상세 이미지를 찾아 받습니다. 사용자가 누를 때만, 사이트 정책과 robots.txt를 지켜 요청합니다."""
+    job = jobs.load(job_id)
+    if job is None:
+        raise HTTPException(404, "작업을 찾을 수 없어요")
+    if not job["url"]:
+        raise HTTPException(400, "참고 URL을 먼저 입력해 주세요")
+    _call(jobs.check_detail_upload, job_id, 1)
+    try:
+        found = await asyncio.to_thread(detail_images.find_page_images, job["url"])
+    except detail_images.DetailError as e:
+        raise HTTPException(409, str(e))
+    site_policy.record_failures(found["failures"])  # 요청을 막은 사이트는 한동안 다시 요청하지 않습니다
+    saved = [jobs.new_detail_image(job_id, image["imageUrl"].rsplit("/", 1)[-1][:120] or "detail", image["data"], image["ext"], image["mime"],
+                                   "page", job["url"], image["imageUrl"]) for image in found["images"]]
+    report = {"pageUrl": job["url"], "found": len(saved), "skipped": found["skipped"],
+              "failures": [{k: f[k] for k in ("host", "code", "label")} for f in found["failures"]]}
+    return _call(jobs.add_detail_images, job_id, saved, report)
+
+
+@app.post("/api/jobs/{job_id}/detail-images/extract", status_code=202)
+async def extract_detail_images(job_id: str):
+    return _call(jobs.extract_details, job_id)
+
+
+@app.get("/api/jobs/{job_id}/detail-images/{image_id}")
+async def get_detail_image(job_id: str, image_id: str):
+    found = jobs.detail_image(job_id, image_id) if jobs.JOB_ID_RE.match(image_id) else None
+    if not found:
+        raise HTTPException(404, "이미지를 찾을 수 없어요")
+    return FileResponse(found[0], media_type=found[1])
+
+
+@app.delete("/api/jobs/{job_id}/detail-images/{image_id}")
+async def remove_detail_image(job_id: str, image_id: str):
+    return _call(jobs.remove_detail_image, job_id, image_id)
 
 
 @app.post("/api/jobs/{job_id}/retry")
@@ -350,6 +482,16 @@ async def edit_outline_card(job_id: str, frame: str, request: Request):
     except (ValidationError, ValueError):
         raise HTTPException(400, "카드 내용 형식이 올바르지 않아요")
     return _call(jobs.edit_outline_card, job_id, frame, body.model_dump())
+
+
+class CardTemplateBody(Strict):
+    template: str = Field(max_length=40)
+
+
+@app.put("/api/jobs/{job_id}/outline/cards/{frame}/template")
+async def change_card_template(job_id: str, frame: str, body: CardTemplateBody):
+    """card-02 ~ card-05의 카드 구성(템플릿)을 바꿉니다. 승인 단계에서 사용자가 고를 수 있습니다."""
+    return _call(jobs.change_card_template, job_id, frame, body.template)
 
 
 @app.put("/api/jobs/{job_id}/content-type")

@@ -17,6 +17,7 @@
     compose: "AI가 입력한 자료로 구성안을 쓰고 있어요. 사이트에는 접속하지 않아요.",
     design: "AI가 카드 5장을 다시 디자인하고 있어요. 1~3분 걸릴 수 있어요.",
     redesign: "AI가 이 카드만 다시 디자인하고 있어요. 1분 안팎 걸려요. 다른 카드는 그대로예요.",
+    vision: "AI가 상세 이미지에서 상품 정보를 읽고 있어요. 이미지가 길면 1~2분 걸려요. 웹에는 접속하지 않아요.",
     retype: "AI가 바뀐 유형의 템플릿에 맞춰 구성안을 다시 쓰고 있어요. 저장된 조사 결과만 쓰고 검색은 다시 하지 않아요.",
   };
   const STATUS_TEXT = {
@@ -130,6 +131,7 @@
     document.body.classList.toggle("format-template", template);
     const started = job && job.state !== "draft";
     $("mode-field").hidden = Boolean(started);
+    if (started) $("research-field").hidden = true;
     $("mode-status").textContent = ai ? "실제 AI 모드" : "데모 모드";
     $("mode-status").className = `tag ${ai ? "tag-real" : "tag-demo"}`;
     const status = options && options.ai;
@@ -178,12 +180,15 @@
   }
 
   function verifyBadge(source) {
+    if (source.verification === "image") return el("span", { class: "verify is-image", textContent: "상세 이미지 판독" });
     if (source.verification === "user_provided") return el("span", { class: "verify is-user", textContent: "사용자 제공" });
     const text = { fetched: "페이지 읽음", search_result: "검색 목록에만 있음", restricted: "자동 접근 금지" }[source.verification] || "미확인";
     return el("span", { class: `verify ${source.verification === "fetched" ? "is-ok" : "is-no"}`, textContent: text });
   }
 
   function sourceLink(source) {
+    // 상세 이미지는 저장된 이미지를 열어 AI가 읽은 값과 대조할 수 있게 합니다
+    if (source.verification === "image" && source.imageId) return el("a", { href: `/api/jobs/${job.id}/detail-images/${source.imageId}`, target: "_blank", rel: "noopener", textContent: `${source.id} ${source.title}` });
     if (!/^https?:\/\//.test(source.url)) return el("span", { textContent: source.title });
     return el("a", { href: source.url, target: "_blank", rel: "noopener noreferrer", textContent: source.title || source.url });
   }
@@ -200,6 +205,8 @@
       ? `검색 ${research.queries.length}회 · 읽은 페이지 ${readCount}개`
       : (research.policyStops || []).length ? "자동 조사 안 함" : "웹 검색 기록 없음";
     state.className = `approval ${readCount ? "is-approved" : "is-needed"}`;
+    renderResearchVersion();
+    renderPeople(research);
     renderChecklist(research);
     renderProblems(research);
     $("research-queries").replaceChildren(...research.queries.map((q) => el("li", { textContent: q })));
@@ -211,17 +218,54 @@
       el("li", { dataset: { origin: f.origin || "ai" } }, factBadge(f, research), ` ${f.text}`)));
   }
 
+  // 캐릭터 소개: 친구·가족 캐릭터별로 찾은 TMI와 근거 문장·출처, 찾지 못한 캐릭터, 쓰지 않은 내용과 이유
+  function renderPeople(research) {
+    const people = research.people || {};
+    const detail = research.peopleResearch || null;
+    const groups = [["friends", "친구"], ["family", "가족"]].filter(([key]) => (people[key] || []).length);
+    $("research-people-wrap").hidden = !groups.length;
+    if (!groups.length) return;
+    const found = groups.reduce((n, [key]) => n + people[key].filter((p) => p.tmi).length, 0);
+    const total = groups.reduce((n, [key]) => n + people[key].length, 0);
+    $("research-people-note").textContent = detail
+      ? `캐릭터별 추가 조사: 검색 ${detail.queries.length}회 · 읽은 페이지 ${(detail.pages || []).length}개 · TMI 확인 ${found}/${total}명`
+        + (detail.queries.length ? ` · 검색어: ${detail.queries.join(" / ")}` : "") + (detail.error ? ` · 추가 조사 실패: ${detail.error}` : "")
+      : `TMI 확인 ${found}/${total}명 (캐릭터별 추가 조사 기록 없음)`;
+    $("research-people").replaceChildren(...groups.flatMap(([key, label]) => people[key].map((p) =>
+      el("li", { dataset: { person: `${key}:${p.name}` } },
+        el("span", { class: "tag tag-demo", textContent: label }), " ",
+        el("b", { textContent: p.name }), p.relation ? ` (${p.relation})` : "", " ",
+        p.tmi ? stateBadge(p.state || "secondary") : stateBadge("missing"),
+        el("div", { class: "person-tmi", textContent: p.tmi ? `TMI: ${p.tmi}` : "TMI: 출처에서 찾지 못했어요 (만들어 넣지 않았어요)" }),
+        p.quote ? el("small", { class: "hint", textContent: `근거 문장: “${p.quote}”` }) : "",
+        (p.sourceIds || []).length ? el("div", { class: "card-links" }, ...sourceLinksOf(p.sourceIds)) : ""))));
+    $("research-people-rejected").replaceChildren(...((detail && detail.rejected) || []).map((r) =>
+      el("li", { textContent: `쓰지 않은 내용 · ${r.name}: ${r.tmi} (${r.reason})` })));
+  }
+
   function factBadge(fact, research) {
     if (fact.origin === "user") return el("span", { class: "verify is-user", textContent: "사용자 제공" });
+    if (fact.origin === "image") return el("span", { class: "verify is-image", textContent: "상세 이미지" });
     const read = (fact.sourceIds || []).some((id) => (research.sources.find((s) => s.id === id) || {}).verification === "fetched");
     return el("span", { class: `verify ${read ? "is-ok" : "is-no"}`, textContent: read ? "페이지에서 확인" : "확인 안 됨" });
   }
 
   // 조사 항목·필드의 근거 상태 (서버 app/research.py와 같은 이름)
   const ITEM_STATE = {
-    verified: ["공식 확인", "is-ok"], secondary: ["2차 자료", "is-ok"], user: ["사용자 제공", "is-user"], listed: ["검색 목록만", "is-no"],
+    verified: ["공식 확인", "is-ok"], secondary: ["2차 자료", "is-ok"], image: ["상세 이미지", "is-image"], user: ["사용자 제공", "is-user"], listed: ["검색 목록만", "is-no"],
     unverified: ["근거 없음", "is-no"], conflict: ["출처 충돌", "is-no"], missing: ["정보 확인 필요", "is-no"],
+    // 값이 없는 이유 (조사와 구성안을 나눈 조사부터)
+    not_searched: ["미조사", "is-none"], not_found: ["자료 없음", "is-none"], failed: ["검색·읽기 실패", "is-no"], blocked: ["접근 제한", "is-no"],
   };
+  const EMPTY_STATES = ["not_searched", "not_found", "failed", "blocked", "missing"];
+  const EMPTY_TEXT = {
+    not_searched: "이번 조사에서 찾아보지 않았어요",
+    not_found: "찾아봤지만 읽은 출처에 이 정보가 없었어요",
+    failed: "검색이나 페이지 읽기에 실패해 확인하지 못했어요",
+    blocked: "사이트 접근 제한(자동 접근 금지·요청 대기·접근 거부)으로 확인하지 못했어요",
+    missing: "찾지 못했어요",
+  };
+  const ATTEMPT_TEXT = { read: "읽음", failed: "읽기 실패", blocked: "접근 제한", unknown: "조회 기록 없음" };
   const stateBadge = (state) => el("span", { class: `verify ${(ITEM_STATE[state] || ["", "is-no"])[1]}`, dataset: { state }, textContent: (ITEM_STATE[state] || [state])[0] });
 
   function sourceLinksOf(ids) {
@@ -247,19 +291,62 @@
     }
   }
 
+  // 조사 항목 요약: 확인·자료 없음·실패·접근 제한·미조사·검토 필요 개수
+  function renderResearchSummary(items) {
+    const node = $("research-summary");
+    const count = (states) => items.filter((i) => states.includes(i.state)).length;
+    const review = items.filter((i) => (i.coverage && i.coverage.review) || ["conflict", "listed", "unverified"].includes(i.state)).length;
+    const parts = [`확인 ${items.length - count(EMPTY_STATES)}/${items.length}`];
+    for (const state of ["not_found", "failed", "blocked", "not_searched", "missing"]) {
+      const n = count([state]);
+      if (n) parts.push(`${ITEM_STATE[state][0]} ${n}`);
+    }
+    if (review) parts.push(`검토 필요 ${review}`);
+    node.textContent = parts.join(" · ");
+    node.hidden = !items.length;
+  }
+
+  // 정보별 근거: 어느 페이지에서 언제 확인했는지, 페이지를 실제로 읽었는지, 근거 문장을 검증했는지(아직 안 함)를 따로 보여 줍니다
+  function evidenceLine(record) {
+    const link = /^https?:\/\//.test(record.url) ? el("a", { href: record.url, target: "_blank", rel: "noopener noreferrer", textContent: record.title || record.url }) : el("span", { textContent: record.title || record.sourceId });
+    const read = record.pageRead ? "페이지 읽음" : record.verification === "user_provided" ? "사용자 제공" : record.verification === "image" ? "상세 이미지" : "페이지 읽지 않음";
+    const quote = record.quoteCheck === "found" ? "근거 문장 확인됨" : record.quoteCheck === "not_found" ? "근거 문장 못 찾음" : "근거 문장 미검증";
+    return el("span", { class: "evidence" }, link, ` · ${read} · ${quote}${record.at ? ` · ${record.at.replace("T", " ")}` : ""}`);
+  }
+
   function renderChecklist(research) {
     const items = research.items || [];
     $("research-checklist-wrap").hidden = !items.length;
+    renderResearchSummary(items);
     const editable = isTemplateJob() && job.outline && ["waiting_outline", "waiting_preview", "done"].includes(job.state);
     $("research-checklist").replaceChildren(...items.map((item) => {
-      const detail = el("div", { class: "item-detail" }, el("span", { textContent: item.value || "찾지 못했어요" }));
+      const empty = EMPTY_STATES.includes(item.state);
+      const detail = el("div", { class: "item-detail" }, el("span", { textContent: item.value || EMPTY_TEXT[item.state] || "찾지 못했어요" }));
       if (item.quote) detail.append(el("q", { textContent: item.quote }));
-      const links = sourceLinksOf(item.sourceIds || []);
-      if (links.length) detail.append(el("span", {}, "출처: ", ...links.flatMap((a, i) => (i ? [", ", a] : [a]))));
+      const coverage = item.coverage;
+      if (coverage && coverage.review) {
+        // 충분성: 일부만 조사됐거나 전체 규모를 알 수 없음 → 사용자 검토 (개수를 강제하지 않음)
+        detail.append(el("span", { class: "item-coverage" }, coverage.level === "partial" ? "일부만 확인됐어요" : "모두 조사됐는지 확인이 필요해요",
+          coverage.note ? ` (${coverage.note})` : ""));
+      }
+      if ((item.evidence || []).length) {
+        detail.append(el("span", { class: "evidence-list" }, "근거: ", ...item.evidence.flatMap((r, i) => (i ? [" / ", evidenceLine(r)] : [evidenceLine(r)]))));
+      } else {
+        const links = sourceLinksOf(item.sourceIds || []);
+        if (links.length) detail.append(el("span", {}, "출처: ", ...links.flatMap((a, i) => (i ? [", ", a] : [a]))));
+      }
+      const checked = ((item.attempts || {}).checked || []);
+      if (empty && checked.length) {
+        detail.append(el("span", { class: "item-attempts" }, "확인한 페이지: ", ...checked.flatMap((c, i) => [i ? ", " : "", `${c.url.replace(/^https?:\/\//, "").slice(0, 60)} (${ATTEMPT_TEXT[c.result] || c.result})`])));
+      }
       for (const alt of item.alternatives || []) {
         detail.append(el("span", {}, `다른 값: ${alt.value} `, ...sourceLinksOf(alt.sourceIds || [])));
       }
-      const needs = ["missing", "conflict", "unverified", "listed"].includes(item.state) || (item.strict && item.state === "secondary");
+      for (const entry of item.unclear || []) {
+        // 상세 이미지에서 읽기 어려웠던 값: 추측하지 않고 확인을 요청합니다
+        detail.append(el("span", { class: "item-unclear" }, `이미지에서 읽기 어려움${entry.quote ? ` ("${entry.quote}")` : ""} · 확인 필요 `, ...sourceLinksOf(entry.sourceIds || [])));
+      }
+      const needs = [...EMPTY_STATES, "conflict", "unverified", "listed"].includes(item.state) || (item.strict && item.state === "secondary");
       const used = editable && job.outline.cards.some((c) => templateFor(c.frame).fields.some((f) => f.item === item.key));
       if (needs && used) detail.append(el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "카드에서 입력", dataset: { jumpItem: item.key }, onclick: () => jumpToItem(item.key) }));
       return el("li", { dataset: { item: item.key, state: item.state } }, stateBadge(item.state), el("b", { textContent: item.label }), detail);
@@ -334,8 +421,9 @@
     const body = {};
     for (const key of ["name", "price", "seller", "sourceUrl", "features", "pasted"]) body[key] = form.elements[key].value.trim();
     show("material-error", "");
-    if (body.pasted.length < 20 && !(body.name && body.features)) {
-      show("material-error", "이름과 특징을 함께 적거나, 공식 페이지 내용을 붙여 넣어 주세요.");
+    const imagesOnly = (job.detailImages || []).length > 0 && !Object.values(body).some(Boolean);
+    if (!imagesOnly && body.pasted.length < 20 && !(body.name && body.features)) {
+      show("material-error", "이름과 특징을 함께 적거나, 공식 페이지 내용을 붙여 넣거나, 아래에서 상세페이지 이미지를 올려 주세요.");
       return;
     }
     if (job.state === "waiting_outline" && !confirm("지금 구성안을 새로 만들어요. 직접 수정한 내용도 바뀌어요. 진행할까요?")) return;
@@ -344,6 +432,133 @@
     } catch (error) {
       show("material-error", error.message);
     }
+  }
+
+  // ---------- 상세페이지 이미지 (자료 조사용) ----------
+  // 카드에 넣는 이미지(이미지 준비)와 따로 둡니다. AI가 상품 정보를 읽는 자료로만 씁니다.
+  const DETAIL_STATES = ["draft", "waiting_material", "waiting_outline", "failed", "interrupted"];
+  const detailUrl = (imageId) => `/api/jobs/${job.id}/detail-images/${imageId}`;
+  const extractionStale = () => {
+    const ids = (job.detailImages || []).map((i) => i.id);
+    const done = job.detailExtraction && job.detailExtraction.status === "done";
+    return ids.length > 0 && (!done || JSON.stringify(job.detailExtraction.imageIds) !== JSON.stringify(ids));
+  };
+
+  function detailEditable() {
+    return !job || (DETAIL_STATES.includes(job.state) && !(job.outline && job.outline.approved) && !job.aiTask);
+  }
+
+  function renderDetail() {
+    const step1 = viewStep === 1 && (!job || job.state === "draft");
+    const images = job ? job.detailImages || [] : [];
+    const open = step1 || !$("material").hidden || (viewStep === 2 && images.length > 0);
+    $("detail-panel").hidden = !open;
+    if (!open) return;
+    const editable = detailEditable();
+    $("detail-upload").disabled = !editable;
+    $("detail-files").disabled = !editable;
+
+    const url = job && job.state !== "draft" ? job.url : $("url").value.trim();
+    const restricted = url && restrictedSiteOf(url);
+    $("detail-fetch").hidden = !url;
+    $("detail-fetch").disabled = !editable || Boolean(restricted);
+    const note = $("detail-fetch-note");
+    note.hidden = !url;
+    note.textContent = restricted
+      ? `${restricted.name}은 이용규약상 자동 수집이 금지되어 있어 이미지를 자동으로 받지 않아요. 브라우저에서 상세페이지를 직접 캡처해 올려 주세요.`
+      : "누를 때만 그 페이지 한 곳에 요청해요. 자동 수집 금지 사이트, robots.txt가 막은 주소, 요청을 막은 사이트에는 요청하지 않아요. 자바스크립트로 그리는 상세 영역은 찾지 못할 수 있어요.";
+
+    $("detail-list").replaceChildren(...images.map((image) => el("li", { dataset: { detail: image.id } },
+      el("a", { href: detailUrl(image.id), target: "_blank", rel: "noopener" }, el("img", { src: detailUrl(image.id), alt: `${image.name} 상세 이미지`, loading: "lazy" })),
+      el("span", { class: "image-name", textContent: image.name, title: image.imageUrl || image.name }),
+      tag(image.origin === "page" ? "페이지에서 받음" : "직접 올림", image.origin === "page" ? "demo" : "real"),
+      el("button", { class: "remove", type: "button", textContent: "빼기", disabled: !editable, "aria-label": `${image.name} 빼기`,
+        onclick: () => detailAction(`detail-images/${image.id}`, { method: "DELETE" }) }))));
+
+    const report = job && job.detailFetch;
+    $("detail-report").replaceChildren(...(report ? [
+      el("li", { textContent: `참고 URL에서 상세 이미지 ${report.found}장을 받았어요${report.found ? "" : ". 페이지가 이미지를 자바스크립트로 불러오면 찾지 못해요. 스크린샷을 올려 주세요"}` }),
+      ...report.failures.map((f) => el("li", { textContent: `${f.host}: ${f.label} (HTTP ${f.code})` })),
+      ...report.skipped.slice(0, 5).map((text) => el("li", { textContent: `요청하지 않음: ${text}` })),
+    ] : []));
+
+    const ai = job && job.mode === "ai" && job.state !== "draft";
+    $("detail-extract").hidden = !(ai && images.length);
+    $("detail-extract").disabled = !editable;
+    const stale = job && extractionStale();
+    $("detail-hint").textContent = !images.length ? ""
+      : !ai ? "실제 AI 모드로 제작을 시작하면 자료 조사 전에 AI가 이 이미지를 먼저 읽어요. 데모 모드에서는 읽지 않아요."
+        : stale ? "새 이미지가 있어요. '이미지에서 정보 읽기'를 누르거나, 위의 '이 자료로 구성안 만들기'를 누르면 함께 읽어요. Pro 한도가 1회 차감돼요."
+          : "읽은 정보는 '이 자료로 구성안 만들기'를 누르면 구성안에 반영돼요. 페이지 내용과 다르면 출처 충돌로 표시돼 직접 확인하게 돼요.";
+    renderExtraction();
+  }
+
+  function renderExtraction() {
+    const extraction = job && job.detailExtraction;
+    const items = (extraction && extraction.items) || [];
+    $("detail-result-wrap").hidden = !items.length && !(extraction && extraction.notes && extraction.notes.length);
+    if (!extraction) return;
+    const refs = extraction.refs || {};
+    $("detail-result").replaceChildren(...items.map((item) => {
+      const detail = el("div", { class: "item-detail" });
+      if (item.unclear) detail.append(el("span", { class: "item-unclear", textContent: "이미지에서 확실히 읽을 수 없어요 · 확인 필요 (카드에 쓰지 않아요). 출처 이미지를 직접 보고 입력해 주세요." }));
+      else detail.append(el("span", { textContent: item.value }));
+      if (item.quote) detail.append(el("q", { textContent: item.quote }));
+      detail.append(el("span", {}, "출처: ", el("a", { href: detailUrl(refs[item.imageRef] || item.imageId), target: "_blank", rel: "noopener",
+        textContent: `${item.imageRef} 상세 이미지${item.tile ? ` · 조각 ${item.tile}` : ""}` })));
+      return el("li", { dataset: { extract: item.key, unclear: String(item.unclear) } },
+        stateBadge(item.unclear ? "missing" : "image"), el("b", { textContent: item.label || item.key }), detail);
+    }));
+    $("detail-notes").replaceChildren(...(extraction.notes || []).map((text) => el("li", { textContent: text })));
+  }
+
+  async function detailAction(path, init) {
+    show("detail-error", "");
+    try {
+      await setJob(await api(`/api/jobs/${job.id}/${path}`, init));
+      return true;
+    } catch (error) {
+      show("detail-error", error.message);
+      return false;
+    }
+  }
+
+  async function uploadDetail() {
+    const files = [...$("detail-files").files];
+    if (!files.length) {
+      show("detail-error", "올릴 이미지 파일을 골라 주세요.");
+      return;
+    }
+    const tooBig = files.find((f) => f.size > options.limits.maxImageBytes);
+    if (tooBig) {
+      show("detail-error", `${tooBig.name}: 10MB 이하 이미지만 올릴 수 있어요. 길면 나눠서 캡처해 주세요.`);
+      return;
+    }
+    try {
+      await ensureDraft();
+    } catch (error) {
+      show("detail-error", error.message);
+      return;
+    }
+    const data = new FormData();
+    for (const file of files) data.append("images", file);
+    $("detail-upload").disabled = true;
+    if (await detailAction("detail-images", { method: "POST", body: data })) $("detail-files").value = "";
+    $("detail-upload").disabled = false;
+  }
+
+  async function fetchDetail() {
+    try {
+      await ensureDraft();
+      if (job.state === "draft") await saveDraftInput(); // 입력한 URL을 먼저 저장합니다
+    } catch (error) {
+      show("detail-error", error.message);
+      return;
+    }
+    $("detail-fetch").disabled = true;
+    $("detail-hint").textContent = "참고 URL 페이지에서 상세 이미지를 찾고 있어요.";
+    await detailAction("detail-images/fetch", { method: "POST" });
+    renderDetail();
   }
 
   function renderThemeNote() {
@@ -582,7 +797,9 @@
         show("form-note", "저장했어요. 이미 만든 구성안의 문구는 자동으로 바뀌지 않아요.");
       } else {
         await ensureDraft();
-        await setJob(await api(`/api/jobs/${job.id}/start`, jsonInit("POST", { ...input, mode: selectedMode() })));
+        const research = selectedMode() === "ai" && !$("research-field").hidden && selectedResearchMode() === "saved" && $("research-version")
+          ? { researchMode: "saved", researchVersion: $("research-version").value } : { researchMode: "new" };
+        await setJob(await api(`/api/jobs/${job.id}/start`, jsonInit("POST", { ...input, mode: selectedMode(), ...research })));
       }
     } catch (error) {
       show("form-error", error.message);
@@ -851,6 +1068,19 @@
   let outlineDraft = null; // 편집 중인 카드의 입력값. 저장 전에도 미리보기에 바로 반영합니다
   let outlineChain = Promise.resolve();
 
+  // 유연한 구성(새 작업): card-02 ~ card-05에서 고를 수 있는 템플릿. 예전 작업이나 표지는 빈 목록입니다
+  function templateChoices(frame) {
+    const type = job.contentType;
+    if (!job.templateSet || frame === FRAMES[0] || !options.templates[`${type}-free`] || job.templateSet[0] !== `${type}-01`) return [];
+    const choices = [2, 3, 4, 5].map((n) => `${type}-0${n}`).concat(`${type}-free`).filter((id) => options.templates[id]);
+    // 예전 판으로 연 카드(예: 친구와 TMI 이전 형식)는 지금 구성을 목록에 함께 보여 줍니다
+    const current = job.outline && (job.outline.cards.find((c) => c.frame === frame) || {}).template;
+    return current && !choices.includes(current) && options.templates[current] ? [current, ...choices] : choices;
+  }
+
+  // 출처를 표시하는 카드인지 (서버 templates.has_source와 같음). 다음 편 예고처럼 조사한 사실이 없는 카드는 출처가 없습니다
+  const hasSource = (tpl) => tpl.kind !== "cover" && tpl.showSource !== false;
+
   function templateSpec(card, draft) {
     const tpl = templateFor(card.frame);
     const index = FRAMES.indexOf(card.frame);
@@ -862,8 +1092,8 @@
     return {
       version: 3, frame: card.frame, template: tpl.id, page: index + 1, total: FRAMES.length,
       no: tpl.legacy && tpl.kind === "body" ? String(index).padStart(2, "0") : "",
-      fields: { ...inherited, ...values.fields }, source: tpl.kind !== "cover" ? values.source || "" : "",
-      images: Object.fromEntries(tpl.images.map((slot) => [slot.key, slotImageFor(card.frame, slot.key)])),
+      fields: { ...inherited, ...values.fields }, source: hasSource(tpl) ? values.source || "" : "",
+      images: itemImages(tpl, card.frame, draft),
     };
   }
 
@@ -1068,7 +1298,7 @@
   }
 
   function slotControls(frame, context = "outline") {
-    const slots = templateFor(frame).images;
+    const slots = activeSlots(frame);
     if (!slots.length) return el("p", { class: "hint", textContent: "이 카드에는 이미지 자리가 없어요." });
     return el("div", { class: "slot-list" }, ...slots.map((slot) => slotPanel(frame, slot, context)));
   }
@@ -1086,6 +1316,7 @@
 
   function fieldText(field, value) {
     if (field.type === "flag") return value ? "예" : "아니요";
+    if (field.type === "choice") return (field.options.find((o) => o.value === value) || field.options.find((o) => o.value === field.default)).label;
     if (field.type === "list") return value.map((t) => `#${t}`).join(" ");
     if (field.type === "items") return value.map((item) => field.fields.map((sub) => item[sub.key]).filter(Boolean).join(" · ")).join("\n");
     if (field.type === "pairs") return value.map((p) => `${p.label}: ${p.value}`).join(" · ");
@@ -1098,13 +1329,16 @@
     const states = ((job.outline.fieldStates || {})[card.frame]) || {};
     for (const field of tpl.fields) {
       const value = card.fields[field.key];
-      const empty = field.type !== "flag" && (!value || (Array.isArray(value) && !value.length));
-      const dd = el("dd", { class: empty ? "is-empty" : "", dataset: { field: field.key } });
-      if (states[field.key] && job.mode === "ai") dd.append(stateBadge(states[field.key]));
-      dd.append(empty ? (field.required ? "비어 있음 · 입력이 필요해요" : "비어 있음 · 카드에서 숨겨요") : fieldText(field, value));
+      const empty = field.type !== "flag" && field.type !== "choice" && (!value || (Array.isArray(value) && !value.length));
+      const active = !field.if || SemogwiRenderer.conditionMet(tpl, card.fields, field.if);
+      if (!active && empty) continue; // 다른 카테고리의 빈 목록은 보여 주지 않습니다
+      const dd = el("dd", { class: empty || !active ? "is-empty" : "", dataset: { field: field.key } });
+      if (states[field.key] && job.mode === "ai" && active) dd.append(stateBadge(states[field.key]));
+      if (!active) dd.append("보관 중 · 카테고리를 바꾸면 카드에 보여요: ");
+      dd.append(empty ? (field.required ? "비어 있음 · 입력이 필요해요" : field.placeholder ? `비어 있음 · 기본 문구 '${field.placeholder}'로 보여요` : "비어 있음 · 카드에서 숨겨요") : fieldText(field, value === undefined && field.type === "choice" ? field.default : value));
       list.append(el("dt", { textContent: field.label }), dd);
     }
-    if (tpl.kind !== "cover") list.append(el("dt", { textContent: "출처" }), el("dd", { class: card.source ? "" : "is-empty", textContent: card.source || "출처 없음" }));
+    if (hasSource(tpl)) list.append(el("dt", { textContent: "출처" }), el("dd", { class: card.source ? "" : "is-empty", textContent: card.source || "출처 없음" }));
     return list;
   }
 
@@ -1121,16 +1355,24 @@
   }
 
   function templateControl(field, value) {
+    if (field.type === "choice") {
+      // 예: 친구/가족. 바꾸면 그 카테고리 목록이 보이고, 다른 목록은 지우지 않고 보관합니다 (templateEditor가 처리)
+      const select = el("select", { name: `field-${field.key}`, dataset: { choice: field.key }, "aria-label": field.label });
+      for (const option of field.options) select.append(el("option", { value: option.value, textContent: option.label, selected: (value || field.default) === option.value }));
+      return el("label", { class: "edit-field" }, el("span", { textContent: field.label }), select,
+        el("small", { class: "hint", textContent: "바꿔도 입력한 친구·가족 정보는 따로 보관돼요. 비어 있는 쪽으로 바꾸면 조사 자료에서 불러와요." }));
+    }
     if (field.type === "flag") {
       const box = el("input", { type: "checkbox", name: `field-${field.key}`, checked: Boolean(value) });
       return el("label", { class: "flag-field" }, box, el("span", { textContent: field.label }), field.hint ? el("small", { class: "hint", textContent: field.hint }) : "");
     }
     if (field.type === "text" || field.type === "multiline") {
       const input = field.type === "text"
-        ? el("input", { type: "text", value: value || "", name: `field-${field.key}`, placeholder: field.default || "" })
+        ? el("input", { type: "text", value: value || "", name: `field-${field.key}`, placeholder: field.placeholder || field.default || "" })
         : el("textarea", { value: value || "", rows: 2, name: `field-${field.key}` });
       return editField(`${field.label}${field.required ? " (필수)" : ""}`, input, field.max);
     }
+    if (field.type === "items" && field.minItems) return itemsEditor(field, value);
     const group = el("fieldset", { class: "edit-group", dataset: { group: field.key } }, el("legend", { textContent: `${field.label} · 최대 ${field.maxItems}개, 빈 칸은 카드에서 숨겨요` }));
     for (let i = 0; i < field.maxItems; i++) {
       if (field.type === "items") {
@@ -1156,23 +1398,123 @@
     return group;
   }
 
+  // 인원을 늘리고 줄일 수 있는 항목 (예: 친구 캐릭터 2~4명). 항목마다 저장 전 번호(orig)를 기억해 이미지가 그 항목을 따라가게 합니다
+  function itemsEditor(field, value) {
+    let rows = (value || []).map((item, i) => ({ item: { ...item }, orig: i }));
+    if (!rows.length) rows = Array.from({ length: field.defaultItems || field.minItems }, () => ({ item: {}, orig: -1 }));
+    while (rows.length < field.minItems) rows.push({ item: {}, orig: -1 });
+    const group = el("fieldset", { class: "edit-group items-editor", dataset: { group: field.key } });
+    const legend = el("legend");
+    const list = el("div", { class: "item-list" });
+    const note = el("small", { class: "hint" });
+    const changed = () => group.closest("form")?.dispatchEvent(new Event("input", { bubbles: true }));
+    const read = () => rows.forEach((row, i) => field.fields.forEach((sub) => {
+      const input = list.querySelector(`[name="field-${field.key}-${i}-${sub.key}"]`);
+      if (input) row.item[sub.key] = input.value;
+    }));
+    const add = el("button", { class: "btn btn-ghost btn-small", type: "button", dataset: { itemAdd: field.key },
+      onclick: () => { read(); if (rows.length < field.maxItems) rows.push({ item: {}, orig: -1 }); draw(); changed(); } });
+    const draw = () => {
+      legend.textContent = `${field.label} · ${field.minItems}~${field.maxItems}명 (지금 ${rows.length}명)`;
+      add.textContent = `+ ${field.label.replace(/ 캐릭터$/, "")} 추가`;
+      add.disabled = rows.length >= field.maxItems;
+      note.textContent = rows.length >= field.maxItems ? `최대 ${field.maxItems}명이에요.` : rows.length <= field.minItems ? `최소 ${field.minItems}명이 필요해요. 확인된 캐릭터가 부족하면 카드 구성을 '자유 구성'으로 바꿔 주세요.` : "";
+      list.replaceChildren(...rows.map((row, i) => {
+        const box = el("div", { class: "item-row", dataset: { item: `${field.key}-${i}` } }, el("b", { textContent: `${i + 1}` }),
+          el("input", { type: "hidden", name: `field-${field.key}-${i}-orig`, value: String(row.orig) }));
+        for (const sub of field.fields) {
+          const input = sub.type === "multiline"
+            ? el("textarea", { value: row.item[sub.key] || "", rows: 3, name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.default || "" })
+            : el("input", { type: "text", value: row.item[sub.key] || "", name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.default || "" });
+          box.append(editField(`${sub.label}${sub.required ? " (필수)" : ""}`, input, sub.max));
+        }
+        box.append(el("button", { class: "btn btn-ghost btn-small item-remove", type: "button", textContent: "삭제", disabled: rows.length <= field.minItems,
+          dataset: { itemRemove: `${field.key}-${i}` }, "aria-label": `${field.label} ${i + 1} 삭제`,
+          onclick: () => { read(); if (rows.length > field.minItems) rows.splice(i, 1); draw(); changed(); } }));
+        return box;
+      }));
+    };
+    draw();
+    group.append(legend, list, el("div", { class: "actions" }, add), note);
+    // 카테고리를 바꿀 때 templateEditor가 씁니다: 비어 있는지 보고, 조사 자료로 채웁니다 (새 항목이라 이미지는 비어 있음)
+    group.isBlank = () => { read(); return rows.every((row) => !Object.values(row.item).some((v) => String(v || "").trim())); };
+    group.setItems = (items) => {
+      rows = items.slice(0, field.maxItems).map((item) => ({ item: { ...item }, orig: -1 }));
+      while (rows.length < field.minItems) rows.push({ item: {}, orig: -1 });
+      draw();
+    };
+    return group;
+  }
+
+  // 카테고리(친구/가족) 선택에 따라 보이는 목록을 바꿉니다. 숨긴 목록도 폼에 남겨 저장하므로 입력한 정보가 사라지지 않습니다
+  function bindChoices(form, tpl) {
+    const sync = (fromUser) => {
+      const values = Object.fromEntries([...form.querySelectorAll("[data-choice]")].map((s) => [s.dataset.choice, s.value]));
+      for (const field of tpl.fields) {
+        if (!field.if) continue;
+        const group = form.querySelector(`[data-group="${field.key}"]`);
+        if (!group) continue;
+        const on = SemogwiRenderer.conditionMet(tpl, values, field.if);
+        group.style.display = on ? "" : "none";
+        const people = (((job.research || {}).people) || {})[field.key] || [];
+        if (on && fromUser && group.isBlank && group.isBlank() && people.length) {
+          group.setItems(people.map((p) => ({ name: p.name, relation: p.relation, tmi: p.tmi })));
+        }
+      }
+    };
+    form.querySelectorAll("[data-choice]").forEach((select) => select.addEventListener("change", () => {
+      sync(true);
+      form.dispatchEvent(new Event("input", { bubbles: true }));
+    }));
+    sync(false);
+  }
+
   function collectTemplate(form, card) {
     const tpl = templateFor(card.frame);
     const get = (name) => (form.elements[name] ? form.elements[name].value : "");
     const fields = {};
+    const itemOrder = {};
     for (const field of tpl.fields) {
       if (field.type === "flag") fields[field.key] = Boolean(form.elements[`field-${field.key}`] && form.elements[`field-${field.key}`].checked);
+      else if (field.type === "choice") fields[field.key] = get(`field-${field.key}`) || field.default;
       else if (field.type === "text" || field.type === "multiline") fields[field.key] = get(`field-${field.key}`);
       else if (field.type === "list") fields[field.key] = [...Array(field.maxItems).keys()].map((i) => get(`field-${field.key}-${i}`).trim()).filter(Boolean);
       else if (field.type === "items") {
-        fields[field.key] = [...Array(field.maxItems).keys()]
-          .map((i) => Object.fromEntries(field.fields.map((sub) => [sub.key, get(`field-${field.key}-${i}-${sub.key}`).trim()])))
-          .filter((item) => Object.values(item).some(Boolean));
+        const rows = [...Array(field.maxItems).keys()]
+          .map((i) => ({ item: Object.fromEntries(field.fields.map((sub) => [sub.key, get(`field-${field.key}-${i}-${sub.key}`).trim()])),
+            orig: form.elements[`field-${field.key}-${i}-orig`] ? Number(get(`field-${field.key}-${i}-orig`)) : i }))
+          .filter((row) => Object.values(row.item).some(Boolean));
+        fields[field.key] = rows.map((row) => row.item);
+        if (field.slotPrefix) itemOrder[field.key] = rows.map((row) => row.orig);
       }
       else fields[field.key] = [...Array(field.maxItems).keys()].map((i) => ({ label: get(`field-${field.key}-${i}-label`).trim(), value: get(`field-${field.key}-${i}-value`).trim() }))
         .filter((p) => p.label || p.value);
     }
-    return { role: get("role"), fields, source: tpl.kind !== "cover" ? get("source") : "" };
+    const result = { role: get("role"), fields, source: hasSource(tpl) ? get("source") : "" };
+    if (Object.keys(itemOrder).length) result.itemOrder = itemOrder;
+    return result;
+  }
+
+  // 항목별 이미지(친구 1 이미지 …)를 편집 중인 항목 순서에 맞춥니다. 저장하면 서버도 같은 방식으로 옮깁니다
+  function itemImages(tpl, frame, draft) {
+    const images = Object.fromEntries(tpl.images.map((slot) => [slot.key, slotImageFor(frame, slot.key)]));
+    for (const field of tpl.fields) {
+      const order = draft && draft.itemOrder && draft.itemOrder[field.key];
+      if (!field.slotPrefix || !order) continue;
+      for (let j = 0; j < field.maxItems; j++) {
+        const source = j < order.length ? order[j] : -1;
+        images[`${field.slotPrefix}${j + 1}`] = source >= 0 ? slotImageFor(frame, `${field.slotPrefix}${source + 1}`) : null;
+      }
+    }
+    return images;
+  }
+
+  // 카드에 그려지는 이미지 자리만 (예: 친구가 2명이면 친구 3·4 이미지 자리는 숨김)
+  function activeSlots(frame) {
+    const tpl = templateFor(frame);
+    const card = job.outline && job.outline.cards.find((c) => c.frame === frame);
+    const fields = (card && card.fields) || {};
+    return tpl.images.filter((slot) => !slot.if || SemogwiRenderer.conditionMet(tpl, fields, slot.if));
   }
 
   function templateEditor(card) {
@@ -1180,9 +1522,31 @@
     const error = el("p", { class: "error", role: "alert", hidden: true });
     const save = el("button", { class: "btn btn-primary btn-small", type: "submit", textContent: "저장" });
     const form = el("form", { class: "outline-editor template-editor", dataset: { editor: card.frame } });
+    const choices = templateChoices(card.frame);
+    if (choices.length) {
+      // card-02 ~ card-05: 자료에 맞는 카드 구성을 고릅니다. 바꾸면 있는 값만 옮기고 새 사실은 만들지 않아요
+      const select = el("select", { "aria-label": `${card.frame} 카드 구성`, dataset: { templateSelect: card.frame },
+        onchange: async (e) => {
+          error.hidden = true;
+          try {
+            const next = await api(`/api/jobs/${job.id}/outline/cards/${card.frame}/template`, jsonInit("PUT", { template: e.target.value }));
+            outlineDraft = null;
+            await setJob(next);
+            renderOutline();
+          } catch (err) {
+            e.target.value = card.template;
+            error.textContent = err.message;
+            error.hidden = false;
+          }
+        } });
+      for (const id of choices) select.append(el("option", { value: id, textContent: options.templates[id].label, selected: id === card.template }));
+      form.append(el("label", { class: "edit-field" }, el("span", { textContent: "카드 구성" }), select,
+        el("small", { class: "hint", textContent: "필수 정보가 없으면 자유 구성으로 확인된 정보만 담아요." })));
+    }
     form.append(editField("역할", el("input", { type: "text", value: card.role, name: "role" }), 10));
     for (const field of tpl.fields) form.append(templateControl(field, card.fields[field.key]));
-    if (tpl.kind !== "cover") {
+    bindChoices(form, tpl);
+    if (hasSource(tpl)) {
       form.append(editField("출처", el("input", { type: "text", value: card.source, name: "source", placeholder: "출처: 공식 사이트 (모르면 비워 두세요)" }), 30));
     }
     form.append(
@@ -1233,6 +1597,7 @@
           preview,
           el("div", { class: "outline-content" },
             el("span", { class: "outline-role", textContent: card.role }), " ",
+            templateChoices(card.frame).length ? el("span", { class: "tag tag-demo", textContent: templateFor(card.frame).label }) : "", " ",
             card.edited ? el("span", { class: "edited-mark", textContent: "직접 수정" }) : job.mode === "ai" ? tag("AI 작성", "real") : tag("예시 내용"),
             fieldSummary(card),
             ...(job.mode === "ai" && sourcesOf(card).length
@@ -1687,6 +2052,7 @@
       $("research").hidden = true;
       $("material").hidden = true;
     }
+    renderDetail();
   }
 
   async function renderJob() {
@@ -1733,9 +2099,108 @@
     $("download-list").replaceChildren();
     for (const id of ["progress", "research", "material", "outline", "preview", "download", "ai-task"]) $(id).hidden = true;
     $("material-form").reset();
+    $("detail-files").value = "";
     delete $("material-form").dataset.job;
     renderView();
     $("topic").focus();
+  }
+
+  // ---------- 조사 자료 보관함 (저장된 자료 사용 / 새로 조사하기) ----------
+  const library = { key: "", versions: [], details: new Map(), timer: 0 };
+  const selectedResearchMode = () => ($("job-form").elements.researchMode && $("job-form").elements.researchMode.value) || "new";
+
+  function scheduleLibrary() {
+    clearTimeout(library.timer);
+    library.timer = setTimeout(loadLibrary, 350);
+  }
+
+  async function loadLibrary() {
+    const input = readInput();
+    const visible = selectedMode() === "ai" && (!job || job.state === "draft") && Boolean(input.topic);
+    $("research-field").hidden = !visible;
+    if (!visible) return;
+    const key = `${input.contentType}|${input.topic}`;
+    if (key !== library.key) {
+      library.key = key;
+      try {
+        const query = new URLSearchParams({ topic: input.topic, contentType: input.contentType || "" });
+        library.versions = (await api(`/api/research-library?${query}`)).versions;
+      } catch {
+        library.versions = [];
+      }
+      const saved = [...$("job-form").elements.researchMode].find((r) => r.value === "saved");
+      const fresh = [...$("job-form").elements.researchMode].find((r) => r.value === "new");
+      saved.disabled = !library.versions.length;
+      (library.versions.length ? saved : fresh).checked = true; // 저장된 자료가 있으면 기본으로 다시 써서 결과를 일관되게 합니다
+    }
+    renderLibrary();
+  }
+
+  function versionLabel(v) {
+    const type = typeLabelOf(v.contentType);
+    return `#${v.number} · ${v.researchedAt} 조사 · 읽은 출처 ${v.sourceCount}개(공식 ${v.officialCount}) · ${type}`;
+  }
+
+  async function renderLibrary() {
+    const box = $("research-library");
+    const mode = selectedResearchMode();
+    if (!library.versions.length) {
+      box.replaceChildren();
+      $("research-hint").textContent = "이 주제·유형으로 저장된 자료가 없어요. '새로 조사하기'로 AI가 조사하고, 결과는 자료 보관함에 저장돼요.";
+      return;
+    }
+    $("research-hint").textContent = mode === "saved"
+      ? "새 웹 조사 없이 저장된 자료(사실·출처)로 구성안 문구를 새로 써요. 자료에 없는 사실은 쓰지 않아요. 새로 적은 참고 자료는 사용자 제공 자료로 더해져요."
+      : "AI가 새로 조사해 새 버전으로 저장해요. 저장된 자료는 그대로 남아요.";
+    if (mode !== "saved") {
+      box.replaceChildren(el("small", { class: "hint", textContent: `저장된 자료 ${library.versions.length}개: ${versionLabel(library.versions[0])}` }));
+      return;
+    }
+    const select = el("select", { id: "research-version", "aria-label": "사용할 조사 버전", onchange: () => renderLibrary() });
+    const current = box.querySelector("#research-version");
+    const chosen = (current && library.versions.find((v) => v.id === current.value)) || library.versions[0];
+    for (const v of library.versions) select.append(el("option", { value: v.id, textContent: versionLabel(v), selected: v.id === chosen.id }));
+    const detail = el("div", { class: "library-detail" }, el("small", { class: "hint", textContent: "자료를 불러오는 중이에요" }));
+    box.replaceChildren(el("label", { class: "edit-field" }, el("span", { textContent: "조사 버전" }), select),
+      chosen.staleNote ? el("p", { class: "notice", textContent: chosen.staleNote }) : "", detail);
+    if (!library.details.has(chosen.id)) {
+      try {
+        library.details.set(chosen.id, await api(`/api/research-library/${chosen.id}`));
+      } catch (error) {
+        detail.replaceChildren(el("small", { class: "error", textContent: error.message }));
+        return;
+      }
+    }
+    detail.replaceChildren(libraryDetail(library.details.get(chosen.id)));
+  }
+
+  // 저장된 자료 확인: 항목별 값과 확인 상태, 친구·가족, 출처와 조사일
+  function libraryDetail(version) {
+    const items = (version.research.items || []).filter((i) => i.value);
+    const people = version.people || {};
+    const list = el("ul", { class: "library-items" }, ...items.map((item) =>
+      el("li", {}, stateBadge(item.state), ` ${item.label}: ${item.value}`)));
+    const details = version.peopleDetails || {};
+    const groups = Object.entries({ friends: "친구", family: "가족" }).filter(([k]) => (people[k] || []).length)
+      .flatMap(([k, label]) => (details[k] || people[k].map((name) => ({ name }))).map((p) =>
+        el("li", {}, el("b", { textContent: `${label} ${p.name}` }), p.relation ? ` (${p.relation})` : "", ` · TMI: ${p.tmi || "찾지 못함"}`)));
+    const sources = el("ul", { class: "library-sources" }, ...version.sources.map((s) =>
+      el("li", {}, verifyBadge(s), " ", /^https?:\/\//.test(s.url) ? el("a", { href: s.url, target: "_blank", rel: "noopener noreferrer", textContent: s.title || s.url }) : s.title)));
+    return el("details", { class: "library-view" },
+      el("summary", { textContent: `자료 보기 · 조사일 ${version.researchedAt} · 항목 ${items.length}개 · 사실 ${version.factCount}개${version.hasUserMaterial ? " · 사용자 제공 자료 포함" : ""}` }),
+      groups.length ? el("ul", { class: "library-people" }, ...groups) : "", list,
+      el("h4", { class: "sub-title", textContent: "출처" }), sources);
+  }
+
+  function renderResearchVersion() {
+    const node = $("research-version-note");
+    const info = job && job.researchVersion;
+    const fromLibrary = job && job.research && job.research.fromLibrary;
+    node.hidden = !info;
+    if (!info) return;
+    node.textContent = info.source === "saved"
+      ? `저장된 자료 #${info.number}(조사일 ${info.researchedAt})를 사용했어요. 새 웹 조사는 하지 않았어요.${fromLibrary && fromLibrary.staleNote ? ` ${fromLibrary.staleNote}` : ""}`
+      : `새로 조사한 자료를 보관함에 #${info.number}(조사일 ${info.researchedAt})로 저장했어요. 같은 주제로 다시 만들 때 '저장된 자료 사용'을 고를 수 있어요.`;
   }
 
   // ---------- 시작 ----------
@@ -1781,8 +2246,16 @@
     });
     $("retry").addEventListener("click", () => action("retry"));
     $("material-retry").addEventListener("click", () => action("retry"));
+    $("detail-upload").addEventListener("click", uploadDetail);
+    $("detail-fetch").addEventListener("click", fetchDetail);
+    $("detail-extract").addEventListener("click", () => detailAction("detail-images/extract", { method: "POST" }));
+    $("url").addEventListener("input", () => { if (viewStep === 1) renderDetail(); });
     $("material-form").addEventListener("submit", submitMaterial);
     for (const radio of $("job-form").elements.mode) radio.addEventListener("change", applyMode);
+    for (const radio of $("job-form").elements.mode) radio.addEventListener("change", scheduleLibrary);
+    for (const radio of $("job-form").elements.researchMode) radio.addEventListener("change", renderLibrary);
+    $("topic").addEventListener("input", scheduleLibrary);
+    $("type-options").addEventListener("change", scheduleLibrary);
     $("url").addEventListener("input", applyMode);
     $("new-job").addEventListener("click", resetToForm);
     $("edit-input").addEventListener("click", () => goToStep(1));

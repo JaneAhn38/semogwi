@@ -297,6 +297,21 @@ const SemogwiRenderer = (() => {
   const getPath = (fields, path) => path.split(".").reduce((value, key) => (value === undefined || value === null ? undefined : value[key]), fields);
   const baseKey = (path) => path.split(".")[0];
 
+  // 조건: "friends.0"(값이 있을 때), "category=family"(그 값일 때), 또는 둘 이상의 목록(모두 만족). 서버 templates.condition_met과 같습니다.
+  // 저장된 값이 없으면 필드 기본값으로 봅니다 (예: 카테고리가 없던 예전 카드는 '친구')
+  function conditionMet(tpl, fields, expr) {
+    const list = Array.isArray(expr) ? expr : [expr];
+    return list.every((cond) => {
+      const [path, expected] = cond.split("=");
+      let value = getPath(fields || {}, path);
+      if ((value === undefined || value === null || value === "") && !path.includes(".")) {
+        const field = (tpl.fields || []).find((f) => f.key === path);
+        value = field ? field.default : value;
+      }
+      return expected === undefined ? !isEmpty(value) : String(value ?? "") === expected;
+    });
+  }
+
   function fillTokens(spec, text) {
     return text.replace(/\{([\w.]+)\}/g, (_, key) => {
       if (key === "page") return pad2(spec.page);
@@ -615,6 +630,207 @@ const SemogwiRenderer = (() => {
     ctx.restore();
   }
 
+  // 자유 구성 카드의 본문 묶음. 소개 문장 · 정보 줄 상자 · 참고 사항 · 이미지를 내용 양에 맞춰 위에서부터 쌓습니다.
+  // 내용이 적으면 묶음을 세로 가운데 쪽으로 옮겨 빈 상자나 큰 여백이 남지 않게 합니다. 비어 있는 부분은 그리지 않습니다.
+  const STACK = { leadSize: 36, rowLabel: 30, rowValue: 34, noteSize: 28, rowPad: 26, minRow: 96, labelWidth: 170, iconSpace: 92 };
+
+  function measureLines(ctx, tpl, text, font, size, width, maxLines) {
+    setFont(ctx, tpl, font, size);
+    const lines = wrapLines(ctx, text, width);
+    return { lines: lines.slice(0, maxLines), overflow: lines.length > maxLines || lines.some((l) => ctx.measureText(l).width > width) };
+  }
+
+  async function drawStack(ctx, tpl, el, spec, options) {
+    const lead = el.lead ? getPath(spec.fields, el.lead) || "" : "";
+    const rows = el.rows ? (getPath(spec.fields, el.rows) || []).filter((r) => r.label && r.value) : [];
+    const notes = el.notes ? (getPath(spec.fields, el.notes) || []).filter(Boolean) : [];
+    const image = el.slot && spec.images ? spec.images[el.slot] : null;
+    const overflow = [];
+    const valueWidth = el.w - STACK.iconSpace - STACK.labelWidth - 40;
+    const leadBlock = lead ? measureLines(ctx, tpl, lead, "body", STACK.leadSize, el.w, 2) : null;
+    const rowBlocks = rows.map((row) => measureLines(ctx, tpl, row.value, "display", STACK.rowValue, valueWidth, 2));
+    const noteBlocks = notes.map((note) => measureLines(ctx, tpl, `※ ${note}`, "body", STACK.noteSize, el.w - 20, 2));
+    if (leadBlock && leadBlock.overflow) overflow.push(el.lead);
+    if (rowBlocks.some((b) => b.overflow)) overflow.push(el.rows);
+    if (noteBlocks.some((b) => b.overflow)) overflow.push(el.notes);
+
+    const lh = (size) => size * 1.4;
+    const rowHeights = rowBlocks.map((b) => Math.max(STACK.minRow, b.lines.length * lh(STACK.rowValue) + STACK.rowPad * 2));
+    const parts = [];
+    if (leadBlock) parts.push({ kind: "lead", h: leadBlock.lines.length * lh(STACK.leadSize) });
+    if (rows.length) parts.push({ kind: "rows", h: rowHeights.reduce((a, b) => a + b, 0) });
+    if (notes.length) parts.push({ kind: "notes", h: noteBlocks.reduce((a, b) => a + b.lines.length * lh(STACK.noteSize) + 10, 0) });
+    const contentHeight = parts.reduce((a, p) => a + p.h, 0) + el.gap * Math.max(0, parts.length - 1);
+    const space = el.bottom - el.top;
+    let y = el.top;
+    let imageBox = null;
+    if (image) {
+      const room = space - contentHeight - (parts.length ? el.gap : 0);
+      const h = Math.max(200, Math.min(480, room));
+      imageBox = { x: el.x, y: 0, w: el.w, h };
+      y = el.top + Math.max(0, (space - contentHeight - h - (parts.length ? el.gap : 0)) * 0.4);
+    } else {
+      y = el.top + Math.max(0, (space - contentHeight) * 0.35); // 내용이 적으면 가운데 쪽으로
+    }
+
+    for (const part of parts) {
+      if (part.kind === "lead") {
+        setFont(ctx, tpl, "body", STACK.leadSize);
+        ctx.fillStyle = tplColor(tpl, "inkSoft");
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        leadBlock.lines.forEach((line, i) => ctx.fillText(line, el.x, y + lh(STACK.leadSize) * (i + 0.5)));
+      } else if (part.kind === "rows") {
+        paint(ctx, tpl, { type: "rect", box: { x: el.x, y, w: el.w, h: part.h }, radius: 32, fill: "white" });
+        let top = y;
+        rows.forEach((row, i) => {
+          const h = rowHeights[i];
+          if (i) {
+            ctx.beginPath();
+            ctx.moveTo(el.x, top);
+            ctx.lineTo(el.x + el.w, top);
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = tplColor(tpl, "ink");
+            ctx.stroke();
+          }
+          drawCheck(ctx, tpl, { cx: el.x + 60, cy: top + h / 2, r: 24, lineWidth: 3 });
+          drawTextBox(ctx, tpl, row.label, { box: { x: el.x + STACK.iconSpace + 20, y: top, w: STACK.labelWidth, h }, font: "display", size: STACK.rowLabel, minSize: 22, color: "inkSoft", align: "left", valign: "middle", maxLines: 1 });
+          setFont(ctx, tpl, "display", STACK.rowValue);
+          ctx.fillStyle = tplColor(tpl, "ink");
+          ctx.textAlign = "left";
+          ctx.textBaseline = "middle";
+          const lines = rowBlocks[i].lines;
+          const startY = top + (h - lines.length * lh(STACK.rowValue)) / 2;
+          lines.forEach((line, n) => ctx.fillText(line, el.x + STACK.iconSpace + STACK.labelWidth + 30, startY + lh(STACK.rowValue) * (n + 0.5)));
+          top += h;
+        });
+        paint(ctx, tpl, { type: "rect", box: { x: el.x, y, w: el.w, h: part.h }, radius: 32, stroke: "ink", lineWidth: 4 });
+      } else {
+        let top = y;
+        setFont(ctx, tpl, "body", STACK.noteSize);
+        ctx.fillStyle = tplColor(tpl, "inkSoft");
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        for (const block of noteBlocks) {
+          block.lines.forEach((line, n) => ctx.fillText(line, el.x + 10, top + lh(STACK.noteSize) * (n + 0.5)));
+          top += block.lines.length * lh(STACK.noteSize) + 10;
+        }
+      }
+      y += part.h + el.gap;
+    }
+    let missing = false;
+    if (image) {
+      imageBox.y = parts.length ? y : el.top + (space - imageBox.h) * 0.4;
+      missing = await drawSlot(ctx, tpl, { type: "image", slot: el.slot, box: imageBox, radius: 28 }, spec, options);
+    } else if (el.slot) {
+      missing = true;
+    }
+    return { overflow, missing };
+  }
+
+  // 친구 캐릭터 묶음(원형 이미지 · 이름 · 관계 · 개별 TMI 상자)을 가로로 나열합니다. 인원(2~4명)에 맞춰 크기와 간격이 바뀝니다.
+  // 가독성을 먼저 지킵니다: 글이 길면 이미지를 먼저 줄이고, 그래도 모자랄 때만 글자를 최소 크기(tmiMin)까지 줄입니다. 글자를 자르지 않습니다.
+  const COLUMN_LAYOUTS = {
+    2: { gap: 52, circle: 300, name: 42, rel: 28, relH: 52, tmi: 32, tmiMin: 26, pad: 30 },
+    3: { gap: 32, circle: 236, name: 36, rel: 26, relH: 48, tmi: 30, tmiMin: 25, pad: 24 },
+    4: { gap: 20, circle: 184, name: 31, rel: 23, relH: 44, tmi: 28, tmiMin: 24, pad: 18 },
+  };
+  const COLUMN_TMI_LINE = 1.45;
+  const COLUMN_MIN_CIRCLE = 0.72; // 이미지는 원래 크기의 72%까지만 줄입니다
+
+  function columnItems(spec, el) {
+    return (getPath(spec.fields, el.field) || []).filter((f) => f && (f.name || f.relation || f.tmi)).slice(0, 4);
+  }
+
+  function measureColumns(ctx, tpl, items, L, colW, size, circle) {
+    const inner = colW - L.pad * 2;
+    const label = Math.round(size * 0.9);
+    const blocks = items.map((f) => {
+      if (!f.tmi) return null;
+      setFont(ctx, tpl, "body", size);
+      return wrapLines(ctx, f.tmi, inner);
+    });
+    const textH = Math.max(0, ...blocks.filter(Boolean).map((lines) => lines.length * size * COLUMN_TMI_LINE));
+    const hasTmi = blocks.some(Boolean);
+    // 상자 안: 위 여백 - 4 · TMI 표(label + 12) · 14 · 본문 · 아래 여백
+    const box = hasTmi ? Math.max(170, L.pad - 4 + label + 12 + 14 + textH + L.pad) : 0;
+    const hasRel = items.some((f) => f.relation);
+    const nameH = Math.round(L.name * 1.3);
+    const head = circle + 16 + nameH + (hasRel ? 10 + L.relH : 0);
+    const total = head + (hasTmi ? 30 + box : 0);
+    return { blocks, box, label, hasTmi, hasRel, nameH, head, total, size, circle, inner };
+  }
+
+  async function drawColumns(ctx, tpl, el, spec, options) {
+    const items = columnItems(spec, el);
+    const overflow = [];
+    const missing = [];
+    if (!items.length) return { overflow, missing };
+    const L = COLUMN_LAYOUTS[Math.min(4, Math.max(2, items.length))];
+    const slots = items.length === 1 ? 2 : items.length; // 한 명뿐이면(작성 중) 2열 크기로 가운데에 둡니다
+    const colW = (el.w - L.gap * (slots - 1)) / slots;
+    const space = el.bottom - el.top;
+    const baseCircle = Math.min(L.circle, colW - 12);
+    let m = measureColumns(ctx, tpl, items, L, colW, L.tmi, baseCircle);
+    // 1) 이미지 줄이기 → 2) 글자 줄이기 (최소 크기까지)
+    while (m.total > space && m.circle > baseCircle * COLUMN_MIN_CIRCLE) m = measureColumns(ctx, tpl, items, L, colW, m.size, Math.max(baseCircle * COLUMN_MIN_CIRCLE, m.circle - 8));
+    while (m.total > space && m.size > L.tmiMin) m = measureColumns(ctx, tpl, items, L, colW, m.size - 1, m.circle);
+    if (m.total > space) overflow.push(el.field);
+    const lineW = (lines) => lines.some((l) => { setFont(ctx, tpl, "body", m.size); return ctx.measureText(l).width > m.inner; });
+    if (m.blocks.some((b) => b && lineW(b))) overflow.push(el.field);
+
+    const top = el.top + Math.max(0, (space - m.total) * 0.4);
+    const startX = el.x + (items.length === 1 ? (el.w - colW) / 2 : 0);
+    for (const [i, friend] of items.entries()) {
+      const x = startX + i * (colW + L.gap);
+      const cx = x + colW / 2;
+      let y = top;
+      const slotEl = { type: "image", slot: `${el.slotPrefix}${i + 1}`, shape: "circle", box: { x: cx - m.circle / 2, y, w: m.circle, h: m.circle }, fill: "accent", inset: Math.round(m.circle * 0.075) };
+      if (await drawSlot(ctx, tpl, slotEl, spec, options)) missing.push(slotEl.slot);
+      y += m.circle + 16;
+      if (friend.name && drawTextBox(ctx, tpl, friend.name, { box: { x, y, w: colW, h: m.nameH }, font: "display", size: L.name, minSize: Math.round(L.name * 0.7), color: "ink", align: "center", valign: "middle", maxLines: 1 })) overflow.push(el.field);
+      y += m.nameH;
+      if (m.hasRel) {
+        y += 10;
+        if (friend.relation && drawPill(ctx, tpl, { x: cx, y, h: L.relH, align: "center", padX: 16, maxWidth: colW, stroke: "ink", lineWidth: 3, fill: "white", font: "body", size: L.rel, minSize: 18, color: "ink" }, friend.relation)) overflow.push(el.field);
+        y += L.relH;
+      }
+      if (!m.hasTmi) continue;
+      y += 30;
+      const lines = m.blocks[i];
+      if (!lines) continue; // 이 친구의 TMI가 없으면 상자를 그리지 않습니다 (빈 상자나 자리표시를 남기지 않음)
+      // 말풍선 모양 TMI 상자: 흰 바탕 · 둥근 모서리 · 위쪽 꼬리
+      paint(ctx, tpl, { type: "rect", box: { x, y, w: colW, h: m.box }, radius: 30, fill: "white", stroke: "ink", lineWidth: 3 });
+      const tail = Math.min(16, colW * 0.07);
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(cx - tail, y + 1.5);
+      ctx.lineTo(cx, y - tail);
+      ctx.lineTo(cx + tail, y + 1.5);
+      ctx.closePath();
+      ctx.fillStyle = tplColor(tpl, "white");
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(cx - tail, y);
+      ctx.lineTo(cx, y - tail);
+      ctx.lineTo(cx + tail, y);
+      ctx.lineWidth = 3;
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = tplColor(tpl, "ink");
+      ctx.stroke();
+      ctx.restore();
+      drawPill(ctx, tpl, { x: x + L.pad, y: y + L.pad - 4, h: m.label + 12, align: "left", padX: 12, radius: (m.label + 12) / 2, fill: "accent", font: "display", size: m.label, color: "ink" }, "TMI");
+      setFont(ctx, tpl, "body", m.size);
+      ctx.fillStyle = tplColor(tpl, "ink");
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      const lh = m.size * COLUMN_TMI_LINE;
+      const textTop = y + L.pad - 4 + m.label + 12 + 14;
+      lines.forEach((line, n) => ctx.fillText(line, x + L.pad, textTop + lh * (n + 0.5)));
+    }
+    return { overflow, missing };
+  }
+
   // 결과: overflow(글자가 칸을 넘침), overflowFields(넘친 필드), missingImages(비어 있는 이미지 자리)
   async function renderTemplate(canvas, spec, tpl, options) {
     canvas.width = WIDTH;
@@ -628,7 +844,7 @@ const SemogwiRenderer = (() => {
       for (const key of Array.isArray(overflow) ? overflow : overflow ? [name] : []) if (!overflowFields.includes(key)) overflowFields.push(key);
     };
     for (const el of tpl.elements) {
-      if (el.if && isEmpty(getPath(spec.fields, el.if))) continue;
+      if (el.if && !conditionMet(tpl, spec.fields, el.if)) continue;
       if (el.type === "header") await drawHeader(ctx, tpl, el);
       else if (el.type === "footer") mark(drawFooter(ctx, tpl, el, spec), "source");
       else if (el.type === "rect" || el.type === "circle") paint(ctx, tpl, el);
@@ -643,6 +859,14 @@ const SemogwiRenderer = (() => {
         ctx.setLineDash([]);
       } else if (el.type === "image") {
         if (await drawSlot(ctx, tpl, el, spec, options)) missingImages.push(el.slot);
+      } else if (el.type === "stack") {
+        const result = await drawStack(ctx, tpl, el, spec, options);
+        mark(result.overflow, "");
+        if (result.missing) missingImages.push(el.slot);
+      } else if (el.type === "columns") {
+        const result = await drawColumns(ctx, tpl, el, spec, options);
+        mark(result.overflow, "");
+        missingImages.push(...result.missing);
       } else if (el.type === "asset") await drawLogo(ctx, el.box.x, el.box.y, el.box.w, el.box.h);
       else if (el.type === "check") drawCheck(ctx, tpl, el);
       else if (el.type === "star") drawStar(ctx, tpl, el);
@@ -650,8 +874,11 @@ const SemogwiRenderer = (() => {
       else if (el.type === "chips") mark(drawChips(ctx, tpl, el, spec), baseKey(el.field));
       else if (el.type === "bullets") mark(drawBullets(ctx, tpl, el, spec), baseKey(el.field));
       else if (el.type === "pill" || el.type === "text") {
-        const value = el.field ? getPath(spec.fields, el.field) : fillTokens(spec, el.text);
+        let value = el.field ? getPath(spec.fields, el.field) : fillTokens(spec, el.text);
+        // fallback: 값이 비면 템플릿이 정한 기본 안내 문구를 그립니다 (예: 다음 캐릭터 미정 → '???')
+        if (isEmpty(value) && el.fallback) value = el.fallback;
         if (isEmpty(value)) continue;
+        if (el.prefix && typeof value === "string") value = `${el.prefix}${value}`; // 예: 'No. ' + 회차
         const name = el.field ? baseKey(el.field) : "text";
         mark(el.type === "pill" ? drawPill(ctx, tpl, el, value) : drawTextBox(ctx, tpl, value, el), name);
       }
@@ -660,5 +887,5 @@ const SemogwiRenderer = (() => {
     return { overflow: overflowFields.length > 0, overflowFields, missingImages };
   }
 
-  return { render, renderTemplate, fontsReady, WIDTH, HEIGHT };
+  return { render, renderTemplate, fontsReady, conditionMet, WIDTH, HEIGHT };
 })();

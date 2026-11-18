@@ -28,7 +28,8 @@
 | 3-U | **사용자 (업로드 화면)** | `outline.md` (이미지 권장 안내) | `input/cards/<파일>`, `card-images.json` | **멈춤 ③ 이미지 지정** |
 | 3 | `scripts/assign_images.py` (cutout-image) | `card-images.json`, `input/cards/` | `input/placed/img-NN.*`, `sources.md`(프로젝트), `cutout-check.md`, `card-images-result.json` | 자동. 종료 코드 1·2면 멈춤, 3이면 차단·실패 카드 알림 |
 | 4 | write-copy | `outline.md`, `brief.md`, `cutout-check.md` | `slides.json`, `copy-check.md` | 자동 (validate 오류 시 멈춤) |
-| 5 | fill-figma | `slides.json` | Figma 페이지 `세모귀_<폴더>`, `png/card-01.png ~ card-05.png` | 자동 (경고 확인 필요 시 멈춤) |
+| 4.5 | (선택) 배경 준비: 지금은 사용자가 임시 이미지를 지정. AI 생성은 아직 연결하지 않음 | `slides.json` | `backgrounds.json`, `input/backgrounds/`, `sources.md` 행 (규격: `templates/backgrounds.md`) | 파일이 없으면 건너뜀. `승인됨`이 아닌 배경은 validate가 멈춤 |
+| 5 | fill-figma | `slides.json`, (있으면) `backgrounds.json` | Figma 페이지 `세모귀_<폴더>`, `png/card-01.png ~ card-05.png` | 자동 (경고 확인 필요 시 멈춤) |
 
 ## 3. 사용자 승인 지점
 

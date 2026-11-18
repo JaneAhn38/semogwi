@@ -170,7 +170,8 @@
       "radius": 28,
       "fill": "white",
       "stroke": "ink",
-      "lineWidth": 3
+      "lineWidth": 3,
+      "if": "size"
     },
     {
       "type": "rect",
@@ -183,7 +184,8 @@
       "radius": 28,
       "fill": "white",
       "stroke": "ink",
-      "lineWidth": 3
+      "lineWidth": 3,
+      "if": "material"
     },
     {
       "type": "rect",
@@ -196,7 +198,8 @@
       "radius": 28,
       "fill": "white",
       "stroke": "ink",
-      "lineWidth": 3
+      "lineWidth": 3,
+      "if": "components"
     },
     {
       "type": "text",

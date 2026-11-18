@@ -65,6 +65,7 @@
 | Figma 자동 편집 연동 방법 | ✅ 확정 | **Figma MCP**. 복제·텍스트 교체·검증은 `use_figma`, 이미지 교체는 `upload_assets`, 확인은 `get_screenshot` (5장 참고) |
 | PNG 내보내기 방법 | ✅ 확정 | Figma MCP `download_assets` (PNG, 배율 1) → 1080 × 1350 |
 | 폰트 로드 | ✅ 확인됨 | Jua Regular / Gowun Dodum Regular 모두 MCP 환경에서 로드·적용됨 (2026-10-29 테스트) |
+| 배경 교체 | ✅ 확정 | `backgrounds.json`에서 승인된 card-02 ~ card-05의 **복제본 프레임 채우기**만 FILL로 교체. card-01·Page 1은 그대로 (`templates/backgrounds.md`, 5.3 참고) |
 | `main-image` 해상도 | ⚠️ 이미지마다 확인 | `cutout.py` 기본값(긴 변 512px)으로 만든 누끼는 FIT에서 확대됨 (`test.png` 435 × 512 → 1.52배). 6장 참고 |
 
 ---
@@ -128,6 +129,21 @@
 - 회전 정보(orientation 6)가 있는 JPG는 배치용 사본이 똑바로 선 상태로 Figma에 들어갔다 (원본은 그대로 보존).
 - fill-text `ok: true`, verify `ok: true`, Page 1 서명 실행 전후 같음(`d1a2e2a2`, 35개 노드). 서명은 색상을 비교하지 않으므로 PNG 배경 픽셀도 12:25 통합 테스트 결과와 비교했고 같았다.
 - 발견해 고친 오류: 이미지를 하나도 지정하지 않으면 `assign_images.py`가 빈 프로젝트 `sources.md`를 만들던 문제 (행이 있을 때만 쓰도록 수정).
+
+### 5.3 배경 교체 통합 테스트 (2026-11-06)
+
+`projects/2026-11-06_배경통합_테스트/`, Figma 페이지 `세모귀_2026-11-06_배경통합_테스트`. 임시 배경은 Pillow로 그린 도형 이미지이며 AI·유료 기능은 쓰지 않았습니다. 규격은 `templates/backgrounds.md`.
+
+| 카드 | 배경 | main-image | 결과 |
+| --- | --- | --- | --- |
+| card-01 | 템플릿 그라데이션 (고정 표지) | 누끼 FIT | ✅ 프레임에 이미지 없음 |
+| card-02, card-05 | 임시 배경 FILL | 없음 (숨김) | ✅ |
+| card-03 | 임시 배경 FILL | 투명 누끼 FIT | ✅ 투명 영역에 배경이 보임 |
+| card-04 | 임시 배경 FILL | 불투명 이미지 FIT | ✅ |
+
+- fill-text `ok: true`, verify `ok: true`, PNG 5장 1080 × 1350, Page 1 서명 실행 전후 같음(`d1a2e2a2`, 35개 노드).
+- `upload_assets`로 FRAME 노드에 넣으면 그라데이션을 **대체**해 프레임 채우기가 `IMAGE(FILL)` 하나가 됩니다. 레이어 6개와 순서는 그대로입니다.
+- 비율이 다른 이미지는 FILL에서 잘리므로 배경은 1080 × 1350으로 맞춥니다. 배경의 글자는 `body`와 겹쳐 읽기 어렵습니다 (2026-11-06 사전 테스트 페이지 `세모귀_2026-11-06_배경교체_테스트`).
 
 ---
 
