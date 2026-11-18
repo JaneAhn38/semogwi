@@ -1,0 +1,897 @@
+{
+  "size": {
+    "width": 1080,
+    "height": 1350
+  },
+  "topics": {
+    "popup": {
+      "name": "팝업스토어",
+      "accent": "#BFE6D5",
+      "cards": [
+        {
+          "file": "templates/popup-01-cover.html",
+          "page": 1,
+          "role": "cover",
+          "original": "original/PopupCover.dc.html",
+          "textSlots": [
+            {
+              "key": "character",
+              "example": "[캐릭터]"
+            },
+            {
+              "key": "period_start",
+              "example": "[MM.DD]"
+            },
+            {
+              "key": "period_end",
+              "example": "[MM.DD]"
+            },
+            {
+              "key": "location",
+              "example": "[장소 · 지역]"
+            }
+          ],
+          "imageSlots": [
+            {
+              "key": "main_image",
+              "label": "팝업 공식 포스터 · 현장 사진"
+            }
+          ]
+        },
+        {
+          "file": "templates/popup-02-info.html",
+          "page": 2,
+          "role": "info",
+          "original": "original/PopupInfo.dc.html",
+          "textSlots": [
+            {
+              "key": "period_start",
+              "example": "[YYYY.MM.DD]"
+            },
+            {
+              "key": "period_end",
+              "example": "[MM.DD]"
+            },
+            {
+              "key": "open_time",
+              "example": "[00:00]"
+            },
+            {
+              "key": "close_time",
+              "example": "[00:00]"
+            },
+            {
+              "key": "place_detail",
+              "example": "[건물명 층 · 상세 위치]"
+            },
+            {
+              "key": "entry_type",
+              "example": "[사전예약 / 현장대기 / 자유입장]"
+            },
+            {
+              "key": "closed_days",
+              "example": "[휴무일 또는 '없음']"
+            },
+            {
+              "key": "tip1",
+              "example": "[예약 링크 · 오픈 시간]"
+            },
+            {
+              "key": "tip2",
+              "example": "[평균 대기 시간]"
+            },
+            {
+              "key": "tip3",
+              "example": "[가까운 출구 · 주차]"
+            },
+            {
+              "key": "source",
+              "example": "[공식 계정 공지]"
+            }
+          ],
+          "imageSlots": []
+        },
+        {
+          "file": "templates/popup-03-goods.html",
+          "page": 3,
+          "role": "goods",
+          "original": "original/PopupGoods.dc.html",
+          "textSlots": [
+            {
+              "key": "goods1_name",
+              "example": "[굿즈 이름]"
+            },
+            {
+              "key": "goods1_spec",
+              "example": "[종류·사이즈]"
+            },
+            {
+              "key": "goods1_price",
+              "example": "[가격]"
+            },
+            {
+              "key": "goods2_name",
+              "example": "[굿즈 이름]"
+            },
+            {
+              "key": "goods2_spec",
+              "example": "[종류·사이즈]"
+            },
+            {
+              "key": "goods2_price",
+              "example": "[가격]"
+            },
+            {
+              "key": "goods3_name",
+              "example": "[굿즈 이름]"
+            },
+            {
+              "key": "goods3_spec",
+              "example": "[종류·사이즈]"
+            },
+            {
+              "key": "goods3_price",
+              "example": "[가격]"
+            },
+            {
+              "key": "purchase_limit",
+              "example": "[예: 품목별 1인 2개까지]"
+            }
+          ],
+          "imageSlots": [
+            {
+              "key": "goods1_image",
+              "label": "현장 한정 굿즈 사진 1"
+            },
+            {
+              "key": "goods2_image",
+              "label": "현장 한정 굿즈 사진 2"
+            },
+            {
+              "key": "goods3_image",
+              "label": "현장 한정 굿즈 사진 3"
+            }
+          ]
+        },
+        {
+          "file": "templates/popup-04-perks.html",
+          "page": 4,
+          "role": "perks",
+          "original": "original/PopupPerks.dc.html",
+          "textSlots": [
+            {
+              "key": "photozone_location",
+              "example": "[포토존 위치]"
+            },
+            {
+              "key": "tier1_amount",
+              "example": "[N]"
+            },
+            {
+              "key": "tier1_gift",
+              "example": "[증정품]"
+            },
+            {
+              "key": "tier2_amount",
+              "example": "[N]"
+            },
+            {
+              "key": "tier2_gift",
+              "example": "[증정품]"
+            },
+            {
+              "key": "tier3_amount",
+              "example": "[N]"
+            },
+            {
+              "key": "tier3_gift",
+              "example": "[증정품]"
+            },
+            {
+              "key": "event",
+              "example": "[예: SNS 인증 시 스티커 증정 · 소진 시 종료]"
+            },
+            {
+              "key": "source",
+              "example": "[공식 계정 공지]"
+            }
+          ],
+          "imageSlots": [
+            {
+              "key": "photozone_image",
+              "label": "포토존 · 대형 조형물 사진"
+            }
+          ]
+        },
+        {
+          "file": "templates/popup-05-wrap.html",
+          "page": 5,
+          "role": "wrap",
+          "original": "original/PopupWrap.dc.html",
+          "textSlots": [
+            {
+              "key": "reservation",
+              "example": "[필수 / 현장대기]"
+            },
+            {
+              "key": "soldout_items",
+              "example": "[빨리 품절되는 굿즈]"
+            },
+            {
+              "key": "best_time",
+              "example": "[덜 붐비는 시간대]"
+            },
+            {
+              "key": "source",
+              "example": "[공식 계정명 · 팝업 공지 링크]"
+            }
+          ],
+          "imageSlots": []
+        }
+      ]
+    },
+    "goods": {
+      "name": "공식 굿즈",
+      "accent": "#FDE7A6",
+      "cards": [
+        {
+          "file": "templates/goods-01-cover.html",
+          "page": 1,
+          "role": "cover",
+          "original": "original/GoodsCover.dc.html",
+          "textSlots": [
+            {
+              "key": "character",
+              "example": "[캐릭터]"
+            },
+            {
+              "key": "lineup_name",
+              "example": "[굿즈 라인업]"
+            },
+            {
+              "key": "release_date",
+              "example": "[MM.DD (요일)]"
+            },
+            {
+              "key": "store",
+              "example": "[온라인몰 / 매장]"
+            }
+          ],
+          "imageSlots": [
+            {
+              "key": "main_image",
+              "label": "대표 굿즈 공식 사진"
+            }
+          ]
+        },
+        {
+          "file": "templates/goods-02-lineup.html",
+          "page": 2,
+          "role": "lineup",
+          "original": "original/GoodsGrid.dc.html",
+          "textSlots": [
+            {
+              "key": "goods1_name",
+              "example": "[굿즈 이름]"
+            },
+            {
+              "key": "goods1_spec",
+              "example": "[종류·사이즈]"
+            },
+            {
+              "key": "goods1_price",
+              "example": "[가격]"
+            },
+            {
+              "key": "goods2_name",
+              "example": "[굿즈 이름]"
+            },
+            {
+              "key": "goods2_spec",
+              "example": "[종류·사이즈]"
+            },
+            {
+              "key": "goods2_price",
+              "example": "[가격]"
+            },
+            {
+              "key": "goods3_name",
+              "example": "[굿즈 이름]"
+            },
+            {
+              "key": "goods3_spec",
+              "example": "[종류·사이즈]"
+            },
+            {
+              "key": "goods3_price",
+              "example": "[가격]"
+            },
+            {
+              "key": "goods4_name",
+              "example": "[굿즈 이름]"
+            },
+            {
+              "key": "goods4_spec",
+              "example": "[종류·사이즈]"
+            },
+            {
+              "key": "goods4_price",
+              "example": "[가격]"
+            },
+            {
+              "key": "price_min",
+              "example": "[최저가]"
+            },
+            {
+              "key": "price_max",
+              "example": "[최고가]"
+            }
+          ],
+          "imageSlots": [
+            {
+              "key": "goods1_image",
+              "label": "굿즈 사진 1"
+            },
+            {
+              "key": "goods2_image",
+              "label": "굿즈 사진 2"
+            },
+            {
+              "key": "goods3_image",
+              "label": "굿즈 사진 3"
+            },
+            {
+              "key": "goods4_image",
+              "label": "굿즈 사진 4"
+            }
+          ]
+        },
+        {
+          "file": "templates/goods-03-pick.html",
+          "page": 3,
+          "role": "pick",
+          "original": "original/GoodsPick.dc.html",
+          "textSlots": [
+            {
+              "key": "name",
+              "example": "[굿즈 이름]"
+            },
+            {
+              "key": "price",
+              "example": "[가격]"
+            },
+            {
+              "key": "size",
+              "example": "[가로×세로]"
+            },
+            {
+              "key": "material",
+              "example": "[소재]"
+            },
+            {
+              "key": "components",
+              "example": "[구성]"
+            }
+          ],
+          "imageSlots": [
+            {
+              "key": "main_image",
+              "label": "주목 굿즈 공식 사진"
+            }
+          ]
+        },
+        {
+          "file": "templates/goods-04-howto.html",
+          "page": 4,
+          "role": "howto",
+          "original": "original/GoodsHowto.dc.html",
+          "textSlots": [
+            {
+              "key": "sale_start",
+              "example": "[MM.DD (요일) HH:MM]"
+            },
+            {
+              "key": "store",
+              "example": "[온라인몰 / 오프라인 매장]"
+            },
+            {
+              "key": "delivery",
+              "example": "[MM월 중순 순차 배송]"
+            },
+            {
+              "key": "early_bird",
+              "example": "[예: 선착순 300명 한정 엽서 증정]"
+            },
+            {
+              "key": "source",
+              "example": "[공식 판매처 공지]"
+            }
+          ],
+          "imageSlots": []
+        },
+        {
+          "file": "templates/goods-05-wrap.html",
+          "page": 5,
+          "role": "wrap",
+          "original": "original/GoodsWrap.dc.html",
+          "textSlots": [
+            {
+              "key": "release_date",
+              "example": "[MM.DD (요일)]"
+            },
+            {
+              "key": "store",
+              "example": "[온라인몰 / 매장]"
+            },
+            {
+              "key": "price_min",
+              "example": "[최저가]"
+            },
+            {
+              "key": "price_max",
+              "example": "[최고가]"
+            },
+            {
+              "key": "source",
+              "example": "[공식 계정명 · 판매 페이지 링크]"
+            }
+          ],
+          "imageSlots": []
+        }
+      ]
+    },
+    "collab": {
+      "name": "콜라보",
+      "accent": "#C9D8F5",
+      "cards": [
+        {
+          "file": "templates/collab-01-cover.html",
+          "page": 1,
+          "role": "cover",
+          "original": "original/CollabCover.dc.html",
+          "textSlots": [
+            {
+              "key": "brand",
+              "example": "[브랜드]"
+            },
+            {
+              "key": "character",
+              "example": "[캐릭터]"
+            },
+            {
+              "key": "summary",
+              "example": "[콜라보 한 줄 요약 — 예: 한정판 음료와 굿즈가 나와요]"
+            },
+            {
+              "key": "period_start",
+              "example": "[MM.DD]"
+            },
+            {
+              "key": "period_end",
+              "example": "[MM.DD]"
+            }
+          ],
+          "imageSlots": [
+            {
+              "key": "brand_logo",
+              "label": "브랜드 공식 로고"
+            },
+            {
+              "key": "character_image",
+              "label": "캐릭터 공식 이미지"
+            }
+          ]
+        },
+        {
+          "file": "templates/collab-02-about.html",
+          "page": 2,
+          "role": "about",
+          "original": "original/CollabInfo.dc.html",
+          "textSlots": [
+            {
+              "key": "brand",
+              "example": "[브랜드]"
+            },
+            {
+              "key": "character",
+              "example": "[캐릭터]"
+            },
+            {
+              "key": "intro",
+              "example": "[이번 콜라보가 어떤 내용인지 2~3줄로 소개해요. 누가, 무엇을, 어디서 하는지 위주로 공식 발표 내용만 정리합니다.]"
+            },
+            {
+              "key": "period_start",
+              "example": "[MM.DD]"
+            },
+            {
+              "key": "period_end",
+              "example": "[MM.DD]"
+            },
+            {
+              "key": "where",
+              "example": "[매장 / 온라인]"
+            },
+            {
+              "key": "summary_brand",
+              "example": "[브랜드]"
+            },
+            {
+              "key": "summary_character",
+              "example": "[캐릭터]"
+            },
+            {
+              "key": "summary_what",
+              "example": "[메뉴 · 제품 종류]"
+            },
+            {
+              "key": "source",
+              "example": "[브랜드 공식 발표]"
+            }
+          ],
+          "imageSlots": [
+            {
+              "key": "main_image",
+              "label": "콜라보 제품 · 공식 비주얼"
+            }
+          ]
+        },
+        {
+          "file": "templates/collab-03-menu.html",
+          "page": 3,
+          "role": "menu",
+          "original": "original/CollabMenu.dc.html",
+          "textSlots": [
+            {
+              "key": "brand",
+              "example": "[브랜드]"
+            },
+            {
+              "key": "character",
+              "example": "[캐릭터]"
+            },
+            {
+              "key": "intro",
+              "example": "[이번 콜라보로 나온 한정 제품·메뉴를 소개해요]"
+            },
+            {
+              "key": "item1_name",
+              "example": "[이름]"
+            },
+            {
+              "key": "item1_price",
+              "example": "[가격]"
+            },
+            {
+              "key": "item2_name",
+              "example": "[이름]"
+            },
+            {
+              "key": "item2_price",
+              "example": "[가격]"
+            },
+            {
+              "key": "item3_name",
+              "example": "[이름]"
+            },
+            {
+              "key": "item3_price",
+              "example": "[가격]"
+            },
+            {
+              "key": "sale_note",
+              "example": "[예: 일부 매장 한정 · 소진 시 조기 종료]"
+            },
+            {
+              "key": "source",
+              "example": "[브랜드 공식 발표]"
+            }
+          ],
+          "imageSlots": [
+            {
+              "key": "item1_image",
+              "label": "제품·메뉴 사진 1"
+            },
+            {
+              "key": "item2_image",
+              "label": "제품·메뉴 사진 2"
+            },
+            {
+              "key": "item3_image",
+              "label": "제품·메뉴 사진 3"
+            }
+          ]
+        },
+        {
+          "file": "templates/collab-04-perks.html",
+          "page": 4,
+          "role": "perks",
+          "original": "original/CollabPerks.dc.html",
+          "textSlots": [
+            {
+              "key": "brand",
+              "example": "[브랜드]"
+            },
+            {
+              "key": "character",
+              "example": "[캐릭터]"
+            },
+            {
+              "key": "benefit1_title",
+              "example": "[증정 굿즈]"
+            },
+            {
+              "key": "benefit1_desc",
+              "example": "[받는 조건 — 예: 세트 메뉴 구매 시]"
+            },
+            {
+              "key": "benefit2_title",
+              "example": "[구매 혜택]"
+            },
+            {
+              "key": "benefit2_desc",
+              "example": "[조건과 내용]"
+            },
+            {
+              "key": "benefit3_title",
+              "example": "[응모 이벤트]"
+            },
+            {
+              "key": "benefit3_desc",
+              "example": "[참여 방법 · 발표일]"
+            },
+            {
+              "key": "stores",
+              "example": "[전 매장 / 일부 매장]"
+            },
+            {
+              "key": "condition",
+              "example": "[조건]"
+            }
+          ],
+          "imageSlots": []
+        },
+        {
+          "file": "templates/collab-05-wrap.html",
+          "page": 5,
+          "role": "wrap",
+          "original": "original/CollabWrap.dc.html",
+          "textSlots": [
+            {
+              "key": "period_start",
+              "example": "[MM.DD]"
+            },
+            {
+              "key": "period_end",
+              "example": "[MM.DD]"
+            },
+            {
+              "key": "place",
+              "example": "[매장 / 온라인]"
+            },
+            {
+              "key": "key_benefit",
+              "example": "[한 줄 요약]"
+            },
+            {
+              "key": "source",
+              "example": "[브랜드 공식 계정 · 발표 링크]"
+            }
+          ],
+          "imageSlots": []
+        }
+      ]
+    },
+    "character": {
+      "name": "캐릭터 소개",
+      "accent": "#F7C6D3",
+      "cards": [
+        {
+          "file": "templates/character-01-cover.html",
+          "page": 1,
+          "role": "cover",
+          "original": "original/Main.dc.html",
+          "textSlots": [
+            {
+              "key": "name",
+              "example": "[캐릭터 이름]"
+            },
+            {
+              "key": "tagline",
+              "example": "[한 줄 소개 — 예: 소심하지만 먹을 땐 진심인 친구]"
+            }
+          ],
+          "imageSlots": [
+            {
+              "key": "main_image",
+              "label": "캐릭터 공식 이미지 (누끼 PNG)"
+            }
+          ]
+        },
+        {
+          "file": "templates/character-02-profile.html",
+          "page": 2,
+          "role": "profile",
+          "original": "original/CharProfile.dc.html",
+          "textSlots": [
+            {
+              "key": "issue_no",
+              "example": "[회차]"
+            },
+            {
+              "key": "name",
+              "example": "[캐릭터 이름]"
+            },
+            {
+              "key": "birthday",
+              "example": "[MM월 DD일]"
+            },
+            {
+              "key": "favorite",
+              "example": "[좋아하는 것]"
+            },
+            {
+              "key": "creator",
+              "example": "[작가 / 출처]"
+            },
+            {
+              "key": "tag1",
+              "example": "[특징1]"
+            },
+            {
+              "key": "tag2",
+              "example": "[특징2]"
+            },
+            {
+              "key": "tag3",
+              "example": "[특징3]"
+            },
+            {
+              "key": "debut_year",
+              "example": "[YYYY년]"
+            },
+            {
+              "key": "debut_work",
+              "example": "[작품 · 플랫폼]"
+            },
+            {
+              "key": "source",
+              "example": "[공식 계정 / 홈페이지]"
+            }
+          ],
+          "imageSlots": [
+            {
+              "key": "profile_image",
+              "label": "공식 이미지 (누끼 PNG)"
+            }
+          ]
+        },
+        {
+          "file": "templates/character-03-traits.html",
+          "page": 3,
+          "role": "traits",
+          "original": "original/CharTraits.dc.html",
+          "textSlots": [
+            {
+              "key": "trait1_keyword",
+              "example": "[특징 키워드]"
+            },
+            {
+              "key": "trait1_desc",
+              "example": "[이 특징이 드러나는 공식 장면을 한두 줄로]"
+            },
+            {
+              "key": "trait2_keyword",
+              "example": "[특징 키워드]"
+            },
+            {
+              "key": "trait2_desc",
+              "example": "[이 특징이 드러나는 공식 장면을 한두 줄로]"
+            },
+            {
+              "key": "source",
+              "example": "[공식 계정]"
+            }
+          ],
+          "imageSlots": [
+            {
+              "key": "trait1_image",
+              "label": "공식 장면 이미지 1"
+            },
+            {
+              "key": "trait2_image",
+              "label": "공식 장면 이미지 2"
+            }
+          ]
+        },
+        {
+          "file": "templates/character-04-friends.html",
+          "page": 4,
+          "role": "friends",
+          "original": "original/CharFriends.dc.html",
+          "textSlots": [
+            {
+              "key": "friend1_name",
+              "example": "[이름]"
+            },
+            {
+              "key": "friend1_relation",
+              "example": "[관계]"
+            },
+            {
+              "key": "friend2_name",
+              "example": "[이름]"
+            },
+            {
+              "key": "friend2_relation",
+              "example": "[관계]"
+            },
+            {
+              "key": "friend3_name",
+              "example": "[이름]"
+            },
+            {
+              "key": "friend3_relation",
+              "example": "[관계]"
+            },
+            {
+              "key": "tmi1",
+              "example": "[팬들이 좋아하는 깨알 정보 1]"
+            },
+            {
+              "key": "tmi2",
+              "example": "[깨알 정보 2]"
+            },
+            {
+              "key": "tmi3",
+              "example": "[깨알 정보 3]"
+            },
+            {
+              "key": "source",
+              "example": "[공식 계정 / 홈페이지]"
+            }
+          ],
+          "imageSlots": [
+            {
+              "key": "friend1_image",
+              "label": "친구 캐릭터 공식 이미지"
+            },
+            {
+              "key": "friend2_image",
+              "label": "친구 캐릭터 공식 이미지"
+            },
+            {
+              "key": "friend3_image",
+              "label": "친구 캐릭터 공식 이미지"
+            }
+          ]
+        },
+        {
+          "file": "templates/character-05-wrap.html",
+          "page": 5,
+          "role": "wrap",
+          "original": "original/CharWrap.dc.html",
+          "textSlots": [
+            {
+              "key": "recommend_for",
+              "example": "[예: 소심한 친구가 귀여운 분]"
+            },
+            {
+              "key": "official_account",
+              "example": "[@공식 계정]"
+            },
+            {
+              "key": "see_also",
+              "example": "[함께 보면 좋은 캐릭터]"
+            },
+            {
+              "key": "source",
+              "example": "[공식 계정 · 홈페이지 링크]"
+            }
+          ],
+          "imageSlots": []
+        }
+      ]
+    }
+  }
+}

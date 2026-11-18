@@ -1,0 +1,66 @@
+{
+  "_comment": "예시 데이터입니다. 캐릭터·장소·날짜는 모두 지어낸 값이에요. 실제 게시물에는 공식 공지 내용만 넣어 주세요.",
+  "topic": "popup",
+  "accent": "#BFE6D5",
+  "cards": {
+    "popup-01-cover": {
+      "text": {
+        "character": "말랑곰",
+        "period_start": "12.05",
+        "period_end": "12.21",
+        "location": "성수 · 서울숲역"
+      }
+    },
+    "popup-02-info": {
+      "text": {
+        "period_start": "2026.12.05",
+        "period_end": "12.21",
+        "open_time": "11:00",
+        "close_time": "20:00",
+        "place_detail": "OO빌딩 1층 이벤트홀",
+        "entry_type": "사전예약 + 현장대기",
+        "closed_days": "없음",
+        "tip1": "예약은 매주 월요일 10시 오픈",
+        "tip2": "주말 대기 약 1시간",
+        "tip3": "서울숲역 4번 출구 도보 3분",
+        "source": "말랑곰 공식 인스타그램"
+      }
+    },
+    "popup-03-goods": {
+      "text": {
+        "goods1_name": "말랑곰 인형 키링",
+        "goods1_spec": "약 10cm",
+        "goods1_price": "15,000",
+        "goods2_name": "겨울 머그컵",
+        "goods2_spec": "350ml",
+        "goods2_price": "18,000",
+        "goods3_name": "스티커 팩",
+        "goods3_spec": "6종 랜덤",
+        "goods3_price": "4,000",
+        "purchase_limit": "품목별 1인 2개까지"
+      },
+      "images": {}
+    },
+    "popup-04-perks": {
+      "text": {
+        "photozone_location": "입구 정면",
+        "tier1_amount": "3",
+        "tier1_gift": "엽서 1종",
+        "tier2_amount": "5",
+        "tier2_gift": "엽서 + 스티커",
+        "tier3_amount": "10",
+        "tier3_gift": "한정 쇼핑백",
+        "event": "SNS 인증 시 뱃지 증정 · 소진 시 종료",
+        "source": "말랑곰 공식 인스타그램"
+      }
+    },
+    "popup-05-wrap": {
+      "text": {
+        "reservation": "사전예약 권장",
+        "soldout_items": "인형 키링",
+        "best_time": "평일 오전",
+        "source": "말랑곰 공식 인스타그램 · 팝업 공지"
+      }
+    }
+  }
+}
