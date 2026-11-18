@@ -2,6 +2,8 @@ fastapi==0.162.0
 uvicorn==0.54.0
 python-multipart==0.0.33
 
+# 상세페이지 이미지 찾기(사용자가 요청할 때)와 테스트에 씁니다
+httpx==0.28.1
+
 # 테스트용
 pytest==9.2.0
-httpx==0.28.1

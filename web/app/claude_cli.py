@@ -5,6 +5,7 @@
 - 실제 도구 사용 기록(tool_use_result)을 함께 돌려줍니다. 출처 검증은 모델의 말이 아니라 이 기록을 기준으로 합니다.
 """
 
+import base64
 import json
 import os
 import re
@@ -199,9 +200,26 @@ def _classify(run: CliRun, stderr: str, returncode: int) -> AIError:
     return AIError("error", f"AI 호출이 실패했어요 (종료 코드 {returncode}, {run.subtype or '결과 없음'}). 다시 시도해 주세요.")
 
 
+def image_message(prompt: str, images: list[tuple[str, str, bytes]]) -> str:
+    """이미지와 글을 한 사용자 메시지로 묶은 stream-json 입력 한 줄. images: [(설명, MIME, 바이트)]
+
+    이미지는 파일 경로가 아니라 내용(base64)으로 보냅니다. 그래서 AI에게 파일 읽기 도구를 주지 않아도 됩니다.
+    """
+    content = []
+    for label, mime, data in images:
+        content.append({"type": "text", "text": label})
+        content.append({"type": "image", "source": {"type": "base64", "media_type": mime, "data": base64.b64encode(data).decode("ascii")}})
+    content.append({"type": "text", "text": prompt})
+    return json.dumps({"type": "user", "message": {"role": "user", "content": content}}, ensure_ascii=False) + "\n"
+
+
 def run(prompt: str, system: str, schema: dict, *, tools: tuple[str, ...] = (), model: str = "sonnet",
-        effort: str = "medium", timeout: int = 300, budget_usd: float = 1.0, disallowed: tuple[str, ...] = ()) -> CliRun:
-    """프롬프트를 실행하고 구조화된 결과와 도구 사용 기록을 돌려줍니다. 실패하면 AIError를 냅니다."""
+        effort: str = "medium", timeout: int = 300, budget_usd: float = 1.0, disallowed: tuple[str, ...] = (),
+        images: list[tuple[str, str, bytes]] | None = None) -> CliRun:
+    """프롬프트를 실행하고 구조화된 결과와 도구 사용 기록을 돌려줍니다. 실패하면 AIError를 냅니다.
+
+    images를 주면 이미지와 함께 보냅니다 (상세 이미지 판독). 도구 없이 실행합니다.
+    """
     state = status()
     if not state["available"]:
         raise AIError("unavailable", state["reason"])
@@ -218,12 +236,14 @@ def run(prompt: str, system: str, schema: dict, *, tools: tuple[str, ...] = (), 
         "--setting-sources", "",
         "--max-budget-usd", str(budget_usd),
     ]
+    if images:
+        args += ["--input-format", "stream-json"]
     if tools:
         args += ["--allowedTools", ",".join(tools)]
     if disallowed:
         args += ["--disallowedTools", *disallowed]
     try:
-        done = subprocess.run(args, input=prompt, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        done = subprocess.run(args, input=image_message(prompt, images) if images else prompt, capture_output=True, text=True, encoding="utf-8", errors="replace",
                               timeout=timeout, cwd=WORK_DIR, env=_clean_env())
     except subprocess.TimeoutExpired:
         raise AIError("timeout", f"AI 응답이 {timeout // 60}분 안에 끝나지 않아 중단했어요. 다시 시도해 주세요.") from None

@@ -12,8 +12,8 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from . import claude_cli, cutout, research as research_items, site_policy, templates
-from .ai_provider import card_source_state, get_ai_provider, material_text, policy_stop_research
+from . import claude_cli, cutout, detail_images, research as research_items, research_library, site_policy, templates
+from .ai_provider import card_source_state, get_ai_provider, material_text, policy_stop_research, separates_research
 from .claude_cli import AIError
 from .layout import ImageElement, LayoutError, TextElement, validate_layout
 from .outline import check_card, issues_of, unsupported_numbers
@@ -92,6 +92,11 @@ def _normalize(job: dict) -> dict:
     job.setdefault("typeSource", "user")
     job.setdefault("notes", "")
     job.setdefault("typeReason", "")
+    job.setdefault("detailImages", [])  # 자료 조사용 상세페이지 이미지 (카드에 넣는 이미지와 따로 둡니다)
+    job.setdefault("detailExtraction", None)  # AI가 상세 이미지에서 읽은 결과
+    job.setdefault("detailFetch", None)  # 참고 URL에서 상세 이미지를 찾은 기록
+    job.setdefault("researchVersion", None)  # 조사 자료 보관함의 버전 (새로 조사해 저장했거나, 저장된 자료로 시작한 경우)
+    job.setdefault("researchStage", None)  # 조사 단계가 끝났는지 (조사와 구성안 작성을 나눈 작업). 구성안만 다시 쓸 때 씁니다
     for asset in job["assets"]:
         asset.setdefault("sha256", None)
         asset.setdefault("useVariant", "original")
@@ -107,6 +112,7 @@ def _normalize(job: dict) -> dict:
             card.setdefault("edited", False)
             card.setdefault("regenCount", 0)
             card.setdefault("sourceIds", [])
+        _open_old_versions(job)
         job["outline"].setdefault("issues", _base_issues(job, job["outline"]["cards"]))
     preview = job.get("preview")
     if preview:
@@ -122,9 +128,66 @@ def _normalize(job: dict) -> dict:
     return job
 
 
+def _open_old_versions(job: dict) -> None:
+    """디자인이 바뀐 템플릿으로 저장한 카드를 예전 판으로 엽니다 (예: 공통 TMI가 있던 친구와 TMI 카드).
+
+    예전 값을 새 형식으로 옮기면 공통 TMI를 특정 친구의 사실처럼 붙이게 되므로, 내용은 그대로 두고 예전 디자인으로 그립니다.
+    """
+    if not templates.is_template_job(job) or not job.get("templateSet"):
+        return
+    preview = job.get("preview")
+    old_hash = _approval_hash(job) if preview and preview.get("cards") else None
+    changed = False
+    for index, card in enumerate(job["outline"]["cards"]):
+        old_id = templates.upgrade_card(card)
+        if not old_id:
+            continue
+        card["template"] = old_id
+        if index < len(job["templateSet"]):
+            job["templateSet"][index] = old_id
+        changed = True
+        for shown in (preview or {}).get("cards", []):
+            if shown.get("frame") == card["frame"] and shown.get("spec", {}).get("template") != old_id:
+                shown["spec"]["template"] = old_id
+                shown["layoutName"] = old_id
+                shown["layoutLabel"] = f"{templates.TEMPLATES[old_id]['label']} 템플릿"
+    # 그림 내용은 그대로이므로 승인 기록도 유지합니다
+    if changed and old_hash and preview.get("approvalHash") == old_hash:
+        preview["approvalHash"] = _approval_hash(job)
+
+
 def _base_issues(job: dict, cards: list[dict]) -> dict:
     """형식별 글자 수·필드 규칙. 출처 검증은 _issues가 더합니다."""
-    return templates.issues_of(job, cards) if templates.is_template_job(job) else issues_of(cards)
+    if not templates.is_template_job(job):
+        return issues_of(cards)
+    _sync_templates(job, cards)
+    return templates.issues_of(job, cards)
+
+
+def _sync_templates(job: dict, cards: list[dict]) -> None:
+    """구성안 카드마다 고른 템플릿을 작업의 templateSet에 반영하고, 이미지 자리를 새 템플릿에 맞춥니다.
+
+    card-02 ~ card-05는 자료에 따라 템플릿이 바뀔 수 있습니다. 넣어 둔 이미지는 같은 자리 이름이 있으면 그대로,
+    없으면 새 템플릿의 빈 자리에 차례로 옮깁니다 (이미지를 잃지 않게).
+    """
+    if not templates.is_flexible(job) or len(cards) != len(FRAMES):
+        return
+    ids = [card.get("template") or job["templateSet"][i] for i, card in enumerate(cards)]
+    if ids == job["templateSet"]:
+        return
+    job["templateSet"] = ids
+    slots_all = job.get("slotImages")
+    if slots_all is None:
+        return
+    for frame in FRAMES:
+        keys = [slot["key"] for slot in templates.slots_of(job, frame)]
+        old = slots_all.get(frame) or {}
+        new = {key: old.get(key) for key in keys}
+        leftovers = [image for key, image in old.items() if image and key not in keys]
+        for key in keys:
+            if new[key] is None and leftovers:
+                new[key] = leftovers.pop(0)
+        slots_all[frame] = new
 
 
 def _images_from_preview(preview: dict) -> dict:
@@ -200,6 +263,9 @@ def create_draft(job_id: str) -> dict:
         "typeSource": "user",
         "typeReason": "",
         "notes": "",
+        "detailImages": [],
+        "detailExtraction": None,
+        "detailFetch": None,
         "steps": [{"key": k, "label": label, "mode": mode, "status": "pending"} for k, label, mode in STEPS],
         "outline": None,
         "preview": None,
@@ -252,12 +318,15 @@ def _apply_type(job: dict, content_type: str, source: str, reason: str = "") -> 
     job["templateSet"] = templates.template_set(content_type) if job["format"] == templates.FORMAT else None
 
 
-def start(job_id: str, mode: str = "demo") -> dict:
+def start(job_id: str, mode: str = "demo", research_mode: str = "new", version_id: str | None = None) -> dict:
+    """제작을 시작합니다. research_mode가 saved면 보관함의 조사 버전으로 구성안만 새로 씁니다 (웹 조사 안 함)."""
     job = _require(job_id, "draft")
     if not job["topic"]:
         raise JobConflict("주제를 입력해 주세요")
     if any(_is_processing(a) for a in job["assets"]):
         raise JobConflict("배경 제거가 끝난 뒤에 시작해 주세요")
+    if research_mode == "saved":
+        return _start_from_library(job, mode, version_id)
     if mode == "ai":
         state = claude_cli.status()
         if not state["available"]:
@@ -285,6 +354,54 @@ def start(job_id: str, mode: str = "demo") -> dict:
     save(job)
     _start(job_id, _ai_build_outline(job_id) if mode == "ai" else _build_outline(job_id))
     return job
+
+
+def _start_from_library(job: dict, mode: str, version_id: str | None) -> dict:
+    """저장된 조사 자료로 시작합니다. 새 조사(웹 검색) 없이, 자료를 바탕으로 AI가 구성안 문구를 새로 씁니다."""
+    if mode != "ai":
+        raise JobConflict("저장된 자료 사용은 실제 AI 모드에서만 쓸 수 있어요")
+    version = research_library.get(version_id or "")
+    if version is None:
+        raise JobConflict("저장된 조사 자료를 찾지 못했어요. '새로 조사하기'로 시작해 주세요")
+    content_type = job["contentType"] if job["contentType"] != AUTO_TYPE else version["contentType"]
+    if version["topic"] and research_library.topic_key(content_type, job["topic"]) != research_library.topic_key(version["contentType"], version["topic"]):
+        raise JobConflict("이 주제·유형의 저장된 자료가 아니에요. 자료를 다시 골라 주세요")
+    state = claude_cli.status()
+    if not state["available"]:
+        raise JobConflict(state["reason"])
+    job.update(mode="ai", demo=False)
+    for step in job["steps"]:
+        step["mode"] = "real"
+    _apply_type(job, content_type, "user")
+    job["research"] = research_library.research_for_job(version, str(job.get("notes") or "").strip())
+    job["researchVersion"] = {"id": version["id"], "number": version["number"], "researchedAt": version["researchedAt"], "source": "saved"}
+    _set_step(job, "input", "done")
+    _set_step(job, "research", "done")
+    job["state"] = "running"
+    save(job)
+    _start(job["id"], _ai_compose_saved(job["id"]))
+    return job
+
+
+async def _ai_compose_saved(job_id: str) -> None:
+    job = _read(job_id)
+    _set_step(job, "outline", "active")
+    save(job)
+    try:
+        result = await asyncio.to_thread(get_ai_provider().compose_outline, job, uploads_dir(job_id))
+    except AIError as e:
+        _ai_fail(job_id, e.message)
+        return
+    job = _read(job_id)
+    _record_calls(job, result["calls"])
+    result["research"]["fromLibrary"] = job["research"].get("fromLibrary")
+    result["research"]["researchedAt"] = job["research"].get("researchedAt")
+    _apply_outline_result(job, result)
+    save(job)
+
+
+def research_versions(content_type: str, topic: str) -> list[dict]:
+    return research_library.versions(content_type, topic)
 
 
 def _set_step(job: dict, key: str, status: str) -> None:
@@ -516,7 +633,9 @@ def _issues(job: dict) -> dict:
         cited = [s for s in research["sources"] if s["id"] in card["sourceIds"]] if research else []
         if any(s["verification"] == "user_provided" for s in cited):
             issues[card["frame"]]["warnings"].append("사용자가 제공한 자료가 들어 있어요. AI가 공식 페이지에서 확인한 내용이 아니니 게시 전에 확인해 주세요")
-        if state == "user_provided":
+        if any(s["verification"] == "image" for s in cited):
+            issues[card["frame"]]["warnings"].append("상세 이미지에서 AI가 읽은 정보가 들어 있어요. 조사 결과의 출처 이미지와 대조해 확인해 주세요")
+        if state in ("user_provided", "image"):
             continue
         if state == "verified":
             read = [s for s in cited if s["verification"] == "fetched"]
@@ -560,6 +679,26 @@ def _check_fields_against_research(job: dict, cards: list[dict], issues: dict) -
             target = notes["errors"] if strict and not card["edited"] else notes["warnings"]
             if message not in target:
                 target.append(message)
+        if tpl["id"].endswith(f"-{templates.FREE}"):
+            _check_free_card(card, items, notes)
+
+
+def _check_free_card(card: dict, items: dict, notes: dict) -> None:
+    """자유 구성 카드는 필드가 조사 항목과 연결되지 않으므로, 문구 안에 충돌·미확인 값이 들어 있는지 직접 찾습니다."""
+    text = research_items._norm(templates.card_text(card))
+    for item in items.values():
+        if item["state"] not in ("conflict", "listed", "unverified"):
+            continue
+        values = [v for v in [item["value"]] + [a["value"] for a in item.get("alternatives", [])] if v]
+        if not any(len(research_items._norm(v)) >= 2 and research_items._norm(v) in text for v in values):
+            continue
+        if item["state"] == "conflict":
+            message = f"출처마다 값이 달라요: {item['label']} ({' / '.join(values)}). 공식 자료를 확인해 직접 고쳐 주세요"
+        else:
+            message = f"근거를 확인하지 못한 정보예요: {item['label']}. 확인해서 고치거나 지워 주세요"
+        target = notes["errors"] if item["strict"] and not card["edited"] else notes["warnings"]
+        if message not in target:
+            target.append(message)
 
 
 def _make_outline(job: dict) -> None:
@@ -605,8 +744,12 @@ async def _ai_build_outline(job_id: str) -> None:
         _record_calls(job, chosen["calls"])
         _apply_type(job, chosen["contentType"], "ai", chosen["reason"])
         save(job)
+    provider = get_ai_provider()
+    if separates_research(job) and hasattr(provider, "research_only"):
+        await _ai_research_then_compose(job_id, job, provider)
+        return
     try:
-        result = await asyncio.to_thread(get_ai_provider().research_outline, job)
+        result = await asyncio.to_thread(provider.research_outline, job, uploads_dir(job_id))
     except AIError as e:
         _ai_fail(job_id, e.message)
         return
@@ -617,14 +760,59 @@ async def _ai_build_outline(job_id: str) -> None:
     save(job)
 
 
+async def _ai_research_then_compose(job_id: str, job: dict, provider, compose_only: bool = False) -> None:
+    """1단계 자료 조사 → 조사 결과를 작업에 저장 → 2단계 구성안 작성.
+
+    조사 결과를 먼저 저장하므로 구성안 작성이 실패해도 조사를 잃지 않고, 다시 시도하면 검색 없이 구성안만 씁니다.
+    """
+    if not compose_only:
+        try:
+            found = await asyncio.to_thread(provider.research_only, job, uploads_dir(job_id))
+        except AIError as e:
+            _ai_fail(job_id, e.message)
+            return
+        job = _read(job_id)
+        _record_calls(job, found["calls"])
+        site_policy.record_failures(found["research"]["fetchFailures"])
+        if found["status"] == "need_material":
+            _apply_outline_result(job, found)
+            save(job)
+            return
+        job["research"] = found["research"]
+        if found.get("extraction") is not None:
+            job["detailExtraction"] = found["extraction"]
+        if job["contentType"] == "character" and job["research"].get("items"):
+            job["research"]["people"] = research_items.people_from(job["research"])
+        job["researchStage"] = {"done": True, "coreOnly": found["coreOnly"], "at": datetime.now().isoformat(timespec="seconds")}
+        _set_step(job, "research", "done")
+        _set_step(job, "outline", "active")
+        save(job)  # 조사 결과를 먼저 저장합니다 (화면에서 바로 볼 수 있고, 구성안 실패 시에도 남음)
+    stage = job.get("researchStage") or {}
+    try:
+        result = await asyncio.to_thread(provider.compose_from_research, job, job["research"], job.get("detailExtraction"), stage.get("coreOnly", False))
+    except AIError as e:
+        _ai_fail(job_id, e.message)
+        return
+    job = _read(job_id)
+    _record_calls(job, result["calls"])
+    _apply_outline_result(job, result)
+    save(job)
+
+
 def _apply_outline_result(job: dict, result: dict) -> None:
     """구성안이 나오면 승인 단계로, 자료가 부족하면 자료 입력 단계로 갑니다. 어느 쪽도 제작을 끝내지 않습니다."""
     job["research"] = result["research"]
+    if result.get("extraction") is not None:
+        job["detailExtraction"] = result["extraction"]
     _set_step(job, "research", "done")
     job["error"] = None
+    if job["contentType"] == "character" and job["research"].get("items"):
+        # 친구·가족을 카테고리별로 나눠 둡니다 (구성안 편집에서 카테고리를 바꿀 때 불러옴)
+        job["research"]["people"] = research_items.people_from(job["research"])
     if result["status"] == "need_material":
         job["state"] = "waiting_material"
         return
+    _store_research(job)
     version = job["outline"]["version"] + 1 if job.get("outline") else 1
     cards = [{**c, "edited": False, "regenCount": 0} for c in result["cards"]]
     job["outline"] = {"version": version, "cards": cards, "approved": False, "issues": {}}
@@ -634,6 +822,18 @@ def _apply_outline_result(job: dict, result: dict) -> None:
     job["state"] = "waiting_outline"
 
 
+def _store_research(job: dict) -> None:
+    """새로 조사한 자료를 보관함에 새 버전으로 남깁니다 (작업당 한 번). 저장된 자료로 시작한 작업은 다시 저장하지 않습니다."""
+    research = job.get("research") or {}
+    if job.get("researchVersion") or research.get("fromLibrary") or not research.get("searchPerformed") or not templates.is_template_job(job):
+        return
+    try:
+        summary = research_library.save(job, research)
+    except OSError:
+        return  # 보관함에 쓰지 못해도 제작은 계속합니다
+    job["researchVersion"] = {"id": summary["id"], "number": summary["number"], "researchedAt": summary["researchedAt"], "source": "new"}
+
+
 def submit_material(job_id: str, material: dict) -> dict:
     """사용자가 준 자료로 구성안을 만듭니다. 웹에 접속하지 않아 막힌 사이트에 다시 요청하지 않습니다."""
     job = _require(job_id, "waiting_material", "waiting_outline", "failed", "interrupted")
@@ -641,14 +841,96 @@ def submit_material(job_id: str, material: dict) -> dict:
         raise JobConflict("실제 AI 모드에서만 쓸 수 있어요")
     if job.get("outline") and job["outline"]["approved"]:
         raise JobConflict("승인된 구성안이 있어요. 구성안 카드를 직접 수정해 주세요")
-    job["userMaterial"] = {**material, "submittedAt": datetime.now().isoformat(timespec="seconds")}
+    if material:
+        job["userMaterial"] = {**material, "submittedAt": datetime.now().isoformat(timespec="seconds")}
+    elif not job["detailImages"]:
+        raise JobConflict("자료를 입력하거나 상세페이지 이미지를 올려 주세요")
     for step in job["steps"]:
         if step["status"] in ("failed", "active"):
             step["status"] = "pending"
     if job["state"] in ("failed", "interrupted"):
         job["state"] = "waiting_material"
     job["error"] = None
-    return _start_ai_task(job, "compose", None, get_ai_provider().compose_outline, _apply_outline_result)
+    uploads = uploads_dir(job_id)
+    return _start_ai_task(job, "compose", None, lambda snapshot: get_ai_provider().compose_outline(snapshot, uploads), _apply_outline_result)
+
+
+# ---------- 상세페이지 이미지 (자료 조사용) ----------
+DETAIL_STATES = ("draft", "waiting_material", "waiting_outline", "failed", "interrupted")
+
+
+def _require_detail(job_id: str) -> dict:
+    job = _require(job_id, *DETAIL_STATES)
+    if job.get("outline") and job["outline"]["approved"]:
+        raise JobConflict("승인된 구성안이 있어요. 구성안 카드를 직접 수정해 주세요")
+    return job
+
+
+def check_detail_upload(job_id: str, count: int = 1) -> None:
+    job = _require_detail(job_id)
+    if len(job["detailImages"]) + count > detail_images.MAX_DETAIL_IMAGES:
+        raise JobConflict(f"상세 이미지는 {detail_images.MAX_DETAIL_IMAGES}장까지 올릴 수 있어요")
+
+
+def new_detail_image(job_id: str, name: str, data: bytes, ext: str, mime: str, origin: str, page_url: str = "", image_url: str = "") -> dict:
+    image_id = uuid.uuid4().hex
+    (uploads_dir(job_id) / f"{image_id}{ext}").write_bytes(data)  # 파일 이름은 서버가 정합니다
+    return {"id": image_id, "name": name, "ext": ext, "mime": mime, "origin": origin, "pageUrl": page_url, "imageUrl": image_url,
+            "sha256": hashlib.sha256(data).hexdigest(), "addedAt": datetime.now().isoformat(timespec="seconds")}
+
+
+def add_detail_images(job_id: str, images: list[dict], fetch_report: dict | None = None) -> dict:
+    job = _require_detail(job_id)
+    known = {i["sha256"] for i in job["detailImages"]}
+    for image in images:
+        if image["sha256"] not in known and len(job["detailImages"]) < detail_images.MAX_DETAIL_IMAGES:
+            job["detailImages"].append(image)
+            known.add(image["sha256"])
+    if fetch_report is not None:
+        job["detailFetch"] = fetch_report
+    save(job)
+    return job
+
+
+def remove_detail_image(job_id: str, image_id: str) -> dict:
+    """목록에서만 뺍니다. 파일은 지우지 않습니다. 다음 판독·구성안에서 쓰지 않습니다."""
+    job = _require_detail(job_id)
+    if not any(i["id"] == image_id for i in job["detailImages"]):
+        raise KeyError(image_id)
+    job["detailImages"] = [i for i in job["detailImages"] if i["id"] != image_id]
+    save(job)
+    return job
+
+
+def detail_image(job_id: str, image_id: str) -> tuple[Path, str] | None:
+    job = load(job_id)
+    image = next((i for i in (job or {}).get("detailImages", []) if i["id"] == image_id), None) if job else None
+    if image is None:
+        # 판독 결과가 가리키는 이미지는 목록에서 빼도 보여 줍니다 (출처 확인용)
+        refs = ((job or {}).get("detailExtraction") or {}).get("refs") or {}
+        if job and image_id in refs.values():
+            found = list(uploads_dir(job_id).glob(f"{image_id}.*"))
+            return (found[0], "image/jpeg" if found[0].suffix == ".jpg" else f"image/{found[0].suffix[1:]}") if found else None
+        return None
+    return uploads_dir(job_id) / f"{image['id']}{image['ext']}", image["mime"]
+
+
+def extract_details(job_id: str) -> dict:
+    """상세 이미지에서 상품 정보를 읽습니다 (실제 AI 모드). 결과는 다음 조사·구성안에 함께 씁니다."""
+    job = _require_detail(job_id)
+    if not _is_ai(job) and job["state"] != "draft":
+        raise JobConflict("실제 AI 모드에서만 쓸 수 있어요")
+    if not job["detailImages"]:
+        raise JobConflict("상세 이미지를 먼저 올려 주세요")
+    state = claude_cli.status()
+    if not state["available"]:
+        raise JobConflict(state["reason"])
+    uploads = uploads_dir(job_id)
+
+    def apply(current, result):
+        current["detailExtraction"] = result["extraction"]
+
+    return _start_ai_task(job, "vision", None, lambda snapshot: get_ai_provider().extract_detail(snapshot, uploads), apply)
 
 
 def _apply_design(job: dict, result: dict) -> None:
@@ -693,13 +975,21 @@ def retry(job_id: str) -> dict:
     if wait and not designing:
         minutes = max(1, round(wait / 60))
         raise JobConflict(f"이 사이트에 다시 요청하지 않도록 기다리는 중이에요. {minutes}분 뒤에 다시 조사할 수 있어요. 지금은 자료를 직접 입력해 주세요")
+    # 조사는 끝났는데 구성안 작성에서 실패·중단됐으면 다시 조사하지 않고 구성안만 씁니다 (한도와 사이트 요청을 아낌)
+    compose_only = (not designing and job["state"] in ("failed", "interrupted") and (job.get("researchStage") or {}).get("done")
+                    and job.get("research") and not job.get("outline") and separates_research(job))
     for step in job["steps"]:
         if step["status"] in ("failed", "active", "skipped"):
             step["status"] = "pending"
+    if compose_only:
+        _set_step(job, "research", "done")
+        _set_step(job, "outline", "active")
     job.update(state="running", error=None)
     save(job)
     if designing and templates.is_template_job(job):
         _start(job_id, _build_template_preview(job_id))  # 템플릿 작업의 디자인 단계는 AI를 부르지 않습니다
+    elif compose_only:
+        _start(job_id, _ai_research_then_compose(job_id, job, get_ai_provider(), compose_only=True))
     else:
         _start(job_id, _ai_build_design(job_id) if designing else _ai_build_outline(job_id))
     return job
@@ -839,10 +1129,18 @@ def _outline_card(job: dict, frame: str) -> dict:
 def edit_outline_card(job_id: str, frame: str, values: dict) -> dict:
     job = _require(job_id, "waiting_outline", "waiting_preview", "done")
     card = _outline_card(job, frame)
+    item_order = values.pop("itemOrder", None) or {}
     if templates.is_template_job(job):
+        item_order = _check_item_order(templates.template_for(job, frame), values.get("fields") or {}, item_order)
         values = _template_values(job, frame, values)
         keys = ("role", "fields", "source")
-        checked = templates.check_card(values, templates.template_for(job, frame))
+        tpl = templates.template_for(job, frame)
+        if templates.is_flexible(job) and frame != FRAMES[0]:
+            values = templates.fit_template(job, {**values, "frame": frame, "template": tpl["id"]})
+            values.pop("frame")
+            keys = ("role", "fields", "source", "template")
+            tpl = templates.TEMPLATES[values["template"]]
+        checked = templates.check_card(values, tpl)
     else:
         keys = ("role", "title", "body", "source")
         checked = check_card(values)
@@ -850,9 +1148,52 @@ def edit_outline_card(job_id: str, frame: str, values: dict) -> dict:
         raise JobConflict(checked["errors"][0])
     if all(card.get(k, "") == values[k] for k in keys):
         return job  # 바뀐 내용이 없으면 승인도 그대로
+    if item_order and values.get("template", card.get("template")) == card.get("template") and (job.get("slotImages") or {}).get(frame):
+        # 친구를 지우거나 순서를 바꾸면 친구별 이미지가 그 친구를 따라갑니다
+        job["slotImages"][frame] = templates.remap_item_slots(templates.template_for(job, frame), job["slotImages"][frame], item_order)
     card.update(values, edited=True)
     job["outline"]["issues"] = _issues(job)
     _revoke_outline(job)
+    save(job)
+    return job
+
+
+def _check_item_order(tpl: dict, raw_fields: dict, orders: dict) -> dict:
+    """화면이 보낸 항목 순서(저장 전 번호)를 확인합니다. 저장될 항목 수와 맞지 않으면 쓰지 않습니다 (이미지를 엉뚱한 항목에 붙이지 않게)."""
+    result = {}
+    for field in tpl["fields"]:
+        order = orders.get(field["key"])
+        if not field.get("slotPrefix") or not isinstance(order, list):
+            continue
+        kept = templates.clean_fields({"fields": [field]}, {field["key"]: raw_fields.get(field["key"])})[field["key"]]
+        valid = [i for i in order if isinstance(i, int) and -1 <= i < field["maxItems"]]
+        used = [i for i in valid if i >= 0]
+        if len(valid) == len(order) == len(kept) and len(used) == len(set(used)):
+            result[field["key"]] = valid
+    return result
+
+
+def change_card_template(job_id: str, frame: str, template_id: str) -> dict:
+    """card-02 ~ card-05의 카드 구성(템플릿)을 바꿉니다. 있는 값만 옮기고 새 사실은 만들지 않습니다."""
+    job = _require(job_id, "waiting_outline", "waiting_preview", "done")
+    if not templates.is_flexible(job):
+        raise JobConflict("이 작업은 카드 구성을 바꿀 수 없어요")
+    if frame == FRAMES[0]:
+        raise JobConflict("표지(card-01)는 구성을 바꿀 수 없어요")
+    if template_id not in templates.body_choices(job["contentType"]):
+        raise JobConflict("이 유형에서 쓸 수 없는 카드 구성이에요")
+    card = _outline_card(job, frame)
+    if card["template"] == template_id:
+        return job
+    moved = templates.move_fields(job, card, template_id)
+    if moved["missing"]:
+        raise JobConflict(f"이 구성에는 {', '.join(moved['missing'])} 정보가 필요해요. 확인된 값이 없으면 자유 구성을 써 주세요")
+    card.update(template=template_id, fields=moved["fields"], edited=True)
+    card.pop("convertedFrom", None)
+    job["outline"]["issues"] = _issues(job)
+    _revoke_outline(job)
+    if job.get("preview"):
+        _refresh_template_preview(job)
     save(job)
     return job
 
@@ -1257,7 +1598,7 @@ def slot_suggestions(job: dict) -> dict:
     queue = [a for a in _visible(job) if a["rights"] == PERMITTED and a["id"] not in used]
     suggestions = {}
     for frame in FRAMES:
-        for slot in templates.slots_of(job, frame):
+        for slot in templates.active_slots(job, frame):  # 카드에 그려지지 않는 자리(없는 친구의 이미지)는 추천하지 않습니다
             if queue and not (current.get(frame) or {}).get(slot["key"]):
                 asset = queue.pop(0)
                 suggestions.setdefault(frame, {})[slot["key"]] = {"assetId": asset["id"], "variant": _variant_for(asset)}

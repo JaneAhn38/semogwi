@@ -60,6 +60,16 @@
           <small id="mode-hint" class="hint"></small>
         </fieldset>
 
+        <fieldset id="research-field" class="field" hidden>
+          <legend>자료 조사 방식</legend>
+          <div class="chip-group">
+            <label class="chip"><input type="radio" name="researchMode" value="saved"><span>저장된 자료 사용</span></label>
+            <label class="chip"><input type="radio" name="researchMode" value="new" checked><span>새로 조사하기</span></label>
+          </div>
+          <div id="research-library" class="research-library"></div>
+          <small id="research-hint" class="hint"></small>
+        </fieldset>
+
         <div class="field">
           <label for="url">참고 URL <span class="opt">선택</span> <span class="tag tag-demo demo-only">저장만 해요</span></label>
           <input id="url" name="url" type="url" inputmode="url" placeholder="https://">
@@ -154,16 +164,50 @@
         </form>
       </section>
 
+      <section id="detail-panel" class="panel" aria-labelledby="detail-title" hidden>
+        <div class="panel-head">
+          <h2 id="detail-title">상세페이지 이미지 (자료 조사용)</h2>
+          <span class="tag tag-demo">카드에는 넣지 않아요</span>
+        </div>
+        <p class="panel-note">쇼핑몰 상세 설명이 글이 아니라 이미지로 되어 있으면 자동 조사가 읽지 못해요. 상세페이지 <b>스크린샷이나 이미지 파일</b>을 올리면 AI가 상품명·가격·크기·소재·구성품·판매 기간·특징을 읽어요. 흐리거나 잘린 글자는 추측하지 않고 <b>확인 필요</b>로 남겨요.</p>
+        <div class="detail-upload">
+          <input id="detail-files" type="file" accept="image/png,image/jpeg,image/webp" multiple aria-label="상세페이지 이미지 파일">
+          <button id="detail-upload" class="btn btn-ghost btn-small" type="button">이미지 올리기</button>
+          <button id="detail-fetch" class="btn btn-ghost btn-small" type="button" hidden>참고 URL에서 상세 이미지 찾기</button>
+        </div>
+        <p id="detail-fetch-note" class="hint" hidden></p>
+        <p id="detail-error" class="error" role="alert" hidden></p>
+        <ul id="detail-list" class="detail-list"></ul>
+        <ul id="detail-report" class="material-failures"></ul>
+        <div class="actions">
+          <button id="detail-extract" class="btn btn-ghost" type="button" hidden>이미지에서 정보 읽기 <span class="btn-tag">AI</span></button>
+        </div>
+        <p id="detail-hint" class="action-hint" role="status"></p>
+        <div id="detail-result-wrap" hidden>
+          <h3 class="sub-title">이미지에서 읽은 정보</h3>
+          <ul id="detail-result" class="research-checklist"></ul>
+          <ul id="detail-notes" class="material-failures"></ul>
+        </div>
+      </section>
+
       <section id="research" class="panel" aria-labelledby="research-title" hidden>
         <div class="panel-head">
           <h2 id="research-title">자료 조사 결과</h2>
           <span id="research-state" class="approval"></span>
         </div>
         <p class="panel-note">실제 조회 기록과 대조해 표시해요. <b>페이지 읽음</b>만 확인된 출처이고, 검색 목록에만 있는 주소는 확인된 출처가 아니에요. 문장이 페이지와 맞는지와 이용 조건은 직접 확인해 주세요.</p>
+        <p id="research-version-note" class="notice" hidden></p>
         <div id="research-checklist-wrap" hidden>
           <h3 class="sub-title">조사 항목</h3>
           <p class="panel-note">카드 5장에 필요한 항목이에요. <b>공식 확인</b>과 <b>2차 자료</b>는 그 페이지를 실제로 읽은 것이고, 나머지는 카드에 쓰기 전에 확인이 필요해요.</p>
+          <p id="research-summary" class="research-summary" hidden></p>
           <ul id="research-checklist" class="research-checklist"></ul>
+        </div>
+        <div id="research-people-wrap" hidden>
+          <h3 class="sub-title">캐릭터별 조사 결과</h3>
+          <p id="research-people-note" class="panel-note"></p>
+          <ul id="research-people" class="research-people"></ul>
+          <ul id="research-people-rejected" class="material-failures"></ul>
         </div>
         <div id="research-problems-wrap" hidden>
           <h3 class="sub-title">조사 중 문제</h3>
