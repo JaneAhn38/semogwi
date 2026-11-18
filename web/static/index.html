@@ -89,7 +89,7 @@
             <span class="dropzone-title">이미지를 끌어다 놓거나 눌러서 고르세요</span>
             <small>PNG, JPG, WebP · 한 장에 10MB까지</small>
           </label>
-          <small class="hint">올리면 오른쪽에서 배경 제거와 사용 권한을 정할 수 있어요.</small>
+          <small class="hint">올리면 오른쪽에서 배경 제거와 출처를 정할 수 있어요.</small>
         </div>
 
         <p id="form-error" class="error" role="alert" hidden></p>
@@ -121,7 +121,7 @@
         <div class="panel-head">
           <h2 id="images-title">이미지 준비</h2>
         </div>
-        <p class="panel-note">올렸다고 사용 허가가 되는 건 아니에요. <b>허가됨</b>으로 고른 이미지만 카드에 쓸 수 있어요. 원본은 그대로 보관돼요.</p>
+        <p class="panel-note">올린 이미지는 바로 카드에 쓸 수 있어요. 출처를 적어 두면 함께 저장돼요. 원본은 그대로 보관돼요.</p>
         <p id="cutout-unavailable" class="notice" hidden></p>
         <div id="image-cards" class="image-cards"></div>
       </section>
@@ -298,7 +298,7 @@
         <thead><tr><th scope="col">기능</th><th scope="col">지금 상태</th></tr></thead>
         <tbody>
           <tr><td>주제·유형·URL 입력과 검사, 작업 저장 (새로 고침해도 유지)</td><td><span class="tag tag-real">실제 동작</span></td></tr>
-          <tr><td>이미지 업로드, 형식·용량·권한 검사</td><td><span class="tag tag-real">실제 동작</span></td></tr>
+          <tr><td>이미지 업로드, 형식·용량 검사, 출처 기록</td><td><span class="tag tag-real">실제 동작</span></td></tr>
           <tr><td>배경 제거 (scripts/cutout.py, 설치된 모델만 사용)</td><td><span class="tag tag-real">실제 동작</span></td></tr>
           <tr><td>구성안 직접 수정, 문구 길이 검사, 승인·승인 해제</td><td><span class="tag tag-real">실제 동작</span></td></tr>
           <tr><td>카드별 이미지 선택, 수정 전후 비교, 되돌리기</td><td><span class="tag tag-real">실제 동작</span></td></tr>

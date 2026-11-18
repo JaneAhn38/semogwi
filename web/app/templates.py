@@ -699,7 +699,7 @@ def remap_item_slots(tpl: dict, slots: dict, orders: dict) -> dict:
 
 
 def default_slot_images(job: dict, permitted: list[dict]) -> dict:
-    """허가된 이미지를 앞 카드부터 이미지 자리마다 한 장씩 넣습니다. 같은 이미지를 반복하지 않습니다."""
+    """이미지를 앞 카드부터 이미지 자리마다 한 장씩 넣습니다. 같은 이미지를 반복하지 않습니다."""
     images = {frame: {slot["key"]: None for slot in slots_of(job, frame)} for frame in FRAMES}
     queue = list(permitted)
     for frame in FRAMES:

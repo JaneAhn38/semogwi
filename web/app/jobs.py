@@ -23,6 +23,16 @@ DATA_DIR = Path(os.environ.get("SEMOGWI_DATA_DIR", Path(__file__).resolve().pare
 DEMO_STEP_SECONDS = float(os.environ.get("SEMOGWI_DEMO_DELAY", "0.9"))
 JOB_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 PERMITTED = "허가됨"
+NOT_PERMITTED = "허가 안 됨"
+UNCHECKED = "확인 필요"  # 업로드 기본값. 사용 허가를 확인했다는 뜻이 아니므로 '허가됨'으로 바꿔 기록하지 않습니다
+
+
+def usable_asset(asset: dict) -> bool:
+    """카드에 쓸 수 있는 이미지인지. 학술 연구·내부 시연용이라 권한을 따로 고르지 않아도 씁니다.
+
+    예전에 '허가 안 됨'으로 직접 표시한 이미지만 쓰지 않습니다. 사용 권한 기록 자체(rights)는 그대로 둡니다.
+    """
+    return not asset.get("removed") and asset.get("rights") != NOT_PERMITTED
 MAX_DESIGN_REQUESTS = 20
 TEMPLATE_ONLY = "고정 템플릿 카드뉴스는 디자인이 정해져 있어요. 문구는 구성안에서, 이미지는 카드별 이미지 선택에서 바꿔 주세요"
 
@@ -514,11 +524,11 @@ def remove_asset(job_id: str, asset_id: str) -> dict:
 
 def _usable(job: dict, image: dict) -> bool:
     asset = next((a for a in _visible(job) if a["id"] == image["assetId"]), None)
-    return bool(asset) and asset["rights"] == PERMITTED and (image["variant"] == "original" or _has_cutout(asset))
+    return bool(asset) and usable_asset(asset) and (image["variant"] == "original" or _has_cutout(asset))
 
 
 def _drop_unusable_images(job: dict) -> None:
-    """권한이 바뀌었거나 뺀 이미지를 카드에서 내립니다. 그 카드가 바뀌므로 디자인 승인을 해제합니다."""
+    """쓸 수 없게 됐거나 뺀 이미지를 카드에서 내립니다. 그 카드가 바뀌므로 디자인 승인을 해제합니다."""
     if templates.is_template_job(job):
         if _drop_slot_images(job) and job.get("preview"):
             _refresh_template_preview(job)
@@ -1253,8 +1263,8 @@ def _default_layout(frame: str, seed: int, has_image: bool) -> str:
 
 
 def _default_card_images(job: dict) -> dict:
-    """사용자가 고르기 전 기본값: 허가된 이미지를 앞 카드부터 한 장씩만 씁니다 (반복하지 않음)."""
-    permitted = [a for a in _visible(job) if a["rights"] == PERMITTED]
+    """사용자가 고르기 전 기본값: 올린 이미지를 앞 카드부터 한 장씩만 씁니다 (반복하지 않음)."""
+    permitted = [a for a in _visible(job) if usable_asset(a)]
     images = {frame: None for frame in FRAMES}
     for frame, asset in zip(FRAMES, permitted):
         images[frame] = {"assetId": asset["id"], "variant": asset["useVariant"] if _has_cutout(asset) else "original"}
@@ -1468,7 +1478,7 @@ def set_card_image(job_id: str, frame: str, asset_id: str | None, variant: str) 
     index = _check_frame(frame)
     image = {"assetId": asset_id, "variant": variant} if asset_id else None
     if image and not _usable(job, image):
-        raise JobConflict("사용 권한이 '허가됨'인 이미지만 카드에 쓸 수 있어요")
+        raise JobConflict("카드에 쓸 수 없는 이미지예요")
     if job["cardImages"].get(frame) == image:
         return job
     if _is_ai(job):
@@ -1590,12 +1600,12 @@ def _variant_for(asset: dict) -> str:
 
 
 def slot_suggestions(job: dict) -> dict:
-    """빈 이미지 자리에 넣을 만한 이미지를 제안만 합니다. 아직 어느 자리에도 쓰지 않은 허가된 이미지를 앞 카드부터 채웁니다."""
+    """빈 이미지 자리에 넣을 만한 이미지를 제안만 합니다. 아직 어느 자리에도 쓰지 않은 이미지를 앞 카드부터 채웁니다."""
     current = job.get("slotImages")
     if not current:
         return {}
     used = {i["assetId"] for slots in current.values() for i in slots.values() if i}
-    queue = [a for a in _visible(job) if a["rights"] == PERMITTED and a["id"] not in used]
+    queue = [a for a in _visible(job) if usable_asset(a) and a["id"] not in used]
     suggestions = {}
     for frame in FRAMES:
         for slot in templates.active_slots(job, frame):  # 카드에 그려지지 않는 자리(없는 친구의 이미지)는 추천하지 않습니다
@@ -1647,7 +1657,7 @@ def set_slot_image(job_id: str, frame: str, slot: str, asset_id: str | None, var
     image = None
     if asset_id:
         if not _usable(job, {"assetId": asset_id, "variant": variant}):
-            raise JobConflict("사용 권한이 '허가됨'인 이미지만 카드에 쓸 수 있어요")
+            raise JobConflict("카드에 쓸 수 없는 이미지예요")
         # 누끼가 있는데 원본을 고르면 사용자가 원본을 직접 선택한 것입니다. 나중에 누끼를 다시 만들어도 바꾸지 않습니다
         keep = variant == "original" and _has_cutout(_asset(job, asset_id))
         image = _slot_image(asset_id, variant, previous, keep)

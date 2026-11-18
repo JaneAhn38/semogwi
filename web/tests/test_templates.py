@@ -436,9 +436,12 @@ def test_upload_into_card_slot_from_outline(client):
     # 교체
     job = api(client, job_id, "POST", path, files=files, data={"rights": "허가됨", "source": "직접 촬영"}).json()
     assert job["slotImages"]["card-03"]["trait_image_1"]["assetId"] == job["assets"][-1]["id"] != new_id
+    # 권한·출처를 고르지 않아도 올려서 넣을 수 있음. 권한은 '확인 필요'로 기록 ('허가됨'으로 바꾸지 않음)
+    job = api(client, job_id, "POST", path, files=files).json()
+    assert job["assets"][-1]["rights"] == "확인 필요" and job["assets"][-1]["source"] == ""
+    assert job["slotImages"]["card-03"]["trait_image_1"]["assetId"] == job["assets"][-1]["id"]
     before = len(job["assets"])
-    assert api(client, job_id, "POST", path, files=files, data={"rights": "확인 필요", "source": ""}).status_code == 400
-    assert api(client, job_id, "POST", path, files=files, data={"rights": "허가됨", "source": ""}).status_code == 400
+    assert api(client, job_id, "POST", path, files=files, data={"rights": "허가됨", "source": ""}).status_code == 400  # '허가됨'으로 기록하려면 출처 필요
     assert api(client, job_id, "POST", "/cards/card-05/slots/nothing/upload", files=files, data={"rights": "허가됨", "source": "x"}).status_code == 409
     assert len(get(client, job_id)["assets"]) == before  # 거절된 업로드는 저장하지 않습니다
 

@@ -218,7 +218,7 @@ const SemogwiRenderer = (() => {
       ctx.font = `44px ${fontStack(theme, "display")}`;
       ctx.fillText("이미지 자리", x + w / 2, y + h / 2 - 28);
       ctx.font = `30px ${fontStack(theme, "body")}`;
-      ctx.fillText("허가된 이미지가 없어요", x + w / 2, y + h / 2 + 28);
+      ctx.fillText("이미지가 없어요", x + w / 2, y + h / 2 + 28);
       ctx.restore();
       return;
     }

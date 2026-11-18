@@ -1020,7 +1020,8 @@ class AIProvider:
     # ---------- 디자인 ----------
     def _image_refs(self, job: dict, uploads: Path) -> tuple[dict, list[dict]]:
         refs, listing = {}, []
-        permitted = [a for a in job["assets"] if not a["removed"] and a["rights"] == "허가됨"]
+        from .jobs import usable_asset  # 순환 import 방지
+        permitted = [a for a in job["assets"] if usable_asset(a)]
         for number, asset in enumerate(permitted, 1):
             use_cutout = asset["useVariant"] == "cutout" and asset["cutout"] and asset["cutout"].get("file")
             path = uploads / (asset["cutout"]["file"] if use_cutout else f"{asset['id']}{asset['ext']}")

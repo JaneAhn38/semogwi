@@ -507,8 +507,8 @@ async def set_slot_image(job_id: str, frame: str, slot: str, body: CardImageBody
 
 
 @app.post("/api/jobs/{job_id}/cards/{frame}/slots/{slot}/upload", status_code=201)
-async def upload_slot_image(job_id: str, frame: str, slot: str, image: UploadFile = File(...), rights: str = Form("허가됨"), source: str = Form("")):
-    """구성안 단계에서 카드 이미지 자리에 바로 올려 넣거나 교체합니다. 카드에 쓰므로 '허가됨'과 출처가 필요합니다."""
+async def upload_slot_image(job_id: str, frame: str, slot: str, image: UploadFile = File(...), rights: str = Form("확인 필요"), source: str = Form("")):
+    """구성안 단계에서 카드 이미지 자리에 바로 올려 넣거나 교체합니다. 권한을 고르지 않아도 되고, 출처는 적으면 함께 저장합니다."""
     job = jobs.load(job_id)
     if job is None:
         raise HTTPException(404, "작업을 찾을 수 없어요")
@@ -516,8 +516,6 @@ async def upload_slot_image(job_id: str, frame: str, slot: str, image: UploadFil
         raise HTTPException(400, f"이미지는 {MAX_IMAGES}장까지 올릴 수 있어요. 쓰지 않는 이미지를 빼 주세요")
     name, data, ext, mime = await _read_image(image)
     source = _check_rights(name, rights, source)
-    if rights != jobs.PERMITTED:
-        raise HTTPException(400, "카드에 넣을 이미지는 사용 권한이 '허가됨'이어야 해요")
     _call(jobs.check_slot_upload, job_id, frame, slot)  # 파일을 저장하기 전에 상태와 자리를 확인합니다
     asset = jobs.new_asset(job_id, name, data, ext, mime, rights, source)
     return _call(jobs.add_asset_to_slot, job_id, frame, slot, asset)

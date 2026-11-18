@@ -47,7 +47,7 @@
   let compareFrame = null;
   let downloadsKey = "";
 
-  const assetDrafts = new Map(); // 아직 저장되지 않은 권한·출처 입력
+  const assetDrafts = new Map(); // 아직 저장되지 않은 출처 입력
   const imageCardKeys = new Map();
   const tiles = new Map(); // frame -> { root, canvas, controls, canvasKey, controlsKey }
   const requestDrafts = new Map();
@@ -754,20 +754,10 @@
     renderView();
   }
 
-  function pendingRightsMessage() {
-    for (const asset of visibleAssets()) {
-      const draft = assetDrafts.get(asset.id);
-      if (draft && draft.rights === "허가됨" && !draft.source.trim()) {
-        return `${asset.name}: 사용 권한이 '허가됨'이면 출처를 적어 주세요.`;
-      }
-    }
-    return "";
-  }
-
   async function flushAssetDrafts() {
     for (const asset of visibleAssets()) {
       const draft = assetDrafts.get(asset.id);
-      if (draft && (draft.rights !== asset.rights || draft.source.trim() !== asset.source)) await saveAsset(asset.id);
+      if (draft && draft.source.trim() !== asset.source) await saveAsset(asset.id);
     }
   }
 
@@ -781,11 +771,6 @@
       $("topic").setAttribute("aria-invalid", "true");
       show("form-error", input.topic ? `주제는 ${options.limits.topicMax}자 이내로 입력해 주세요.` : "주제를 입력해 주세요.");
       $("topic").focus();
-      return;
-    }
-    const pending = pendingRightsMessage();
-    if (pending) {
-      show("form-error", pending);
       return;
     }
     $("start").disabled = true;
@@ -811,7 +796,7 @@
 
   // ---------- 이미지 준비 ----------
   function draftOf(asset) {
-    if (!assetDrafts.has(asset.id)) assetDrafts.set(asset.id, { rights: asset.rights, source: asset.source });
+    if (!assetDrafts.has(asset.id)) assetDrafts.set(asset.id, { source: asset.source });
     return assetDrafts.get(asset.id);
   }
 
@@ -819,10 +804,10 @@
     const draft = assetDrafts.get(assetId);
     const asset = job.assets.find((a) => a.id === assetId);
     const source = draft.source.trim();
-    if (draft.rights === "허가됨" && !source) return; // 출처를 적으면 저장합니다
-    if (draft.rights === asset.rights && source === asset.source) return;
+    if (source === asset.source) return;
     try {
-      await setJob(await api(`/api/jobs/${job.id}/assets/${assetId}`, jsonInit("PATCH", { rights: draft.rights, source })));
+      // 출처만 저장합니다. 사용 권한 기록은 바꾸지 않습니다 (확인하지 않은 이미지를 '허가됨'으로 기록하지 않음)
+      await setJob(await api(`/api/jobs/${job.id}/assets/${assetId}`, jsonInit("PATCH", { source })));
       show("action-error", "");
     } catch (error) {
       show("action-error", error.message);
@@ -902,31 +887,16 @@
           onclick: () => assetAction(`assets/${asset.id}`, jsonInit("PATCH", { useVariant: "original" })) }) : ""),
     );
 
-    const rights = el("select", {
-      "aria-label": `${asset.name} 사용 권한`,
-      onchange: (e) => {
-        draft.rights = e.target.value;
-        hint.hidden = !(draft.rights === "허가됨" && !draft.source.trim());
-        saveAsset(asset.id);
-      },
-    });
-    for (const value of ["확인 필요", "허가됨", "허가 안 됨"]) {
-      rights.append(el("option", { value, textContent: `사용 권한: ${value}`, selected: value === draft.rights }));
-    }
     const source = el("input", {
       type: "text",
       value: draft.source,
       maxLength: 100,
       placeholder: "이미지 출처 (예: 직접 촬영)",
       "aria-label": `${asset.name} 출처`,
-      oninput: (e) => {
-        draft.source = e.target.value;
-        hint.hidden = !(draft.rights === "허가됨" && !draft.source.trim());
-      },
+      oninput: (e) => { draft.source = e.target.value; },
       onchange: () => saveAsset(asset.id),
     });
-    const hint = el("small", { class: "hint rights-hint", textContent: "출처를 적으면 '허가됨'으로 저장돼요.", hidden: !(draft.rights === "허가됨" && !draft.source.trim()) });
-    body.push(rights, source, hint);
+    body.push(source);
 
     return el("article", { class: "image-card", dataset: { asset: asset.id } }, ...body);
   }
@@ -948,7 +918,7 @@
       if (imageCardKeys.get(asset.id) === key) continue;
       imageCardKeys.set(asset.id, key);
       const draft = assetDrafts.get(asset.id);
-      if (draft && draft.rights === asset.rights && draft.source.trim() === asset.source) assetDrafts.delete(asset.id);
+      if (draft && draft.source.trim() === asset.source) assetDrafts.delete(asset.id);
       const card = imageCard(asset);
       const current = grid.querySelector(`[data-asset="${asset.id}"]`);
       if (current) current.replaceWith(card);
@@ -1129,7 +1099,8 @@
   // ---------- 카드 이미지 자리 (선택·업로드·교체·배경 제거·크기와 위치) ----------
   const slotPanels = new Map(); // "frame:slot" -> { key, node }. 폴링으로 다시 그려도 입력 중인 파일·슬라이더가 사라지지 않게 재사용합니다
   const slotAdjustDrafts = new Map(); // 슬라이더를 움직이는 동안의 값. 놓으면 저장합니다
-  const permittedAssets = () => visibleAssets().filter((a) => a.rights === "허가됨");
+  // 카드에 쓸 수 있는 이미지 (예전에 '허가 안 됨'으로 직접 표시한 이미지만 빼고 모두)
+  const permittedAssets = () => visibleAssets().filter((a) => a.rights !== "허가 안 됨");
   const assetName = (id) => (job.assets.find((a) => a.id === id) || {}).name || "이미지";
   const currentSlot = (frame, key) => ((job.slotImages || {})[frame] || {})[key] || null;
   const suggestionOf = (frame, key) => ((job.slotSuggestions || {})[frame] || {})[key] || null;
@@ -1245,8 +1216,7 @@
 
   function slotUpload(frame, slot, current) {
     const file = el("input", { type: "file", accept: "image/png,image/jpeg,image/webp", "aria-label": `${frame} ${slot.label} 이미지 파일`, dataset: { slotFile: `${frame}:${slot.key}` } });
-    const source = el("input", { type: "text", maxLength: 100, placeholder: "출처 (예: 직접 촬영, 공식 사이트)", "aria-label": `${frame} ${slot.label} 출처` });
-    const agree = el("input", { type: "checkbox" });
+    const source = el("input", { type: "text", maxLength: 100, placeholder: "출처 (선택, 예: 직접 촬영, 공식 사이트)", "aria-label": `${frame} ${slot.label} 출처` });
     const error = el("small", { class: "rights-hint", hidden: true });
     const button = el("button", {
       class: "btn btn-ghost btn-small", type: "button", textContent: current ? "새 이미지로 교체" : "올려서 넣기",
@@ -1254,12 +1224,9 @@
       onclick: async () => {
         const fail = (text) => { error.textContent = text; error.hidden = false; };
         if (!file.files.length) return fail("이미지 파일을 골라 주세요.");
-        if (!source.value.trim()) return fail("출처를 적어 주세요.");
-        if (!agree.checked) return fail("사용 허가를 확인해 주세요.");
         const data = new FormData();
         data.append("image", file.files[0]);
-        data.append("rights", "허가됨");
-        data.append("source", source.value.trim());
+        data.append("source", source.value.trim());  // 출처는 적으면 함께 저장 (선택)
         button.disabled = true;
         if (await slotAction(`cards/${frame}/slots/${slot.key}/upload`, { method: "POST", body: data })) {
           file.value = "";
@@ -1269,7 +1236,7 @@
       },
     });
     return el("details", { class: "slot-upload" }, el("summary", { textContent: current ? "다른 이미지 올려서 교체" : "이 카드에 이미지 올리기" }),
-      file, source, el("label", { class: "flag-field" }, agree, el("span", { textContent: "카드에 써도 되는 이미지예요 (사용 권한: 허가됨)" })), button, error);
+      file, source, button, error);
   }
 
   function slotPanel(frame, slot, context) {
@@ -1809,7 +1776,7 @@
       },
     });
     select.append(el("option", { value: "", textContent: "이미지 사용 안 함", selected: !current }));
-    for (const asset of visibleAssets().filter((a) => a.rights === "허가됨")) {
+    for (const asset of permittedAssets()) {
       const variants = hasCutout(asset) ? [["original", "원본"], ["cutout", "배경 제거"]] : [["original", "원본"]];
       for (const [variant, label] of variants) {
         const value = `${asset.id}:${variant}`;
