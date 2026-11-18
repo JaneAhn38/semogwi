@@ -344,6 +344,8 @@ body.format-template .legacy-only, body:not(.format-template) .template-only { d
 .library-rename input { width: 100%; padding: 8px 12px; color: var(--ink); font: 400 .95rem/1.5 var(--font-body); background: var(--cream); border: 2px solid var(--line); border-radius: 12px; }
 .library-rename .hint { margin: 0; }
 .btn-danger { color: #8c1d40; }
+.library-manage { display: grid; gap: 6px; }
+.library-error { margin: 0; color: #8c1d40; font-size: .86rem; font-weight: 700; }
 .library-view summary { cursor: pointer; font-size: .9rem; }
 .library-items, .library-sources, .library-people { margin: 6px 0; padding-left: 1.1em; font-size: .88rem; display: grid; gap: 3px; overflow-wrap: anywhere; }
 .edit-group legend { margin-bottom: 4px; padding: 0; font-family: var(--font-display); font-size: .92rem; }
@@ -464,3 +466,15 @@ body.format-template .legacy-only, body:not(.format-template) .template-only { d
 .verify.is-image { color: #3d4f8c; background: #e3e9ff; }
 .sub-title { margin: 14px 0 8px; font-family: var(--font-display); font-size: 1rem; }
 .item-unclear { color: #8c1d40; font-size: .84rem; }
+
+/* '저장된 자료 사용': 보완 조사 결과 검토 */
+.research-review { display: grid; gap: 8px; margin: 0 0 14px; padding: 12px 14px; background: var(--butter); border-radius: 16px; }
+.research-review .actions { margin-top: 4px; }
+.review-summary { margin: 0; font-size: .92rem; }
+.review-conflict-note { margin: 0; color: #8c1d40; font-size: .86rem; font-weight: 700; }
+.review-conflict { display: grid; gap: 6px; padding: 8px 10px; background: #fff; border: 2px dashed var(--line); border-radius: 12px; }
+.review-option { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; overflow-wrap: anywhere; }
+.review-edit { display: grid; gap: 6px; }
+.review-edit input { width: 100%; padding: 6px 10px; color: var(--ink); font: 400 .9rem/1.5 var(--font-body); background: var(--cream); border: 2px solid var(--line); border-radius: 10px; }
+.review-edit .hint { margin: 0; }
+.item-supplement { color: var(--ink-soft); font-size: .84rem; }

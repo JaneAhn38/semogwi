@@ -251,6 +251,8 @@ async def options():
         "limits": {"topicMax": TOPIC_MAX, "maxImages": MAX_IMAGES, "maxImageBytes": MAX_IMAGE_BYTES, "designRequestMax": DESIGN_REQUEST_MAX},
         "templates": templates.public_templates(),
         "templateTypes": sorted(t for t in CONTENT_TYPES if templates.enabled(t)),
+        # 서버가 제공하는 기능. 화면(app.js)만 새 파일이고 서버가 예전 코드로 실행 중이면 화면이 알아채고 안내합니다
+        "features": ["libraryManage"],
     }
 
 
@@ -432,6 +434,38 @@ async def get_detail_image(job_id: str, image_id: str):
 @app.delete("/api/jobs/{job_id}/detail-images/{image_id}")
 async def remove_detail_image(job_id: str, image_id: str):
     return _call(jobs.remove_detail_image, job_id, image_id)
+
+
+class ResearchItemEdit(Strict):
+    value: str = Field(default="", max_length=400)
+
+
+class ResearchChoice(Strict):
+    index: int = Field(ge=0, le=20)
+
+
+# ---------- '저장된 자료 사용': 보완 조사 결과 검토 ----------
+@app.put("/api/jobs/{job_id}/research/items/{key}")
+async def edit_research_item(job_id: str, key: str, body: ResearchItemEdit):
+    """통합된 조사 항목 값을 직접 고칩니다 (사용자 제공 값으로 기록, 이전 값은 보존)."""
+    return _call(jobs.edit_research_item, job_id, key, body.value)
+
+
+@app.post("/api/jobs/{job_id}/research/items/{key}/choose")
+async def choose_research_value(job_id: str, key: str, body: ResearchChoice):
+    """기존 값과 추가 조사 값이 다를 때 하나를 고릅니다 (0 = 기존 값)."""
+    return _call(jobs.choose_research_value, job_id, key, body.index)
+
+
+@app.post("/api/jobs/{job_id}/research/approve")
+async def approve_research(job_id: str):
+    """검토한 통합 자료를 새 버전으로 저장하고 그 자료로 구성안을 씁니다."""
+    return _call(jobs.approve_research, job_id)
+
+
+@app.post("/api/jobs/{job_id}/research/supplement-retry")
+async def retry_supplement(job_id: str):
+    return _call(jobs.retry_supplement, job_id)
 
 
 @app.post("/api/jobs/{job_id}/retry")

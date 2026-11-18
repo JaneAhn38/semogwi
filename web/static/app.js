@@ -24,12 +24,13 @@
     running: "예시 작업을 진행하고 있어요. 실제 조사나 AI 생성은 하지 않아요.",
     waiting_outline: "구성안을 확인하고 있어요. 승인해야 다음 단계로 넘어가요.",
     waiting_material: "자료가 더 필요해요. 아래에 직접 입력하면 이어서 진행해요.",
+    waiting_research: "저장된 자료와 추가 조사 결과를 합쳤어요. 내용을 확인·수정한 뒤 '이 자료로 구성안 만들기'를 눌러 주세요.",
     waiting_preview: "카드 디자인을 확인하고 있어요. 승인해야 PNG를 받을 수 있어요.",
     done: "완료됐어요. 5단계에서 샘플 PNG를 받을 수 있어요.",
     failed: "제작이 멈췄어요.",
     interrupted: "작업이 중단됐어요.",
   };
-  const STEP_TEXT = { pending: "대기", active: "진행 중", done: "완료", failed: "실패", waiting: "승인 대기", material: "자료 입력 대기", skipped: "자동 조사 안 함" };
+  const STEP_TEXT = { pending: "대기", active: "진행 중", done: "완료", failed: "실패", waiting: "승인 대기", material: "자료 입력 대기", skipped: "자동 조사 안 함", review: "자료 검토 대기" };
   const MATERIAL_LABELS = {
     goods: { name: "상품명", price: "가격", seller: "판매처", features: "특징" },
     popup: { name: "행사명", price: "입장료·가격", seller: "장소", features: "기간·예약 방법 등" },
@@ -199,6 +200,7 @@
       : (research.policyStops || []).length ? "자동 조사 안 함" : "웹 검색 기록 없음";
     state.className = `approval ${readCount ? "is-approved" : "is-needed"}`;
     renderResearchVersion();
+    renderReview(research);
     renderPeople(research);
     renderChecklist(research);
     renderProblems(research);
@@ -298,8 +300,15 @@
       if (empty && checked.length) {
         detail.append(el("span", { class: "item-attempts" }, "확인한 페이지: ", ...checked.flatMap((c, i) => [i ? ", " : "", `${c.url.replace(/^https?:\/\//, "").slice(0, 60)} (${ATTEMPT_TEXT[c.result] || c.result})`])));
       }
-      for (const alt of item.alternatives || []) {
-        detail.append(el("span", {}, `다른 값: ${alt.value} `, ...sourceLinksOf(alt.sourceIds || [])));
+      const reviewing = job.state === "waiting_research";
+      const note = supplementNote(item);
+      if (note) detail.append(el("span", { class: "item-supplement" }, note));
+      if (reviewing && item.savedConflict) {
+        detail.append(conflictChooser(item));
+      } else {
+        for (const alt of item.alternatives || []) {
+          detail.append(el("span", {}, `다른 값: ${alt.value} `, ...sourceLinksOf(alt.sourceIds || [])));
+        }
       }
       for (const entry of item.unclear || []) {
         // 상세 이미지에서 읽기 어려웠던 값: 추측하지 않고 확인을 요청합니다
@@ -308,9 +317,84 @@
       const needs = [...EMPTY_STATES, "conflict", "unverified", "listed"].includes(item.state) || (item.strict && item.state === "secondary");
       const used = editable && job.outline.cards.some((c) => templateFor(c.frame).fields.some((f) => f.item === item.key));
       if (needs && used) detail.append(el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "카드에서 입력", dataset: { jumpItem: item.key }, onclick: () => jumpToItem(item.key) }));
+      if (reviewing) detail.append(reviewEditor(item));
       // 자료 상태 배지는 화면에 표시하지 않습니다 (분류·검증 값은 data-state와 조사 데이터에 그대로 둠)
       return el("li", { dataset: { item: item.key, state: item.state } }, el("b", { textContent: item.label }), detail);
     }));
+  }
+
+  // ---------- '저장된 자료 사용': 보완 조사 결과 검토 ----------
+  let reviewEditing = "";  // 직접 수정 중인 조사 항목
+
+  function supplementNote(item) {
+    if (item.userEdited) return "검토 중에 직접 수정한 값이에요.";
+    if (item.chosen === "supplement") return "기존 자료와 달라서 추가 조사 값을 골랐어요.";
+    if (item.chosen === "saved") return "기존 자료와 달라서 기존 값을 골랐어요.";
+    return {
+      added: "추가 조사로 새로 찾은 내용이에요.",
+      extended: `추가 조사로 내용이 늘었어요 (기존: ${item.previousValue || ""}).`,
+      confirmed: "추가 조사에서도 같은 내용을 확인했어요.",
+    }[item.supplement] || "";
+  }
+
+  function conflictChooser(item) {
+    const options = [{ value: item.value, sourceIds: item.sourceIds, label: "기존 자료" }, ...(item.alternatives || []).map((a) => ({ ...a, label: a.origin === "supplement" ? "추가 조사" : "다른 출처" }))];
+    return el("div", { class: "review-conflict", dataset: { conflict: item.key } },
+      el("p", { class: "review-conflict-note", textContent: "기존 자료와 추가 조사 값이 달라요. 어느 값을 쓸지 골라 주세요. 고르지 않은 값도 기록에 남아요." }),
+      ...options.map((option, index) => el("div", { class: "review-option" },
+        el("span", {}, el("b", { textContent: `${option.label}: ` }), option.value, " ", ...sourceLinksOf(option.sourceIds || [])),
+        el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "이 값 사용", dataset: { choose: `${item.key}:${index}` },
+          onclick: () => action(`research/items/${item.key}/choose`, jsonInit("POST", { index })) }))));
+  }
+
+  function reviewEditor(item) {
+    if (reviewEditing !== item.key) {
+      return el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "직접 수정", dataset: { editItem: item.key },
+        onclick: () => { reviewEditing = item.key; renderResearch(); } });
+    }
+    const input = el("input", { type: "text", value: item.value || "", maxLength: 200, "aria-label": `${item.label} 값`, dataset: { itemInput: item.key } });
+    const save = () => { reviewEditing = ""; action(`research/items/${item.key}`, jsonInit("PUT", { value: input.value })); };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); save(); }
+      if (e.key === "Escape") { reviewEditing = ""; renderResearch(); }
+    });
+    setTimeout(() => input.focus());
+    return el("div", { class: "review-edit" }, input,
+      el("div", { class: "library-actions" },
+        el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "저장", dataset: { saveItem: item.key }, onclick: save }),
+        el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "취소", onclick: () => { reviewEditing = ""; renderResearch(); } })),
+      el("small", { class: "hint", textContent: "직접 고친 값은 '사용자 제공' 자료로 기록되고, 이전 값도 기록에 남아요. 비우면 이 항목을 쓰지 않아요." }));
+  }
+
+  function renderReview(research) {
+    const box = $("research-review");
+    const supplement = research.supplement;
+    const reviewing = job.state === "waiting_research";
+    box.hidden = !(supplement && reviewing);
+    if (box.hidden) return;
+    const base = supplement.base || {};
+    const name = base.name ? `'${base.name}'(#${base.number})` : `#${base.number}(조사일 ${base.researchedAt})`;
+    const conflicts = (research.items || []).filter((i) => i.savedConflict).length;
+    const parts = [];
+    if (supplement.failed) {
+      parts.push(el("p", { class: "notice", role: "alert", textContent: `추가 조사에 실패했어요: ${supplement.error} 기존 자료 ${name}는 그대로 있어요. 기존 자료로 계속하거나 다시 시도할 수 있어요.` }));
+    } else {
+      const counts = [["새로 찾은 항목", supplement.added], ["내용이 늘어난 항목", supplement.extended], ["같은 내용을 확인한 항목", supplement.confirmed]]
+        .filter(([, list]) => (list || []).length).map(([label, list]) => `${label} ${list.length}개`);
+      parts.push(el("p", { class: "review-summary", textContent: `저장된 자료 ${name}를 바탕으로 부족한 내용을 추가 조사해 합쳤어요.${counts.length ? ` ${counts.join(" · ")}.` : " 새로 찾은 내용은 없어요."} 기존 값은 지우지 않았어요.` }));
+    }
+    if (conflicts) parts.push(el("p", { class: "review-conflict-note", textContent: `기존 자료와 추가 조사 값이 다른 항목이 ${conflicts}개 있어요. 아래 조사 항목에서 쓸 값을 골라 주세요.` }));
+    parts.push(el("div", { class: "actions" },
+      el("button", { class: "btn btn-primary", type: "button", textContent: "이 자료로 구성안 만들기", dataset: { approveResearch: "" },
+        onclick: () => {
+          const left = (job.research.items || []).filter((i) => i.savedConflict).length;
+          if (left && !confirm(`아직 고르지 않은 다른 값이 ${left}개 있어요. 그 항목은 기존 값을 기준으로 쓰고 '확인 필요'로 남겨요. 구성안을 만들까요?`)) return;
+          action("research/approve");
+        } }),
+      supplement.failed ? el("button", { class: "btn btn-ghost", type: "button", textContent: "추가 조사 다시 시도", dataset: { retrySupplement: "" },
+        onclick: () => action("research/supplement-retry") }) : ""));
+    parts.push(el("small", { class: "hint", textContent: "구성안을 만들면 이 통합 자료가 새 조사 버전으로 저장돼요. 바탕이 된 저장 버전은 그대로 남아요." }));
+    box.replaceChildren(el("h3", { class: "sub-title", textContent: "통합된 자료 검토" }), ...parts);
   }
 
   function renderProblems(research) {
@@ -547,7 +631,7 @@
     if (job.state === "done") return 5;
     if (job.state === "waiting_preview") return 4;
     if (job.state === "waiting_outline") return 3;
-    if (job.state === "waiting_material") return 2;
+    if (job.state === "waiting_material" || job.state === "waiting_research") return 2;
     if (job.preview && job.preview.approved) return 5;
     if (job.outline && job.outline.approved) return 4;
     return job.outline ? 3 : 2;
@@ -585,6 +669,7 @@
     if (job.state === "failed" || job.state === "interrupted") return "작업이 멈췄어요. 새로 만들어 주세요.";
     if (job.state === "running") return "진행이 끝나면 넘어갈 수 있어요.";
     if (job.state === "waiting_material") return "자료를 입력하면 구성안 단계로 넘어가요.";
+    if (job.state === "waiting_research") return "조사 자료를 확인하고 '이 자료로 구성안 만들기'를 누르면 구성안 단계로 넘어가요.";
     if (viewStep === 3) return "구성안을 승인하면 다음 단계로 갈 수 있어요.";
     if (viewStep === 4) return "디자인을 최종 승인하면 PNG를 받을 수 있어요.";
     return "";
@@ -960,6 +1045,7 @@
   function displayStepStatus(step) {
     if (step.key === "outline" && job.state === "waiting_outline") return "waiting";
     if (step.key === "outline" && job.state === "waiting_material") return "material";
+    if (step.key === "research" && job.state === "waiting_research") return "review";
     if (step.key === "layout" && job.state === "waiting_preview") return "waiting";
     return step.status;
   }
@@ -968,7 +1054,9 @@
     const aiRunning = job.mode === "ai" && job.state === "running";
     const activeKey = (job.steps.find((s) => s.status === "active") || {}).key;
     $("status-text").textContent = aiRunning
-      ? { research: "AI가 웹에서 자료를 찾고 구성안을 쓰고 있어요. 2~5분 걸릴 수 있어요.",
+      ? { research: job.researchBase && !(job.researchStage || {}).done
+          ? "AI가 저장된 자료를 바탕으로 부족한 내용을 추가 조사하고 있어요. 2~5분 걸릴 수 있어요. 기존 자료는 그대로 남아요."
+          : "AI가 웹에서 자료를 찾고 구성안을 쓰고 있어요. 2~5분 걸릴 수 있어요.",
         layout: isTemplateJob() ? "템플릿에 승인된 문구와 이미지를 넣고 있어요." : "AI가 카드 5장을 디자인하고 있어요. 1~3분 걸릴 수 있어요." }[activeKey] || "진행하고 있어요."
       : STATUS_TEXT[job.state] || "";
     const canRetry = job.mode === "ai" && ["failed", "interrupted"].includes(job.state);
@@ -2033,7 +2121,12 @@
   }
 
   // ---------- 조사 자료 보관함 (저장된 자료 사용 / 새로 조사하기) ----------
-  const library = { key: "", versions: [], details: new Map(), timer: 0, chosenId: "", renaming: "", busy: false };
+  const library = { key: "", versions: [], details: new Map(), timer: 0, chosenId: "", renaming: "", busy: false, error: "" };
+  // 서버가 이름 변경·삭제 API를 가진 새 코드로 실행 중인지 (예전 서버면 버튼 대신 다시 시작 안내)
+  const libraryManageAvailable = () => Boolean(options && (options.features || []).includes("libraryManage"));
+  const RESTART_NOTE = "서버가 예전 코드로 실행 중이라 이름 변경·삭제를 쓸 수 없어요. 서버 창(run.bat)을 닫고 다시 실행한 뒤 새로고침해 주세요.";
+  // 서버에 그 주소가 없을 때(예전 서버) FastAPI가 주는 기본 메시지를 알아보기 쉬운 안내로 바꿉니다
+  const libraryError = (error) => (/^(Not Found|Method Not Allowed)$/.test(error.message) ? RESTART_NOTE : error.message);
   const LIBRARY_NAME_MAX = 40;
   const selectedResearchMode = () => ($("job-form").elements.researchMode && $("job-form").elements.researchMode.value) || "new";
 
@@ -2084,9 +2177,9 @@
     try {
       await api(`/api/research-library/${v.id}`, jsonInit("PATCH", { name }));
       library.renaming = "";
-      show("form-error", "");
+      library.error = "";
     } catch (error) {
-      show("form-error", error.message);
+      library.error = libraryError(error); // 버튼 바로 아래에 보여 줍니다 (폼 맨 아래 오류 칸은 눈에 잘 안 띔)
     } finally {
       library.busy = false;
     }
@@ -2108,9 +2201,11 @@
 이 버전만 지워지고 되돌릴 수 없어요. 다른 버전은 그대로예요.${linked}`)) return;
       await api(`/api/research-library/${v.id}`, { method: "DELETE" });
       if (library.chosenId === v.id) library.chosenId = "";
-      show("form-error", "");
+      library.error = "";
     } catch (error) {
-      show("form-error", error.message);
+      library.error = libraryError(error);
+      library.busy = false;
+      renderLibrary();
       return;
     } finally {
       library.busy = false;
@@ -2119,6 +2214,14 @@
   }
 
   function libraryActions(v) {
+    const error = library.error ? el("p", { class: "library-error", role: "alert", textContent: library.error }) : "";
+    if (!libraryManageAvailable()) {
+      return el("div", { class: "library-manage" },
+        el("div", { class: "library-actions" },
+          el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "이름 바꾸기", disabled: true, title: RESTART_NOTE, dataset: { libraryRename: v.id } }),
+          el("button", { class: "btn btn-ghost btn-small btn-danger", type: "button", textContent: "삭제", disabled: true, title: RESTART_NOTE, dataset: { libraryDelete: v.id } })),
+        el("p", { class: "library-error", role: "alert", textContent: RESTART_NOTE }));
+    }
     if (library.renaming === v.id) {
       const input = el("input", { type: "text", value: versionName(v), maxLength: LIBRARY_NAME_MAX, "aria-label": "조사 버전 이름", dataset: { libraryName: v.id },
         onkeydown: (e) => {
@@ -2132,13 +2235,14 @@
           el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "저장", dataset: { librarySave: v.id }, onclick: () => renameVersion(v, input.value) }),
           el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "기본 이름으로", title: defaultVersionName(v), onclick: () => renameVersion(v, "") }),
           el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "취소", onclick: () => { library.renaming = ""; renderLibrary(); } })),
-        el("small", { class: "hint", textContent: `${LIBRARY_NAME_MAX}자까지 · 비우면 기본 이름(${defaultVersionName(v)})으로 돌아가요. 조사 내용은 바뀌지 않아요.` }));
+        el("small", { class: "hint", textContent: `${LIBRARY_NAME_MAX}자까지 · 비우면 기본 이름(${defaultVersionName(v)})으로 돌아가요. 조사 내용은 바뀌지 않아요.` }),
+        error);
     }
-    return el("div", { class: "library-actions" },
+    return el("div", { class: "library-manage" }, el("div", { class: "library-actions" },
       el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "이름 바꾸기", disabled: library.busy, dataset: { libraryRename: v.id },
-        onclick: () => { library.renaming = v.id; renderLibrary(); } }),
+        onclick: () => { library.renaming = v.id; library.error = ""; renderLibrary(); } }),
       el("button", { class: "btn btn-ghost btn-small btn-danger", type: "button", textContent: "삭제", disabled: library.busy, dataset: { libraryDelete: v.id },
-        onclick: () => deleteVersion(v) }));
+        onclick: () => deleteVersion(v) })), error);
   }
 
   async function renderLibrary() {
@@ -2150,14 +2254,14 @@
       return;
     }
     $("research-hint").textContent = mode === "saved"
-      ? "새 웹 조사 없이 저장된 자료(사실·출처)로 구성안 문구를 새로 써요. 자료에 없는 사실은 쓰지 않아요. 새로 적은 참고 자료는 사용자 제공 자료로 더해져요."
+      ? "저장된 자료를 바탕으로 부족한 내용을 AI가 추가 조사해 합쳐요. 기존 값은 지우지 않고, 다른 값이 나오면 확인을 받아요. 합친 자료를 확인·수정한 뒤 구성안을 만들고, 새 버전으로 저장돼요 (기존 버전은 그대로)."
       : "AI가 새로 조사해 새 버전으로 저장해요. 저장된 자료는 그대로 남아요.";
     if (mode !== "saved") {
       box.replaceChildren(el("small", { class: "hint", textContent: `저장된 자료 ${library.versions.length}개: ${versionLabel(library.versions[0])}` }));
       return;
     }
     const select = el("select", { id: "research-version", "aria-label": "사용할 조사 버전",
-      onchange: (e) => { library.chosenId = e.target.value; library.renaming = ""; renderLibrary(); } });
+      onchange: (e) => { library.chosenId = e.target.value; library.renaming = ""; library.error = ""; renderLibrary(); } });
     const current = box.querySelector("#research-version");
     const chosen = library.versions.find((v) => v.id === library.chosenId) || (current && library.versions.find((v) => v.id === current.value)) || library.versions[0];
     library.chosenId = chosen.id;
@@ -2201,9 +2305,17 @@
     const fromLibrary = job && job.research && job.research.fromLibrary;
     node.hidden = !info;
     if (!info) return;
-    node.textContent = info.source === "saved"
-      ? `저장된 자료 #${info.number}(조사일 ${info.researchedAt})를 사용했어요. 새 웹 조사는 하지 않았어요.${fromLibrary && fromLibrary.staleNote ? ` ${fromLibrary.staleNote}` : ""}`
-      : `새로 조사한 자료를 보관함에 #${info.number}(조사일 ${info.researchedAt})로 저장했어요. 같은 주제로 다시 만들 때 '저장된 자료 사용'을 고를 수 있어요.`;
+    if (info.source === "supplement") {
+      const base = info.basedOn || {};
+      node.textContent = `저장된 자료 #${base.number}을 바탕으로 부족한 내용을 추가 조사해 합쳤고, 새 버전 #${info.number}(조사일 ${info.researchedAt})로 저장했어요. 바탕 버전은 그대로예요.`;
+    } else if (info.source === "saved" && job.researchBase) {
+      node.hidden = job.state === "waiting_research"; // 검토 중에는 아래 '통합된 자료 검토'에서 같은 내용을 보여 줍니다
+      node.textContent = `저장된 자료 #${info.number}(조사일 ${info.researchedAt})를 바탕으로 추가 조사했어요.`;
+    } else {
+      node.textContent = info.source === "saved"
+        ? `저장된 자료 #${info.number}(조사일 ${info.researchedAt})를 사용했어요. 새 웹 조사는 하지 않았어요.${fromLibrary && fromLibrary.staleNote ? ` ${fromLibrary.staleNote}` : ""}`
+        : `새로 조사한 자료를 보관함에 #${info.number}(조사일 ${info.researchedAt})로 저장했어요. 같은 주제로 다시 만들 때 '저장된 자료 사용'을 고를 수 있어요.`;
+    }
   }
 
   // ---------- 시작 ----------

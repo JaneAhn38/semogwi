@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from . import claude_cli, cutout, detail_images, research as research_items, research_library, site_policy, templates
+from . import claude_cli, cutout, detail_images, research as research_items, research_library, research_merge, site_policy, templates
 from .ai_provider import card_source_state, get_ai_provider, material_text, policy_stop_research, separates_research
 from .claude_cli import AIError
 from .layout import ImageElement, LayoutError, TextElement, validate_layout
@@ -107,6 +107,7 @@ def _normalize(job: dict) -> dict:
     job.setdefault("detailFetch", None)  # 참고 URL에서 상세 이미지를 찾은 기록
     job.setdefault("researchVersion", None)  # 조사 자료 보관함의 버전 (새로 조사해 저장했거나, 저장된 자료로 시작한 경우)
     job.setdefault("researchStage", None)  # 조사 단계가 끝났는지 (조사와 구성안 작성을 나눈 작업). 구성안만 다시 쓸 때 씁니다
+    job.setdefault("researchBase", None)  # '저장된 자료 사용': 보완 조사의 바탕이 된 저장 버전 {id, number, researchedAt, name}
     for asset in job["assets"]:
         asset.setdefault("sha256", None)
         asset.setdefault("useVariant", "original")
@@ -367,7 +368,8 @@ def start(job_id: str, mode: str = "demo", research_mode: str = "new", version_i
 
 
 def _start_from_library(job: dict, mode: str, version_id: str | None) -> dict:
-    """저장된 조사 자료로 시작합니다. 새 조사(웹 검색) 없이, 자료를 바탕으로 AI가 구성안 문구를 새로 씁니다."""
+    """저장된 조사 자료로 시작합니다. 그 자료를 바탕으로 부족한 내용을 추가 조사해 합친 뒤(보완 조사),
+    사용자가 통합 자료를 검토·수정하고 승인하면 구성안을 씁니다. 저장된 버전은 고치지 않습니다."""
     if mode != "ai":
         raise JobConflict("저장된 자료 사용은 실제 AI 모드에서만 쓸 수 있어요")
     version = research_library.get(version_id or "")
@@ -384,30 +386,119 @@ def _start_from_library(job: dict, mode: str, version_id: str | None) -> dict:
         step["mode"] = "real"
     _apply_type(job, content_type, "user")
     job["research"] = research_library.research_for_job(version, str(job.get("notes") or "").strip())
+    job["researchBase"] = {"id": version["id"], "number": version["number"], "researchedAt": version["researchedAt"], "name": version.get("name", "")}
     job["researchVersion"] = {"id": version["id"], "number": version["number"], "researchedAt": version["researchedAt"], "source": "saved"}
+    job["researchStage"] = None
     _set_step(job, "input", "done")
-    _set_step(job, "research", "done")
     job["state"] = "running"
     save(job)
-    _start(job["id"], _ai_compose_saved(job["id"]))
+    _start(job["id"], _ai_supplement(job["id"]))
     return job
 
 
-async def _ai_compose_saved(job_id: str) -> None:
+async def _ai_supplement(job_id: str) -> None:
+    """보완 조사: 저장된 자료를 AI에게 주고 부족한 내용을 더 조사해 합칩니다. 끝나면 사용자가 검토하는 단계(waiting_research)로 갑니다.
+
+    추가 조사가 실패해도 작업을 실패로 끝내지 않습니다. 기존 자료를 그대로 두고 검토 단계로 가서, 그대로 진행하거나 다시 시도할 수 있습니다.
+    """
     job = _read(job_id)
-    _set_step(job, "outline", "active")
+    _set_step(job, "research", "active")
     save(job)
+    base = job["research"]
+    info = job.get("researchBase") or {}
     try:
-        result = await asyncio.to_thread(get_ai_provider().compose_outline, job, uploads_dir(job_id))
+        result = await asyncio.to_thread(get_ai_provider().supplement_research, job, base, info, uploads_dir(job_id))
     except AIError as e:
-        _ai_fail(job_id, e.message)
-        return
+        result = {"research": research_merge.failed(base, info, e.message), "calls": [], "extraction": None}
+    except Exception as e:  # 통합 중 예기치 못한 오류도 기존 자료를 잃지 않게 합니다
+        result = {"research": research_merge.failed(base, info, f"추가 조사 결과를 합치지 못했어요 ({type(e).__name__})"), "calls": [], "extraction": None}
     job = _read(job_id)
     _record_calls(job, result["calls"])
-    result["research"]["fromLibrary"] = job["research"].get("fromLibrary")
-    result["research"]["researchedAt"] = job["research"].get("researchedAt")
-    _apply_outline_result(job, result)
+    site_policy.record_failures(result["research"].get("fetchFailures", []))
+    job["research"] = result["research"]
+    if result.get("extraction") is not None:
+        job["detailExtraction"] = result["extraction"]
+    if job["contentType"] == "character" and job["research"].get("items"):
+        job["research"]["people"] = research_items.people_from(job["research"])
+    job["researchStage"] = None  # 사용자가 검토하고 승인하면 조사 단계가 끝납니다
+    job["error"] = None
+    _set_step(job, "research", "done")
+    job["state"] = "waiting_research"
     save(job)
+
+
+def _require_review(job_id: str) -> dict:
+    job = _require(job_id, "waiting_research")
+    if not (job.get("research") or {}).get("supplement"):
+        raise JobConflict("검토할 추가 조사 결과가 없어요")
+    return job
+
+
+def edit_research_item(job_id: str, key: str, value: str) -> dict:
+    """검토 단계: 조사 항목 값을 직접 고칩니다 (사용자 제공 값으로 기록, 이전 값은 보존)."""
+    job = _require_review(job_id)
+    try:
+        research_merge.edit_item(job["research"], key, value)
+    except KeyError:
+        raise JobConflict("조사 항목을 찾을 수 없어요") from None
+    job["research"]["supplement"]["edited"] = sorted(set(job["research"]["supplement"].get("edited", [])) | {key})
+    _refresh_people(job)
+    save(job)
+    return job
+
+
+def choose_research_value(job_id: str, key: str, index: int) -> dict:
+    """검토 단계: 기존 값과 추가 조사 값이 다를 때 하나를 고릅니다 (고르지 않은 값은 기록에 남김)."""
+    job = _require_review(job_id)
+    try:
+        research_merge.choose_value(job["research"], key, index)
+    except KeyError:
+        raise JobConflict("조사 항목을 찾을 수 없어요") from None
+    except ValueError as e:
+        raise JobConflict(str(e)) from None
+    _refresh_people(job)
+    save(job)
+    return job
+
+
+def _refresh_people(job: dict) -> None:
+    if job["contentType"] == "character" and job["research"].get("items"):
+        job["research"]["people"] = research_items.people_from(job["research"])
+
+
+def retry_supplement(job_id: str) -> dict:
+    """검토 단계에서 추가 조사를 다시 합니다 (지금 자료를 바탕으로)."""
+    job = _require(job_id, "waiting_research")
+    state = claude_cli.status()
+    if not state["available"]:
+        raise JobConflict(state["reason"])
+    job.update(state="running", error=None)
+    save(job)
+    _start(job_id, _ai_supplement(job_id))
+    return job
+
+
+def approve_research(job_id: str) -> dict:
+    """검토한 통합 자료를 새 조사 버전으로 저장하고(바탕 버전은 그대로), 그 자료로 구성안을 씁니다."""
+    job = _require_review(job_id)
+    research = job["research"]
+    supplement = research["supplement"]
+    if not supplement.get("failed") or supplement.get("edited"):
+        # 추가 조사가 됐거나 사용자가 고친 경우에만 새 버전을 만듭니다 (실패 후 그대로 진행하면 바탕 버전과 같음)
+        try:
+            summary = research_library.save(job, research)
+            job["researchVersion"] = {"id": summary["id"], "number": summary["number"], "researchedAt": summary["researchedAt"],
+                                      "source": "supplement", "basedOn": job.get("researchBase")}
+        except OSError:
+            pass  # 보관함에 쓰지 못해도 제작은 계속합니다
+    core = research_items.core_status(job["contentType"], research.get("items"))
+    job["researchStage"] = {"done": True, "coreOnly": False, "reviewed": True, "at": datetime.now().isoformat(timespec="seconds"),
+                            "coreReady": core["ready"]}
+    _set_step(job, "outline", "active")
+    job.update(state="running", error=None)
+    save(job)
+    _start(job_id, _ai_research_then_compose(job_id, job, get_ai_provider(), compose_only=True))
+    return job
 
 
 def research_versions(content_type: str, topic: str) -> list[dict]:
@@ -427,7 +518,9 @@ def research_version_usage(version_id: str) -> list[dict]:
             job = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        linked = (job.get("researchVersion") or {}).get("id") == version_id or ((job.get("research") or {}).get("fromLibrary") or {}).get("id") == version_id
+        research = job.get("research") or {}
+        linked = version_id in ((job.get("researchVersion") or {}).get("id"), (job.get("researchBase") or {}).get("id"),
+                                (research.get("fromLibrary") or {}).get("id"), (research.get("basedOn") or {}).get("id"))
         if linked:
             used.append({"id": job.get("id"), "topic": job.get("topic", ""), "state": job.get("state", ""),
                          "source": (job.get("researchVersion") or {}).get("source", "saved")})
@@ -1024,7 +1117,9 @@ def retry(job_id: str) -> dict:
         _set_step(job, "outline", "active")
     job.update(state="running", error=None)
     save(job)
-    if designing and templates.is_template_job(job):
+    if not designing and not compose_only and job.get("researchBase") and not (job.get("researchStage") or {}).get("done"):
+        _start(job_id, _ai_supplement(job_id))  # 저장된 자료로 시작한 작업: 처음부터 새로 조사하지 않고 보완 조사를 다시 합니다
+    elif designing and templates.is_template_job(job):
         _start(job_id, _build_template_preview(job_id))  # 템플릿 작업의 디자인 단계는 AI를 부르지 않습니다
     elif compose_only:
         _start(job_id, _ai_research_then_compose(job_id, job, get_ai_provider(), compose_only=True))

@@ -28,7 +28,9 @@ STALE_DAYS = 7
 # 보관함에 남기는 조사 기록 (카드 문구·검색 실패 같은 작업 상태는 남기지 않음)
 # peopleResearch: 캐릭터별 이름·관계·TMI·근거·출처 / pipeline·researchedAtTime: 조사 방식과 시각 (비교용)
 # items 안에는 항목별 조사 결과(빈 이유)·충분성·근거 기록(evidence)·확인한 페이지(attempts)가 함께 저장됩니다
-KEEP = ("sources", "facts", "items", "missing", "queries", "searchPerformed", "partial", "peopleResearch", "pipeline", "researchedAtTime")
+# supplement·basedOn: 저장된 자료를 바탕으로 보완 조사한 버전의 통합 기록 (어느 버전에서, 무엇을 더했는지)
+KEEP = ("sources", "facts", "items", "missing", "queries", "searchPerformed", "partial", "peopleResearch", "pipeline", "researchedAtTime",
+        "supplement", "basedOn")
 
 
 def topic_key(content_type: str, topic: str) -> str:
@@ -64,6 +66,7 @@ def _summary(record: dict) -> dict:
     sensitive = TIME_SENSITIVE.get(record["contentType"])
     return {
         "id": record["id"], "number": record.get("number", 1), "topic": record["topic"], "contentType": record["contentType"],
+        "basedOn": (research.get("basedOn") or {}).get("number"),  # 보완 조사로 만든 버전이면 바탕 버전 번호
         "name": record.get("name") or "",  # 사용자가 붙인 이름. 비어 있으면 화면에서 조사일·유형으로 기본 이름을 만듭니다
         "createdAt": record["createdAt"], "researchedAt": researched, "ageDays": age, "jobId": record.get("jobId"),
         "sourceCount": len([s for s in sources if s.get("verification") == "fetched"]),

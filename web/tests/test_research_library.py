@@ -92,6 +92,18 @@ def library(client, topic="짱구", content_type="character"):
     return client.get("/api/research-library", params={"topic": topic, "contentType": content_type}).json()["versions"]
 
 
+def start_saved(client, version_id, **extra):
+    """저장된 자료 사용: 보완 조사가 끝나 검토 단계(waiting_research)가 될 때까지 기다립니다."""
+    job_id, r = start_ai(client, researchMode="saved", researchVersion=version_id, **extra)
+    assert r.status_code == 200, r.text
+    return job_id, wait(client, job_id, "waiting_research")
+
+
+def approve_review(client, job_id):
+    assert api(client, job_id, "POST", "/research/approve").status_code == 200
+    return wait(client, job_id, "waiting_outline", "waiting_material")
+
+
 # ---------- 조사 항목: 친구와 가족 분리 ----------
 def test_people_are_split_into_friends_and_family():
     items = [{**i, "state": "verified", "strict": False} for i in PEOPLE_ITEMS]
@@ -125,23 +137,37 @@ def test_new_research_is_saved_as_a_version_with_date_and_sources(client, people
     assert len(library(client, topic=" 짱 구 ")) == 1
 
 
-def test_saved_research_makes_new_outline_without_web_research(client, people_fake):
+def test_saved_research_is_supplemented_reviewed_and_saved_as_new_version(client, people_fake):
     job_id, _ = start_ai(client)
     first = wait(client, job_id, "waiting_outline")
     version_id = first["researchVersion"]["id"]
+    stored_before = research_library._path(version_id).read_text(encoding="utf-8")
     people_fake.kinds.clear()
+    people_fake.base.calls.clear()
 
-    job_id2, r = start_ai(client, researchMode="saved", researchVersion=version_id)
-    assert r.status_code == 200, r.text
-    job = wait(client, job_id2, "waiting_outline")
-    # 새 조사(웹 도구) 호출 없이 구성안만 새로 씁니다
-    assert people_fake.kinds and all(kind != "research" and not tools for kind, tools in people_fake.kinds)
-    assert ("compose", ()) in people_fake.kinds
-    assert job["researchVersion"] == {"id": version_id, "number": 1, "researchedAt": first["researchVersion"]["researchedAt"], "source": "saved"}
-    assert job["research"]["fromLibrary"]["id"] == version_id and not job["research"]["searchPerformed"]
-    assert len(job["outline"]["cards"]) == 5 and not any(i["errors"] for i in job["outline"]["issues"].values())
+    job_id2, job = start_saved(client, version_id)
+    # 1) 기존 자료를 맥락으로 주고 웹 도구로 추가 조사합니다 (구성안은 아직 쓰지 않음)
+    assert people_fake.kinds[0] == ("research", ("WebSearch", "WebFetch"))
+    assert not any(kind == "compose" for kind, _ in people_fake.kinds)
+    prompt = people_fake.base.calls[0]["prompt"]
+    assert "<saved_research>" in prompt and "짱구" in prompt and "마이페이스" in prompt and "우선 보완할 항목" in prompt
+    # 2) 통합 결과: 기존 값은 그대로, 같은 값은 확인으로, 바탕 버전 기록
+    research = job["research"]
+    assert research["basedOn"]["id"] == version_id and research["supplement"]["base"]["number"] == 1 and not research["supplement"].get("failed")
+    by_key = {i["key"]: i for i in research["items"]}
+    assert by_key["personality"]["value"] == "마이페이스" and "personality" in research["supplement"]["confirmed"]
     assert job["research"]["people"]["family"][0]["name"] == "히로시"
-    assert len(library(client)) == 1  # 저장된 자료를 쓴 작업은 새 버전을 만들지 않습니다
+    assert job["outline"] is None and len(library(client)) == 1  # 검토 전에는 새 버전을 만들지 않음
+    # 3) 승인하면 통합 자료를 새 버전으로 저장하고 그 자료로 구성안을 씁니다
+    people_fake.kinds.clear()
+    job = approve_review(client, job_id2)
+    assert job["state"] == "waiting_outline" and len(job["outline"]["cards"]) == 5
+    assert [k for k, _ in people_fake.kinds] == ["compose"]  # 승인 뒤에는 다시 조사하지 않음
+    versions = library(client)
+    assert [v["number"] for v in versions] == [2, 1] and versions[0]["basedOn"] == 1
+    assert job["researchVersion"]["source"] == "supplement" and job["researchVersion"]["id"] == versions[0]["id"]
+    assert job["researchVersion"]["basedOn"]["id"] == version_id
+    assert research_library._path(version_id).read_text(encoding="utf-8") == stored_before  # 바탕 버전은 그대로
 
 
 def test_new_research_keeps_previous_versions(client, people_fake):
@@ -184,8 +210,8 @@ def test_time_sensitive_types_warn_saved_data_may_be_old(client, people_fake):
 def test_user_notes_are_added_to_saved_research_as_user_material(client, people_fake):
     job_id, _ = start_ai(client)
     version_id = wait(client, job_id, "waiting_outline")["researchVersion"]["id"]
-    job_id2, _ = start_ai(client, researchMode="saved", researchVersion=version_id, notes="짱구는 초코비를 좋아해요 (공식 홈페이지 확인)")
-    job = wait(client, job_id2, "waiting_outline")
+    job_id2, _ = start_saved(client, version_id, notes="짱구는 초코비를 좋아해요 (공식 홈페이지 확인)")
+    job = approve_review(client, job_id2)
     user = [s for s in job["research"]["sources"] if s["id"] == research.USER_NOTES_ID]
     assert user and user[0]["verification"] == "user_provided"
     stored = json.loads(research_library._path(version_id).read_text(encoding="utf-8"))
@@ -422,10 +448,15 @@ def test_saved_research_keeps_people_tmi_and_passes_it_to_the_outline(client, fa
     first = detail["peopleDetails"]["friends"][0]
     assert first == {"name": "철수", "relation": "유치원 친구", "tmi": FRIEND_TMI[0]["tmi"], "quote": FRIEND_TMI[0]["quote"], "sourceIds": ["p1"], "state": "secondary"}
     assert any(s["id"] == "p1" for s in detail["sources"])
-    # 저장된 자료 사용: 새 조사 없이 구성안을 쓰고, 빈 TMI는 저장된 캐릭터별 TMI로 채웁니다
+    # 저장된 자료 사용: TMI가 이미 있는 캐릭터는 다시 찾지 않고, 빈 TMI는 저장된 캐릭터별 TMI로 채웁니다
     spy.kinds.clear()
-    job_id2, _ = start_ai(client, researchMode="saved", researchVersion=version_id)
-    job = wait(client, job_id2, "waiting_outline")
+    job_id2, review = start_saved(client, version_id)
+    assert [p["tmi"] for p in review["research"]["peopleResearch"]["people"][:4]] == [p["tmi"] for p in FRIEND_TMI]
+    if "people" in [k for k, _ in spy.kinds]:
+        asked = spy.prompts["rounds"][-1].split("조사할 캐릭터:")[1].split("자동 접근")[0]
+        assert not any(p["name"] in asked for p in FRIEND_TMI)  # 이미 TMI가 있는 친구는 다시 묻지 않음
+    spy.kinds.clear()
+    job = approve_review(client, job_id2)
     assert [k for k, _ in spy.kinds] == ["compose"]
     card = job["outline"]["cards"][3]
     assert [f["tmi"] for f in card["fields"]["friends"]] == [p["tmi"] for p in FRIEND_TMI] and "p1" in card["sourceIds"]
@@ -462,8 +493,7 @@ def test_delete_removes_only_that_version_and_keeps_jobs(client, people_fake):
     job_id2, _ = start_ai(client, researchMode="new")
     second = wait(client, job_id2, "waiting_outline")["researchVersion"]
     # 첫 버전으로 새 작업을 만들어 둡니다 (사용 중인 버전)
-    job_id3, _ = start_ai(client, researchMode="saved", researchVersion=first["id"])
-    using = wait(client, job_id3, "waiting_outline")
+    job_id3, using = start_saved(client, first["id"])
     jobs_before = {j: (jobs.job_dir(j) / "job.json").read_text(encoding="utf-8") for j in (job_id, job_id2, job_id3)}
     second_before = research_library._path(second["id"]).read_text(encoding="utf-8")
 
@@ -477,8 +507,8 @@ def test_delete_removes_only_that_version_and_keeps_jobs(client, people_fake):
     # 연결된 작업은 복사해 둔 자료를 그대로 씁니다 (작업 파일 변화 없음)
     assert {j: (jobs.job_dir(j) / "job.json").read_text(encoding="utf-8") for j in jobs_before} == jobs_before
     job = get(client, job_id3)
-    assert job["research"]["fromLibrary"]["id"] == first["id"] and job["research"]["sources"] and len(job["outline"]["cards"]) == 5
-    assert api(client, job_id3, "POST", "/outline/approve").status_code == 200  # 지운 뒤에도 작업은 계속 진행
+    assert job["research"]["basedOn"]["id"] == first["id"] and job["research"]["sources"]
+    assert approve_review(client, job_id3)["state"] == "waiting_outline"  # 지운 뒤에도 작업은 계속 진행 (복사해 둔 자료 사용)
     # 지운 버전으로는 새로 시작할 수 없고, 다시 지우면 404
     _, r = start_ai(client, researchMode="saved", researchVersion=first["id"])
     assert r.status_code == 409 and "새로 조사하기" in r.json()["detail"]
@@ -495,3 +525,108 @@ def test_new_version_number_does_not_repeat_after_delete(client, people_fake):
     job_id, _ = start_ai(client, researchMode="new")
     third = wait(client, job_id, "waiting_outline")["researchVersion"]
     assert third["number"] == 3 and [v["number"] for v in library(client)] == [3, 2]
+
+
+def test_options_announce_library_management(client):
+    """화면은 이 값으로 서버가 이름 변경·삭제 API를 가진 새 코드인지 확인합니다 (예전 서버면 다시 시작 안내)."""
+    assert "libraryManage" in client.get("/api/options").json()["features"]
+
+
+
+# ---------- 보완 조사: 통합 규칙·검토·실패 ----------
+SUPPLEMENT_ITEMS = [
+    {"key": "official_name", "value": "짱구", "quote": "짱구", "sourceIds": ["s1"]},  # 같은 값 → 확인
+    {"key": "personality", "value": "장난꾸러기", "quote": "장난꾸러기", "sourceIds": ["s1"]},  # 다른 값 → 충돌 (덮어쓰지 않음)
+    {"key": "birthday", "value": "5월 5일", "quote": "생일은 5월 5일", "sourceIds": ["s1"]},  # 비어 있던 항목 → 추가
+    {"key": "friends", "value": "철수(유치원 친구), 유리(유치원 친구), 훈이(유치원 친구), 맹구(유치원 친구), 수지(유치원 친구)",
+     "quote": "친구들", "sourceIds": ["s1"]},  # 목록이 늘어남 → 확장
+]
+
+
+def test_merge_rules_keep_saved_values_and_flag_conflicts():
+    from app import research_merge
+    sources = [{"id": "s1", "title": "공식", "url": "https://example.com/a", "kind": "official", "verification": "fetched"}]
+    base_items = research.verify_items("character", PEOPLE_ITEMS, sources)
+    base = {"sources": sources, "items": base_items, "facts": [{"text": "기존 사실", "sourceIds": ["s1"]}], "queries": ["옛 검색"]}
+    new_sources = [{"id": "s1", "title": "다른 페이지", "url": "https://example.com/b", "kind": "secondary", "verification": "fetched"},
+                   {"id": "s2", "title": "공식 같은 주소", "url": "https://example.com/a/", "kind": "official", "verification": "fetched"}]
+    raw = [{**i, "sourceIds": ["s1"]} for i in SUPPLEMENT_ITEMS] + [{"key": "series", "value": "짱구는 못말려", "quote": "작품", "sourceIds": ["s2"]}]
+    new = {"sources": new_sources, "items": research.verify_items("character", raw, new_sources), "facts": [{"text": "새 사실", "sourceIds": ["s1"]}],
+           "queries": ["새 검색"], "searchPerformed": True}
+    snapshot = json.dumps(base, ensure_ascii=False)
+    merged = research_merge.merge(base, new, "character", {"id": "v1", "number": 1})
+    assert json.dumps(base, ensure_ascii=False) == snapshot  # 원본(저장된 자료)은 고치지 않음
+    ids = {s["url"]: s["id"] for s in merged["sources"]}
+    assert ids == {"https://example.com/a": "s1", "https://example.com/b": "r1"}  # 같은 주소는 합치고, 겹치는 id는 바꿈
+    items = {i["key"]: i for i in merged["items"]}
+    assert items["official_name"]["value"] == "짱구" and items["official_name"]["supplement"] == "confirmed"
+    personality = items["personality"]
+    assert personality["value"] == "마이페이스" and personality["state"] == "conflict" and personality["savedConflict"]
+    assert personality["alternatives"][-1]["value"] == "장난꾸러기" and personality["alternatives"][-1]["sourceIds"] == ["r1"]
+    assert items["birthday"]["value"] == "5월 5일" and items["birthday"]["supplement"] == "added"
+    assert "수지" in items["friends"]["value"] and items["friends"]["previousValue"].startswith("철수") and items["friends"]["supplement"] == "extended"
+    assert items["series"]["sourceIds"] == ["s1"]  # 같은 주소의 새 출처(s2)는 기존 출처 s1로 연결
+    # 추가 조사에 없는 기존 값(가족·TMI)은 그대로
+    assert items["family"]["value"].startswith("히로시") and items["tmi"]["value"]
+    assert merged["queries"] == ["옛 검색", "새 검색"] and {f["text"] for f in merged["facts"]} == {"기존 사실", "새 사실"}
+    assert merged["supplement"]["conflicts"] == ["personality"] and "birthday" in merged["supplement"]["added"]
+
+
+def test_review_conflict_choice_and_edit_are_recorded(client, people_fake):
+    job_id, _ = start_ai(client)
+    version_id = wait(client, job_id, "waiting_outline")["researchVersion"]["id"]
+    people_fake.items = SUPPLEMENT_ITEMS
+    job_id2, job = start_saved(client, version_id)
+    items = {i["key"]: i for i in job["research"]["items"]}
+    assert items["personality"]["value"] == "마이페이스" and items["personality"]["state"] == "conflict"  # 덮어쓰지 않음
+    assert items["birthday"]["value"] == "5월 5일"
+    # 새 값을 고르면 그 값의 근거가 함께 오고, 고르지 않은 기존 값은 기록에 남습니다
+    job = api(client, job_id2, "POST", "/research/items/personality/choose", json={"index": 1}).json()
+    item = next(i for i in job["research"]["items"] if i["key"] == "personality")
+    assert item["value"] == "장난꾸러기" and item["state"] != "conflict" and item["dismissed"][0]["value"] == "마이페이스"
+    # 직접 고친 값은 사용자 제공으로 기록하고 이전 값은 보존합니다
+    job = api(client, job_id2, "PUT", "/research/items/birthday", json={"value": "5월 5일 (공식 프로필)"}).json()
+    item = next(i for i in job["research"]["items"] if i["key"] == "birthday")
+    assert item["state"] == "user" and item["edits"][0]["value"] == "5월 5일" and "u2" in item["sourceIds"]
+    assert api(client, job_id2, "PUT", "/research/items/nope", json={"value": "x"}).status_code == 409
+    job = approve_review(client, job_id2)
+    stored = json.loads(research_library._path(job["researchVersion"]["id"]).read_text(encoding="utf-8"))
+    saved = {i["key"]: i for i in stored["research"]["items"]}
+    assert saved["personality"]["value"] == "장난꾸러기" and saved["birthday"]["value"] == "5월 5일 (공식 프로필)"
+    assert stored["research"]["supplement"]["edited"] == ["birthday"]
+    # 검토 단계가 아니면 고칠 수 없음
+    assert api(client, job_id2, "PUT", "/research/items/birthday", json={"value": "x"}).status_code == 409
+
+
+def test_supplement_failure_keeps_saved_research_and_can_continue(client, people_fake, monkeypatch):
+    job_id, _ = start_ai(client)
+    version_id = wait(client, job_id, "waiting_outline")["researchVersion"]["id"]
+    real = claude_cli.run
+
+    def broken(prompt, system, schema, **kwargs):
+        if "items" in schema["properties"] and "sources" in schema["properties"]:
+            raise claude_cli.AIError("timeout", "조사 시간이 초과됐어요")
+        return real(prompt, system, schema, **kwargs)
+
+    monkeypatch.setattr(claude_cli, "run", broken)
+    job_id2, job = start_saved(client, version_id)
+    research = job["research"]
+    assert research["supplement"]["failed"] and "시간이 초과" in research["supplement"]["error"]
+    assert {i["key"]: i["value"] for i in research["items"]}["personality"] == "마이페이스"  # 기존 자료 유지
+    # 다시 시도도 가능 (여전히 실패하면 검토 단계로 돌아옴)
+    assert api(client, job_id2, "POST", "/research/supplement-retry").status_code == 200
+    job = wait(client, job_id2, "waiting_research")
+    assert job["research"]["supplement"]["failed"]
+    # 기존 자료로 그대로 진행: 바뀐 것이 없으니 새 버전은 만들지 않고 구성안을 씁니다
+    job = approve_review(client, job_id2)
+    assert job["state"] == "waiting_outline" and len(library(client)) == 1
+
+
+def test_new_research_mode_does_not_use_saved_research(client, people_fake):
+    job_id, _ = start_ai(client)
+    wait(client, job_id, "waiting_outline")
+    people_fake.base.calls.clear()
+    job_id2, r = start_ai(client, researchMode="new")
+    job = wait(client, job_id2, "waiting_outline")  # 새로 조사하기: 검토 단계 없이 지금처럼 바로 구성안
+    assert "<saved_research>" not in people_fake.base.calls[0]["prompt"] and not job["research"].get("basedOn")
+    assert job["researchVersion"]["source"] == "new" and job["researchVersion"]["number"] == 2
