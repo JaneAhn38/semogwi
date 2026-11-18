@@ -81,6 +81,11 @@ def _check_template(tpl: dict, name: str) -> None:
             raise TemplateError(f"{name}: {key}는 물려받는 필드라 직접 정의할 수 없어요")
         fields[key] = {"key": key, "type": "text"}
     slots = {image["key"] for image in tpl["images"]}
+    for image in tpl["images"]:
+        target = fields.get(image.get("identify")) if image.get("identify") else None
+        if image.get("identify") and not (target and target["type"] == "items" and target.get("linkedName")
+                                          and any(f["key"] == "slot" and f.get("hidden") for f in target["fields"])):
+            raise TemplateError(f"{name}: {image['key']}가 잇는 {image['identify']}에 숨은 slot 항목과 linkedName이 없어요")
     for el in tpl["elements"]:
         kind = el.get("type")
         if kind not in ELEMENT_TYPES:
@@ -250,6 +255,8 @@ def check_fields(tpl: dict, fields: dict) -> dict:
                 errors.append(f"{label}: {field['maxItems']}개까지 넣을 수 있어요")
             for n, item in enumerate(value, 1):
                 for sub in field["fields"]:
+                    if sub.get("hidden"):
+                        continue
                     name = f"{label} {n} {sub['label']}"
                     if sub.get("required") and not item.get(sub["key"]):
                         errors.append(f"{name}: 꼭 필요한 항목이에요. 확인된 내용을 입력하거나 이 항목을 지워 주세요")
@@ -315,6 +322,31 @@ def slots_of(job: dict, frame: str) -> list[dict]:
     return template_for(job, frame)["images"]
 
 
+def identify_slots(tpl: dict) -> list[dict]:
+    """사진 속 캐릭터 이름을 확인해 항목(friends 등)과 잇는 이미지 자리."""
+    return [image for image in tpl["images"] if image.get("identify")]
+
+
+def linked_images(tpl: dict, fields: dict, images: dict | None) -> dict:
+    """항목의 slot 키로 사진을 찾아, 항목이 그려지는 자리에 그 사진을 넣습니다 (사진 순서 = 문구 순서).
+
+    항목에 slot이 하나도 없으면(사진으로 정하지 않은 친구) 자리 이름 그대로 씁니다.
+    """
+    images = images or {}
+    result = {slot["key"]: images.get(slot["key"]) for slot in tpl["images"]}
+    groups: dict[str, list[str]] = {}
+    for slot in identify_slots(tpl):
+        groups.setdefault(slot["identify"], []).append(slot["key"])
+    for field_key, keys in groups.items():
+        items = fields.get(field_key) or []
+        if not any(isinstance(item, dict) and item.get("slot") for item in items):
+            continue
+        for i, key in enumerate(keys):
+            linked = items[i].get("slot") if i < len(items) else ""
+            result[key] = images.get(linked) if linked in keys else None
+    return result
+
+
 def default_slot_images(job: dict, permitted: list[dict]) -> dict:
     """허가된 이미지를 앞 카드부터 이미지 자리마다 한 장씩 넣습니다. 같은 이미지를 반복하지 않습니다."""
     images = {frame: {slot["key"]: None for slot in slots_of(job, frame)} for frame in FRAMES}
@@ -337,7 +369,7 @@ def build_spec(job: dict, card: dict, images: dict | None) -> dict:
         "version": FORMAT, "frame": card["frame"], "template": tpl["id"], "page": index + 1, "total": len(FRAMES),
         "no": f"{index:02d}" if legacy and tpl["kind"] == "body" else "",
         "fields": {**inherited, **card["fields"]}, "source": card.get("source", ""),
-        "images": {slot["key"]: (images or {}).get(slot["key"]) for slot in tpl["images"]},
+        "images": linked_images(tpl, card["fields"], images),
     }
 
 
@@ -397,7 +429,8 @@ def _describe(field: dict) -> str:
     elif kind == "list":
         rule = f"문자열 배열, 최대 {field['maxItems']}개, 각 {field['itemMax']}자 이내"
     elif kind == "items":
-        subs = ", ".join(f"{s['key']}({s['label']}, {s['max']}자{', 필수' if s.get('required') else ''}"
+        subs = ", ".join(f"{s['key']}(사진 자리 키. 사진으로 확정한 목록의 slot을 그대로 쓰고, 목록이 없으면 빈 문자열)" if s.get("hidden") else
+                         f"{s['key']}({s['label']}, {s['max']}자{', 필수' if s.get('required') else ''}"
                          f"{', 기본값 ' + s['default'] if s.get('default') else ''})" for s in field["fields"])
         rule = f"객체 배열, 최대 {field['maxItems']}개: {subs}"
     else:
@@ -424,6 +457,8 @@ def ai_field_rules(content_type: str, ids: list[str] | None = None) -> str:
 # ---------- 데모 ----------
 def _demo_text(field: dict, variant: int) -> str:
     """예시임을 밝히는 문구. 사실 정보(이름, 날짜, 가격 등)를 만들지 않습니다."""
+    if field.get("hidden"):
+        return ""
     if "demo" in field:
         return field["demo"]
     if field.get("default"):

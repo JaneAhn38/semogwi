@@ -23,6 +23,7 @@
       "label": "친구 캐릭터",
       "type": "items",
       "maxItems": 3,
+      "linkedName": "name",
       "fields": [
         {
           "key": "name",
@@ -36,6 +37,13 @@
           "label": "관계",
           "type": "text",
           "max": 8
+        },
+        {
+          "key": "slot",
+          "label": "사진 자리",
+          "type": "text",
+          "max": 20,
+          "hidden": true
         }
       ],
       "item": "friends"
@@ -54,19 +62,22 @@
       "key": "friend_image_1",
       "label": "친구 1 이미지",
       "required": false,
-      "shape": "circle"
+      "shape": "circle",
+      "identify": "friends"
     },
     {
       "key": "friend_image_2",
       "label": "친구 2 이미지",
       "required": false,
-      "shape": "circle"
+      "shape": "circle",
+      "identify": "friends"
     },
     {
       "key": "friend_image_3",
       "label": "친구 3 이미지",
       "required": false,
-      "shape": "circle"
+      "shape": "circle",
+      "identify": "friends"
     }
   ],
   "elements": [

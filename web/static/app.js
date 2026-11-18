@@ -14,6 +14,7 @@
   ];
   const AI_TASK_TEXT = {
     outline: "AI가 문구를 다시 쓰고 있어요. 저장된 조사 결과만 쓰고 검색은 다시 하지 않아요.",
+    friends: "AI가 확정한 친구에 맞춰 친구 카드를 다시 쓰고 있어요. 자료에 없는 친구만 짧게 찾아봐요.",
     compose: "AI가 입력한 자료로 구성안을 쓰고 있어요. 사이트에는 접속하지 않아요.",
     design: "AI가 카드 5장을 다시 디자인하고 있어요. 1~3분 걸릴 수 있어요.",
     redesign: "AI가 이 카드만 다시 디자인하고 있어요. 1분 안팎 걸려요. 다른 카드는 그대로예요.",
@@ -95,6 +96,7 @@
 
   const visibleAssets = () => (job ? job.assets.filter((a) => !a.removed) : []);
   const isProcessing = (asset) => asset.cutout && asset.cutout.status === "processing";
+  const identifying = () => Object.values((job && job.slotIdentities) || {}).some((slots) => Object.values(slots).some((r) => r.status === "processing"));
   const hasCutout = (asset) => Boolean(asset.cutout && asset.cutout.file);
 
   function assetUrl(assetId, variant = "original") {
@@ -752,7 +754,7 @@
     if (job.state !== "draft" && (first || limit > lastMaxStep || viewStep > limit)) goToStep(limit, !first);
     lastMaxStep = limit;
     await renderJob();
-    if (job.state === "running" || job.aiTask || visibleAssets().some(isProcessing)) pollTimer = setTimeout(poll, POLL_MS);
+    if (job.state === "running" || job.aiTask || visibleAssets().some(isProcessing) || identifying()) pollTimer = setTimeout(poll, POLL_MS);
   }
 
   async function poll() {
@@ -863,9 +865,32 @@
       version: 3, frame: card.frame, template: tpl.id, page: index + 1, total: FRAMES.length,
       no: tpl.legacy && tpl.kind === "body" ? String(index).padStart(2, "0") : "",
       fields: { ...inherited, ...values.fields }, source: tpl.kind !== "cover" ? values.source || "" : "",
-      images: Object.fromEntries(tpl.images.map((slot) => [slot.key, slotImageFor(card.frame, slot.key)])),
+      images: linkedImages(tpl, values.fields, card.frame),
     };
   }
+
+  // 서버의 templates.linked_images와 같은 규칙: 친구 항목의 slot 키로 사진을 찾아 그 항목이 그려지는 자리에 넣습니다
+  function linkedImages(tpl, fields, frame) {
+    const images = Object.fromEntries(tpl.images.map((slot) => [slot.key, slotImageFor(frame, slot.key)]));
+    const result = { ...images };
+    const groups = {};
+    for (const slot of tpl.images.filter((s) => s.identify)) (groups[slot.identify] = groups[slot.identify] || []).push(slot.key);
+    for (const [fieldKey, keys] of Object.entries(groups)) {
+      const items = (fields || {})[fieldKey] || [];
+      if (!items.some((item) => item && item.slot)) continue;
+      keys.forEach((key, i) => {
+        const linked = (items[i] || {}).slot || "";
+        result[key] = keys.includes(linked) ? images[linked] : null;
+      });
+    }
+    return result;
+  }
+
+  const identityOf = (frame, key) => {
+    const record = (((job.slotIdentities || {})[frame]) || {})[key];
+    const image = currentSlot(frame, key);
+    return record && image && record.assetId === image.assetId ? record : null;
+  };
 
   function imageVersions(spec) {
     return Object.values(spec.images || {}).filter(Boolean).map((image) => {
@@ -1042,12 +1067,38 @@
       file, source, el("label", { class: "flag-field" }, agree, el("span", { textContent: "카드에 써도 되는 이미지예요 (사용 권한: 허가됨)" })), button, error);
   }
 
+  // 친구 칸: 사진 속 캐릭터 이름을 보여 주고 사용자가 고쳐서 확정합니다. 친구 문구는 확정한 이름으로만 써요
+  function identityPanel(frame, slot) {
+    const record = identityOf(frame, slot.key);
+    const status = record ? record.status : "manual";
+    const field = templateFor(frame).fields.find((f) => f.key === slot.identify);
+    const nameMax = field.fields.find((s) => s.key === field.linkedName).max;
+    let note;
+    if (status === "processing") note = el("small", { class: "cutout-status" }, el("span", { class: "spinner", "aria-hidden": "true" }), "사진 속 캐릭터 이름을 확인하고 있어요. 기다리지 않고 직접 입력해도 돼요.");
+    else if (status === "suggested" && record.suggested) note = el("small", { class: "hint", textContent: `AI 인식: ${record.suggested} (확신도 ${record.confidence})${record.evidence ? ` · 근거: ${record.evidence}` : ""}. 맞으면 확정하고, 다르면 고쳐서 확정해 주세요.` });
+    else if (status === "suggested") note = el("small", { class: "hint", textContent: `AI가 이름을 확신하지 못했어요${record.candidates.length ? ` (후보: ${record.candidates.join(", ")})` : ""}. 이름을 직접 입력해 주세요.` });
+    else if (status === "failed") note = el("small", { class: "cutout-error", textContent: record.error });
+    else if (status === "confirmed") note = el("small", { class: "hint", textContent: `확정: ${record.name}. 친구 문구는 이 이름으로만 써요.` });
+    else note = el("small", { class: "hint", textContent: "사진 속 캐릭터 이름을 입력해 확정해 주세요." });
+    const input = el("input", {
+      type: "text", maxLength: nameMax, placeholder: "캐릭터 이름", "aria-label": `${frame} ${slot.label} 캐릭터 이름`,
+      value: status === "confirmed" ? record.name : (record && record.suggested) || "", dataset: { identityName: `${frame}:${slot.key}` },
+    });
+    const button = el("button", {
+      class: "btn btn-primary btn-small", type: "button", textContent: status === "confirmed" ? "이름 바꾸기" : "이 이름으로 확정",
+      dataset: { identityConfirm: `${frame}:${slot.key}` },
+      onclick: () => slotAction(`cards/${frame}/slots/${slot.key}/identity`, jsonInit("PUT", { name: input.value })),
+    });
+    return el("div", { class: "slot-identity", dataset: { identity: `${frame}:${slot.key}` } },
+      el("label", { class: "tile-image" }, el("span", { textContent: `캐릭터 이름 (${nameMax}자 이내)` }), input), button, note);
+  }
+
   function slotPanel(frame, slot, context) {
     const current = slotImageFor(frame, slot.key);
     const asset = current && job.assets.find((a) => a.id === current.assetId);
     const suggestion = !current && suggestionOf(frame, slot.key);
     const key = JSON.stringify([current && currentSlot(frame, slot.key), suggestion, asset, permittedAssets().map((a) => [a.id, a.name, a.useVariant, hasCutout(a)]),
-      options.cutout.available, job.state]);
+      options.cutout.available, job.state, slot.identify ? identityOf(frame, slot.key) : null]);
     const cacheKey = `${context}:${frame}:${slot.key}`;
     const cached = slotPanels.get(cacheKey);
     if (cached && cached.key === key) return cached.node;
@@ -1061,6 +1112,7 @@
         el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "적용", dataset: { applySuggestion: `${frame}:${slot.key}` },
           onclick: () => slotAction("slot-suggestions/apply", jsonInit("POST", { frame, slot: slot.key })) })));
     }
+    if (current && slot.identify) node.append(identityPanel(frame, slot));
     if (current && asset) node.append(slotCompare(asset), slotBackground(frame, slot, current, asset), slotAdjust(frame, slot, current));
     node.append(slotUpload(frame, slot, current));
     slotPanels.set(cacheKey, { key, node });
@@ -1087,7 +1139,7 @@
   function fieldText(field, value) {
     if (field.type === "flag") return value ? "예" : "아니요";
     if (field.type === "list") return value.map((t) => `#${t}`).join(" ");
-    if (field.type === "items") return value.map((item) => field.fields.map((sub) => item[sub.key]).filter(Boolean).join(" · ")).join("\n");
+    if (field.type === "items") return value.map((item) => field.fields.filter((sub) => !sub.hidden).map((sub) => item[sub.key]).filter(Boolean).join(" · ")).join("\n");
     if (field.type === "pairs") return value.map((p) => `${p.label}: ${p.value}`).join(" · ");
     return value;
   }
@@ -1137,6 +1189,16 @@
         const item = (value || [])[i] || {};
         const row = el("div", { class: "item-row", dataset: { item: `${field.key}-${i}` } }, el("b", { textContent: `${i + 1}` }));
         for (const sub of field.fields) {
+          if (sub.hidden) {
+            row.append(el("input", { type: "hidden", value: item[sub.key] || "", name: `field-${field.key}-${i}-${sub.key}` }));
+            continue;
+          }
+          if (sub.key === field.linkedName && item.slot) {
+            // 사진으로 확정한 이름은 친구 칸에서만 바꿉니다 (여기서 고쳐도 서버가 확정한 이름으로 되돌려요)
+            const locked = el("input", { type: "text", value: item[sub.key] || "", name: `field-${field.key}-${i}-${sub.key}`, readOnly: true });
+            row.append(editField(`${sub.label} · 친구 칸 사진에서 확정`, locked, sub.max));
+            continue;
+          }
           const input = sub.type === "multiline"
             ? el("textarea", { value: item[sub.key] || "", rows: 2, name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.default || "" })
             : el("input", { type: "text", value: item[sub.key] || "", name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.default || "" });
