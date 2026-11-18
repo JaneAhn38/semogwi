@@ -22,10 +22,16 @@ fill.js           ← 템플릿에 글·이미지를 넣는 헬퍼
 slots.json        ← 장마다 넣을 수 있는 글자/이미지 자리 목록
 render-png.mjs    ← 데이터 → PNG 1080×1350 자동 저장 예시 (Playwright)
 examples/         ← 예시 데이터 (팝업 5장)
-fonts/            ← Jua, Gowun Dodum (woff2·ttf) + fonts.css + 라이선스
+fonts/            ← Jua, Gowun Dodum (woff2) + fonts.css + 라이선스
 index.html        ← 20장 한눈에 보기 (브라우저로 열기)
 original/         ← Claude 디자인 캔버스 원본 파일 (.dc.html, canvas.json)
 ```
+
+폰트 파일 보관 방식:
+
+- **GitHub에 보관**: `Jua-Regular.woff2`, `GowunDodum-Regular.woff2`, `fonts.css`, 라이선스 파일(`OFL-Jua.txt`, `OFL-GowunDodum.txt`)
+- **로컬에만 보관 (GitHub에 포함하지 않음)**: `Jua-Regular.ttf`, `GowunDodum-Regular.ttf` (woff2와 같은 글꼴, 약 9.3MB)
+- `fonts.css`는 woff2를 먼저 읽고 TTF는 woff2를 못 읽을 때만 쓰는 예비용이라, TTF가 없어도 현재 브라우저(Chrome·Edge·Safari·Firefox)에서 똑같이 표시됩니다.
 
 `original/`의 `.dc.html`은 Claude 디자인 캔버스 전용 형식이라 그 편집기 밖에서는 그대로 열리지 않아요. 보관용으로 넣었어요. 웹앱에는 `templates/`를 쓰세요. 디자인은 같아요.
 
