@@ -3,7 +3,7 @@
   "contentType": "character",
   "kind": "body",
   "label": "마무리",
-  "reference": "reference/캐릭터 소개 · 05 마무리.png",
+  "reference": "reference/캐릭터 소개 · 05 마무리 (새 디자인).png",
   "fonts": {
     "display": "Jua",
     "body": "Gowun Dodum"
@@ -17,314 +17,104 @@
     "white": "#FFFFFF",
     "paper": "#FFF8F0"
   },
+  "purpose": "마무리 카드. 다음 편에 소개할 캐릭터를 예고하고 팔로우를 안내한다. 다음 편 정보는 사용자가 구성안에서 입력하며, 비어 있으면 기본 안내 문구가 나온다.",
+  "showSource": false,
+  "allowEmpty": true,
   "fields": [
     {
-      "key": "recommend_for",
-      "label": "이런 분께",
+      "key": "next_name",
+      "label": "다음 캐릭터 이름",
       "type": "text",
-      "max": 16,
-      "required": true
+      "max": 10,
+      "userOnly": true,
+      "placeholder": "???"
     },
     {
-      "key": "official_account",
-      "label": "공식 계정",
+      "key": "next_hint",
+      "label": "힌트",
       "type": "text",
       "max": 18,
-      "item": "official_account"
+      "userOnly": true,
+      "placeholder": "다음 캐릭터는 아직 비밀이에요"
     },
     {
-      "key": "related_character",
-      "label": "같이 보면 좋은 캐릭터",
+      "key": "next_date",
+      "label": "공개일",
       "type": "text",
-      "max": 16,
-      "item": "friends"
+      "max": 12,
+      "userOnly": true,
+      "placeholder": "곧 공개 예정"
+    },
+    {
+      "key": "next_episode",
+      "label": "회차",
+      "type": "text",
+      "max": 8,
+      "userOnly": true,
+      "placeholder": "다음 회차"
+    },
+    {
+      "key": "teaser",
+      "label": "다음 편 예고",
+      "type": "text",
+      "max": 36,
+      "userOnly": true,
+      "placeholder": "다음 편에서 또 다른 귀여운 친구를 소개할게요"
     }
   ],
   "images": [],
   "elements": [
-    {
-      "type": "header",
-      "tag": "캐릭터 소개",
-      "tagFill": "accent"
-    },
-    {
-      "type": "text",
-      "text": "이런 분께 추천해요",
-      "box": {
-        "x": 72,
-        "y": 178,
-        "w": 936,
-        "h": 84
-      },
-      "font": "display",
-      "size": 64,
-      "color": "ink",
-      "align": "left",
-      "valign": "middle",
-      "maxLines": 1
-    },
-    {
-      "type": "rect",
-      "box": {
-        "x": 74,
-        "y": 297,
-        "w": 932,
-        "h": 321
-      },
-      "radius": 32,
-      "fill": "white"
-    },
-    {
-      "type": "line",
-      "x1": 74,
-      "y1": 404,
-      "x2": 1006,
-      "y2": 404,
-      "color": "ink",
-      "lineWidth": 4
-    },
-    {
-      "type": "line",
-      "x1": 74,
-      "y1": 511,
-      "x2": 1006,
-      "y2": 511,
-      "color": "ink",
-      "lineWidth": 4
-    },
-    {
-      "type": "rect",
-      "box": {
-        "x": 74,
-        "y": 297,
-        "w": 932,
-        "h": 321
-      },
-      "radius": 32,
-      "stroke": "ink",
-      "lineWidth": 4
-    },
-    {
-      "type": "check",
-      "cx": 135.5,
-      "cy": 351,
-      "r": 25,
-      "lineWidth": 3
-    },
-    {
-      "type": "check",
-      "cx": 135.5,
-      "cy": 458,
-      "r": 25,
-      "lineWidth": 3,
-      "if": "official_account"
-    },
-    {
-      "type": "check",
-      "cx": 135.5,
-      "cy": 565,
-      "r": 25,
-      "lineWidth": 3,
-      "if": "related_character"
-    },
-    {
-      "type": "text",
-      "text": "이런 분께",
-      "box": {
-        "x": 188,
-        "y": 326,
-        "w": 190,
-        "h": 46
-      },
-      "font": "display",
-      "size": 30,
-      "color": "inkSoft",
-      "align": "left",
-      "valign": "middle",
-      "maxLines": 1
-    },
-    {
-      "type": "text",
-      "text": "공식 계정",
-      "box": {
-        "x": 188,
-        "y": 435,
-        "w": 190,
-        "h": 46
-      },
-      "font": "display",
-      "size": 30,
-      "color": "inkSoft",
-      "align": "left",
-      "valign": "middle",
-      "maxLines": 1,
-      "if": "official_account"
-    },
-    {
-      "type": "text",
-      "text": "같이 보면",
-      "box": {
-        "x": 188,
-        "y": 544,
-        "w": 190,
-        "h": 46
-      },
-      "font": "display",
-      "size": 30,
-      "color": "inkSoft",
-      "align": "left",
-      "valign": "middle",
-      "maxLines": 1,
-      "if": "related_character"
-    },
-    {
-      "type": "text",
-      "field": "recommend_for",
-      "box": {
-        "x": 387,
-        "y": 324,
-        "w": 590,
-        "h": 50
-      },
-      "font": "display",
-      "size": 35,
-      "minSize": 24,
-      "color": "ink",
-      "align": "left",
-      "valign": "middle",
-      "maxLines": 1
-    },
-    {
-      "type": "text",
-      "field": "official_account",
-      "box": {
-        "x": 387,
-        "y": 433,
-        "w": 590,
-        "h": 50
-      },
-      "font": "display",
-      "size": 35,
-      "minSize": 24,
-      "color": "ink",
-      "align": "left",
-      "valign": "middle",
-      "maxLines": 1
-    },
-    {
-      "type": "text",
-      "field": "related_character",
-      "box": {
-        "x": 387,
-        "y": 542,
-        "w": 590,
-        "h": 50
-      },
-      "font": "display",
-      "size": 35,
-      "minSize": 24,
-      "color": "ink",
-      "align": "left",
-      "valign": "middle",
-      "maxLines": 1
-    },
-    {
-      "type": "rect",
-      "box": {
-        "x": 73,
-        "y": 657,
-        "w": 934,
-        "h": 88
-      },
-      "radius": 24,
-      "fill": "accent"
-    },
-    {
-      "type": "text",
-      "text": "출처",
-      "box": {
-        "x": 104,
-        "y": 679,
-        "w": 80,
-        "h": 42
-      },
-      "font": "display",
-      "size": 30,
-      "color": "ink",
-      "align": "left",
-      "valign": "middle",
-      "maxLines": 1
-    },
-    {
-      "type": "text",
-      "text": "{source_text}",
-      "box": {
-        "x": 179,
-        "y": 679,
-        "w": 800,
-        "h": 42
-      },
-      "font": "body",
-      "size": 28,
-      "minSize": 22,
-      "color": "inkSoft",
-      "align": "left",
-      "valign": "middle",
-      "maxLines": 1
-    },
-    {
-      "type": "asset",
-      "src": "mascot",
-      "box": {
-        "x": 456,
-        "y": 864,
-        "w": 168,
-        "h": 148
-      }
-    },
-    {
-      "type": "text",
-      "text": "세상의 모든 귀여운 것들, 또 만나요!",
-      "box": {
-        "x": 90,
-        "y": 1024,
-        "w": 900,
-        "h": 46
-      },
-      "font": "display",
-      "size": 40,
-      "color": "ink",
-      "align": "center",
-      "valign": "middle",
-      "maxLines": 1
-    },
-    {
-      "type": "text",
-      "text": "저장해 두고 필요할 때 꺼내 보세요",
-      "box": {
-        "x": 90,
-        "y": 1088,
-        "w": 900,
-        "h": 36
-      },
-      "font": "body",
-      "size": 26,
-      "color": "inkSoft",
-      "align": "center",
-      "valign": "middle",
-      "maxLines": 1
-    },
-    {
-      "type": "footer",
-      "left": "세모귀 팔로우하고 소식 받기"
-    }
+    {"type": "header", "tag": "캐릭터 소개", "tagFill": "accent"},
+    {"type": "text", "text": "다음 캐릭터도 보고 싶다면", "box": {"x": 72, "y": 160, "w": 936, "h": 92}, "font": "display", "size": 72,
+     "color": "ink", "align": "left", "valign": "middle", "maxLines": 1},
+
+    {"type": "rect", "box": {"x": 74, "y": 286, "w": 932, "h": 404}, "radius": 40, "fill": "white"},
+    {"type": "rect", "box": {"x": 74, "y": 286, "w": 932, "h": 89}, "radius": [40, 40, 0, 0], "fill": "accent"},
+    {"type": "line", "x1": 74, "y1": 375, "x2": 1006, "y2": 375, "color": "ink", "lineWidth": 4},
+    {"type": "rect", "box": {"x": 74, "y": 286, "w": 932, "h": 404}, "radius": 40, "stroke": "ink", "lineWidth": 5},
+    {"type": "text", "text": "NEXT CHARACTER", "box": {"x": 116, "y": 307, "w": 520, "h": 46}, "font": "display", "size": 32,
+     "letterSpacing": 6, "color": "ink", "align": "left", "valign": "middle", "maxLines": 1},
+    {"type": "text", "field": "next_episode", "prefix": "No. ", "fallback": "다음 회차", "box": {"x": 640, "y": 309, "w": 322, "h": 44},
+     "font": "body", "size": 28, "minSize": 20, "color": "ink", "align": "right", "valign": "middle", "maxLines": 1},
+
+    {"type": "circle", "cx": 232, "cy": 532, "r": 113, "fill": "accent", "stroke": "muted", "lineWidth": 4, "dash": [13, 9]},
+    {"type": "text", "text": "?", "box": {"x": 132, "y": 446, "w": 200, "h": 172}, "font": "display", "size": 112, "color": "ink",
+     "align": "center", "valign": "middle", "maxLines": 1},
+
+    {"type": "text", "text": "이름", "box": {"x": 388, "y": 440, "w": 110, "h": 44}, "font": "display", "size": 28, "color": "inkSoft",
+     "align": "left", "valign": "middle", "maxLines": 1},
+    {"type": "text", "text": "힌트", "box": {"x": 388, "y": 506, "w": 110, "h": 44}, "font": "display", "size": 28, "color": "inkSoft",
+     "align": "left", "valign": "middle", "maxLines": 1},
+    {"type": "text", "text": "공개", "box": {"x": 388, "y": 572, "w": 110, "h": 44}, "font": "display", "size": 28, "color": "inkSoft",
+     "align": "left", "valign": "middle", "maxLines": 1},
+    {"type": "text", "field": "next_name", "fallback": "???", "box": {"x": 506, "y": 440, "w": 470, "h": 46}, "font": "body", "size": 30,
+     "minSize": 22, "color": "ink", "align": "left", "valign": "middle", "maxLines": 1},
+    {"type": "text", "field": "next_hint", "fallback": "다음 캐릭터는 아직 비밀이에요", "box": {"x": 506, "y": 506, "w": 470, "h": 46},
+     "font": "body", "size": 30, "minSize": 22, "color": "ink", "align": "left", "valign": "middle", "maxLines": 1},
+    {"type": "text", "field": "next_date", "fallback": "곧 공개 예정", "box": {"x": 506, "y": 572, "w": 470, "h": 46}, "font": "body",
+     "size": 30, "minSize": 22, "color": "ink", "align": "left", "valign": "middle", "maxLines": 1},
+
+    {"type": "rect", "box": {"x": 72, "y": 724, "w": 936, "h": 172}, "radius": 36, "fill": "ink"},
+    {"type": "text", "text": "다음 편 예고", "box": {"x": 116, "y": 756, "w": 600, "h": 46}, "font": "display", "size": 32,
+     "color": "accent", "align": "left", "valign": "middle", "maxLines": 1},
+    {"type": "text", "field": "teaser", "fallback": "다음 편에서 또 다른 귀여운 친구를 소개할게요", "box": {"x": 116, "y": 812, "w": 860, "h": 62},
+     "font": "body", "size": 29, "minSize": 22, "lineHeight": 1.3, "color": "white", "align": "left", "valign": "middle", "maxLines": 2},
+
+    {"type": "asset", "src": "mascot", "box": {"x": 437, "y": 915, "w": 206, "h": 185}},
+    {"type": "text", "text": "팔로우하면 다음 친구를 제일 먼저 만나요!", "box": {"x": 72, "y": 1104, "w": 936, "h": 58}, "font": "display",
+     "size": 42, "color": "ink", "align": "center", "valign": "middle", "maxLines": 1},
+    {"type": "text", "text": "저장해 두고 다음 편도 기다려 주세요", "box": {"x": 90, "y": 1172, "w": 900, "h": 40}, "font": "body", "size": 26,
+     "color": "inkSoft", "align": "center", "valign": "middle", "maxLines": 1},
+    {"type": "footer", "left": "세모귀 팔로우하고 소식 받기"}
   ],
   "sample": {
-    "source": "출처: [공식 계정 · 홈페이지 링크]",
+    "source": "",
     "fields": {
-      "recommend_for": "[예: 소심한 친구가 귀여운 분]",
-      "official_account": "[@공식 계정]",
-      "related_character": "[함께 보면 좋은 캐릭터]"
+      "next_name": "[???]",
+      "next_hint": "[다음 캐릭터 힌트 한 줄]",
+      "next_date": "[MM월 DD일]",
+      "next_episode": "[다음 회차]",
+      "teaser": "[세모귀와 어떤 사이인지 한 줄 — 예: 세모귀의 단짝이 찾아와요]"
     }
   }
 }

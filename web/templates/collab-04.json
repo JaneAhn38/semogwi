@@ -291,7 +291,8 @@
         "h": 120
       },
       "radius": 28,
-      "fill": "accent"
+      "fill": "accent",
+      "if": "stores"
     },
     {
       "type": "rect",
@@ -302,7 +303,8 @@
         "h": 120
       },
       "radius": 28,
-      "fill": "accent"
+      "fill": "accent",
+      "if": "purchase_condition"
     },
     {
       "type": "text",
