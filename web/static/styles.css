@@ -367,7 +367,7 @@ body.format-template .legacy-only, body:not(.format-template) .template-only { d
 .sub-title { margin: 14px 0 6px; font: 400 1rem var(--font-display); }
 #notes { resize: vertical; line-height: 1.5; }
 .research-checklist { display: grid; gap: 6px; margin: 0 0 12px; padding: 0; list-style: none; }
-.research-checklist li { display: grid; grid-template-columns: 7.5em 9em minmax(0, 1fr); gap: 2px 10px; align-items: start; padding: 8px 12px; font-size: .9rem; background: var(--cream); border-radius: 12px; }
+.research-checklist li { display: grid; grid-template-columns: 9em minmax(0, 1fr); gap: 2px 10px; align-items: start; padding: 8px 12px; font-size: .9rem; background: var(--cream); border-radius: 12px; }
 .research-checklist .verify { justify-self: start; }
 .research-checklist b { font-family: var(--font-display); font-weight: 400; }
 .research-checklist .item-detail { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
@@ -387,7 +387,6 @@ body.format-template .legacy-only, body:not(.format-template) .template-only { d
 .verify.is-ok { color: var(--mint-deep); background: var(--mint-soft); }
 .verify.is-no { color: #8c1d40; background: #ffe9ef; }
 .verify.is-none { color: var(--ink-soft); background: #eeeaf0; } /* 미조사·자료 없음: 오류가 아니라 정보가 없는 상태 */
-.research-summary { margin: 0 0 8px; font-size: .9rem; color: var(--ink-soft); }
 .item-coverage { color: #8a5a00; font-size: .84rem; }
 .evidence-list, .item-attempts { font-size: .82rem; color: var(--ink-soft); }
 .evidence a { overflow-wrap: anywhere; }

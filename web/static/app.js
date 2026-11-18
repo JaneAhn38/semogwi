@@ -179,13 +179,6 @@
     return (card.sourceIds || []).map((id) => job.research.sources.find((s) => s.id === id)).filter(Boolean);
   }
 
-  function verifyBadge(source) {
-    if (source.verification === "image") return el("span", { class: "verify is-image", textContent: "상세 이미지 판독" });
-    if (source.verification === "user_provided") return el("span", { class: "verify is-user", textContent: "사용자 제공" });
-    const text = { fetched: "페이지 읽음", search_result: "검색 목록에만 있음", restricted: "자동 접근 금지" }[source.verification] || "미확인";
-    return el("span", { class: `verify ${source.verification === "fetched" ? "is-ok" : "is-no"}`, textContent: text });
-  }
-
   function sourceLink(source) {
     // 상세 이미지는 저장된 이미지를 열어 AI가 읽은 값과 대조할 수 있게 합니다
     if (source.verification === "image" && source.imageId) return el("a", { href: `/api/jobs/${job.id}/detail-images/${source.imageId}`, target: "_blank", rel: "noopener", textContent: `${source.id} ${source.title}` });
@@ -211,11 +204,10 @@
     renderProblems(research);
     $("research-queries").replaceChildren(...research.queries.map((q) => el("li", { textContent: q })));
     $("research-sources").replaceChildren(...research.sources.map((s) =>
-      el("li", { dataset: { verification: s.verification } }, verifyBadge(s),
-        s.kind === "user" ? "" : el("span", { class: "tag tag-demo", textContent: s.officialBasis === "registered" ? "공식(등록)" : s.kind === "official" ? "공식(AI 판단)" : "2차 출처" }),
-        s.verification === "fetched" && s.officialBasis !== "registered" ? el("span", { class: "tag tag-demo", textContent: "이용 조건 미확인" }) : "", sourceLink(s))));
+      // 확인 상태·분류 배지는 표시하지 않습니다 (verification·kind·officialBasis는 data 속성과 조사 데이터에 그대로)
+      el("li", { dataset: { verification: s.verification, kind: s.kind || "" } }, sourceLink(s))));
     $("research-facts").replaceChildren(...research.facts.map((f) =>
-      el("li", { dataset: { origin: f.origin || "ai" } }, factBadge(f, research), ` ${f.text}`)));
+      el("li", { dataset: { origin: f.origin || "ai" } }, f.text)));
   }
 
   // 캐릭터 소개: 친구·가족 캐릭터별로 찾은 TMI와 근거 문장·출처, 찾지 못한 캐릭터, 쓰지 않은 내용과 이유
@@ -234,8 +226,7 @@
     $("research-people").replaceChildren(...groups.flatMap(([key, label]) => people[key].map((p) =>
       el("li", { dataset: { person: `${key}:${p.name}` } },
         el("span", { class: "tag tag-demo", textContent: label }), " ",
-        el("b", { textContent: p.name }), p.relation ? ` (${p.relation})` : "", " ",
-        p.tmi ? stateBadge(p.state || "secondary") : stateBadge("missing"),
+        el("b", { textContent: p.name }), p.relation ? ` (${p.relation})` : "",
         el("div", { class: "person-tmi", textContent: p.tmi ? `TMI: ${p.tmi}` : "TMI: 출처에서 찾지 못했어요 (만들어 넣지 않았어요)" }),
         p.quote ? el("small", { class: "hint", textContent: `근거 문장: “${p.quote}”` }) : "",
         (p.sourceIds || []).length ? el("div", { class: "card-links" }, ...sourceLinksOf(p.sourceIds)) : ""))));
@@ -243,20 +234,7 @@
       el("li", { textContent: `쓰지 않은 내용 · ${r.name}: ${r.tmi} (${r.reason})` })));
   }
 
-  function factBadge(fact, research) {
-    if (fact.origin === "user") return el("span", { class: "verify is-user", textContent: "사용자 제공" });
-    if (fact.origin === "image") return el("span", { class: "verify is-image", textContent: "상세 이미지" });
-    const read = (fact.sourceIds || []).some((id) => (research.sources.find((s) => s.id === id) || {}).verification === "fetched");
-    return el("span", { class: `verify ${read ? "is-ok" : "is-no"}`, textContent: read ? "페이지에서 확인" : "확인 안 됨" });
-  }
-
-  // 조사 항목·필드의 근거 상태 (서버 app/research.py와 같은 이름)
-  const ITEM_STATE = {
-    verified: ["공식 확인", "is-ok"], secondary: ["2차 자료", "is-ok"], image: ["상세 이미지", "is-image"], user: ["사용자 제공", "is-user"], listed: ["검색 목록만", "is-no"],
-    unverified: ["근거 없음", "is-no"], conflict: ["출처 충돌", "is-no"], missing: ["정보 확인 필요", "is-no"],
-    // 값이 없는 이유 (조사와 구성안을 나눈 조사부터)
-    not_searched: ["미조사", "is-none"], not_found: ["자료 없음", "is-none"], failed: ["검색·읽기 실패", "is-no"], blocked: ["접근 제한", "is-no"],
-  };
+  // 조사 항목의 근거 상태(서버 app/research.py)는 화면에 배지로 표시하지 않습니다. 값이 없는 항목의 설명 문장만 씁니다
   const EMPTY_STATES = ["not_searched", "not_found", "failed", "blocked", "missing"];
   const EMPTY_TEXT = {
     not_searched: "이번 조사에서 찾아보지 않았어요",
@@ -266,7 +244,6 @@
     missing: "찾지 못했어요",
   };
   const ATTEMPT_TEXT = { read: "읽음", failed: "읽기 실패", blocked: "접근 제한", unknown: "조회 기록 없음" };
-  const stateBadge = (state) => el("span", { class: `verify ${(ITEM_STATE[state] || ["", "is-no"])[1]}`, dataset: { state }, textContent: (ITEM_STATE[state] || [state])[0] });
 
   function sourceLinksOf(ids) {
     return ids.map((id) => job.research.sources.find((s) => s.id === id)).filter(Boolean).map(sourceLink);
@@ -291,33 +268,15 @@
     }
   }
 
-  // 조사 항목 요약: 확인·자료 없음·실패·접근 제한·미조사·검토 필요 개수
-  function renderResearchSummary(items) {
-    const node = $("research-summary");
-    const count = (states) => items.filter((i) => states.includes(i.state)).length;
-    const review = items.filter((i) => (i.coverage && i.coverage.review) || ["conflict", "listed", "unverified"].includes(i.state)).length;
-    const parts = [`확인 ${items.length - count(EMPTY_STATES)}/${items.length}`];
-    for (const state of ["not_found", "failed", "blocked", "not_searched", "missing"]) {
-      const n = count([state]);
-      if (n) parts.push(`${ITEM_STATE[state][0]} ${n}`);
-    }
-    if (review) parts.push(`검토 필요 ${review}`);
-    node.textContent = parts.join(" · ");
-    node.hidden = !items.length;
-  }
-
   // 정보별 근거: 어느 페이지에서 언제 확인했는지, 페이지를 실제로 읽었는지, 근거 문장을 검증했는지(아직 안 함)를 따로 보여 줍니다
   function evidenceLine(record) {
     const link = /^https?:\/\//.test(record.url) ? el("a", { href: record.url, target: "_blank", rel: "noopener noreferrer", textContent: record.title || record.url }) : el("span", { textContent: record.title || record.sourceId });
-    const read = record.pageRead ? "페이지 읽음" : record.verification === "user_provided" ? "사용자 제공" : record.verification === "image" ? "상세 이미지" : "페이지 읽지 않음";
-    const quote = record.quoteCheck === "found" ? "근거 문장 확인됨" : record.quoteCheck === "not_found" ? "근거 문장 못 찾음" : "근거 문장 미검증";
-    return el("span", { class: "evidence" }, link, ` · ${read} · ${quote}${record.at ? ` · ${record.at.replace("T", " ")}` : ""}`);
+    return el("span", { class: "evidence" }, link, record.at ? ` · ${record.at.replace("T", " ")}` : "");
   }
 
   function renderChecklist(research) {
     const items = research.items || [];
     $("research-checklist-wrap").hidden = !items.length;
-    renderResearchSummary(items);
     const editable = isTemplateJob() && job.outline && ["waiting_outline", "waiting_preview", "done"].includes(job.state);
     $("research-checklist").replaceChildren(...items.map((item) => {
       const empty = EMPTY_STATES.includes(item.state);
@@ -349,7 +308,8 @@
       const needs = [...EMPTY_STATES, "conflict", "unverified", "listed"].includes(item.state) || (item.strict && item.state === "secondary");
       const used = editable && job.outline.cards.some((c) => templateFor(c.frame).fields.some((f) => f.item === item.key));
       if (needs && used) detail.append(el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "카드에서 입력", dataset: { jumpItem: item.key }, onclick: () => jumpToItem(item.key) }));
-      return el("li", { dataset: { item: item.key, state: item.state } }, stateBadge(item.state), el("b", { textContent: item.label }), detail);
+      // 자료 상태 배지는 화면에 표시하지 않습니다 (분류·검증 값은 data-state와 조사 데이터에 그대로 둠)
+      return el("li", { dataset: { item: item.key, state: item.state } }, el("b", { textContent: item.label }), detail);
     }));
   }
 
@@ -507,7 +467,7 @@
       detail.append(el("span", {}, "출처: ", el("a", { href: detailUrl(refs[item.imageRef] || item.imageId), target: "_blank", rel: "noopener",
         textContent: `${item.imageRef} 상세 이미지${item.tile ? ` · 조각 ${item.tile}` : ""}` })));
       return el("li", { dataset: { extract: item.key, unclear: String(item.unclear) } },
-        stateBadge(item.unclear ? "missing" : "image"), el("b", { textContent: item.label || item.key }), detail);
+        el("b", { textContent: item.label || item.key }), detail);
     }));
     $("detail-notes").replaceChildren(...(extraction.notes || []).map((text) => el("li", { textContent: text })));
   }
@@ -1300,7 +1260,7 @@
       const active = !field.if || SemogwiRenderer.conditionMet(tpl, card.fields, field.if);
       if (!active && empty) continue; // 다른 카테고리의 빈 목록은 보여 주지 않습니다
       const dd = el("dd", { class: empty || !active ? "is-empty" : "", dataset: { field: field.key } });
-      if (states[field.key] && job.mode === "ai" && active) dd.append(stateBadge(states[field.key]));
+      if (states[field.key]) dd.dataset.state = states[field.key]; // 근거 상태는 화면에 배지로 표시하지 않고 속성으로만 둡니다
       if (!active) dd.append("보관 중 · 카테고리를 바꾸면 카드에 보여요: ");
       dd.append(empty ? (field.required ? "비어 있음 · 입력이 필요해요" : field.placeholder ? `비어 있음 · 기본 문구 '${field.placeholder}'로 보여요` : "비어 있음 · 카드에서 숨겨요") : fieldText(field, value === undefined && field.type === "choice" ? field.default : value));
       list.append(el("dt", { textContent: field.label }), dd);
@@ -1568,7 +1528,7 @@
             card.edited ? el("span", { class: "edited-mark", textContent: "직접 수정" }) : job.mode === "ai" ? tag("AI 작성", "real") : tag("예시 내용"),
             fieldSummary(card),
             ...(job.mode === "ai" && sourcesOf(card).length
-              ? [el("div", { class: "card-links" }, ...sourcesOf(card).flatMap((s) => [verifyBadge(s), sourceLink(s)]))]
+              ? [el("div", { class: "card-links" }, ...sourcesOf(card).map(sourceLink))]
               : []),
             ...notes,
             slotControls(card.frame),
@@ -1696,7 +1656,7 @@
             el("p", { class: "outline-body", textContent: card.body }),
             el("p", { class: "outline-source", textContent: card.source || "출처 없음" }),
             ...(job.mode === "ai" && sourcesOf(card).length
-              ? [el("div", { class: "card-links" }, ...sourcesOf(card).flatMap((s) => [verifyBadge(s), sourceLink(s)]))]
+              ? [el("div", { class: "card-links" }, ...sourcesOf(card).map(sourceLink))]
               : []),
             ...notes),
           el("div", { class: "outline-buttons" },
@@ -2105,7 +2065,7 @@
 
   function versionLabel(v) {
     const type = typeLabelOf(v.contentType);
-    return `#${v.number} · ${v.researchedAt} 조사 · 읽은 출처 ${v.sourceCount}개(공식 ${v.officialCount}) · ${type}`;
+    return `#${v.number} · ${v.researchedAt} 조사 · 읽은 출처 ${v.sourceCount}개 · ${type}`;
   }
 
   async function renderLibrary() {
@@ -2146,13 +2106,13 @@
     const items = (version.research.items || []).filter((i) => i.value);
     const people = version.people || {};
     const list = el("ul", { class: "library-items" }, ...items.map((item) =>
-      el("li", {}, stateBadge(item.state), ` ${item.label}: ${item.value}`)));
+      el("li", { dataset: { state: item.state } }, `${item.label}: ${item.value}`)));
     const details = version.peopleDetails || {};
     const groups = Object.entries({ friends: "친구", family: "가족" }).filter(([k]) => (people[k] || []).length)
       .flatMap(([k, label]) => (details[k] || people[k].map((name) => ({ name }))).map((p) =>
         el("li", {}, el("b", { textContent: `${label} ${p.name}` }), p.relation ? ` (${p.relation})` : "", ` · TMI: ${p.tmi || "찾지 못함"}`)));
     const sources = el("ul", { class: "library-sources" }, ...version.sources.map((s) =>
-      el("li", {}, verifyBadge(s), " ", /^https?:\/\//.test(s.url) ? el("a", { href: s.url, target: "_blank", rel: "noopener noreferrer", textContent: s.title || s.url }) : s.title)));
+      el("li", { dataset: { verification: s.verification } }, /^https?:\/\//.test(s.url) ? el("a", { href: s.url, target: "_blank", rel: "noopener noreferrer", textContent: s.title || s.url }) : s.title)));
     return el("details", { class: "library-view" },
       el("summary", { textContent: `자료 보기 · 조사일 ${version.researchedAt} · 항목 ${items.length}개 · 사실 ${version.factCount}개${version.hasUserMaterial ? " · 사용자 제공 자료 포함" : ""}` }),
       groups.length ? el("ul", { class: "library-people" }, ...groups) : "", list,
