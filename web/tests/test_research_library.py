@@ -430,3 +430,68 @@ def test_saved_research_keeps_people_tmi_and_passes_it_to_the_outline(client, fa
     card = job["outline"]["cards"][3]
     assert [f["tmi"] for f in card["fields"]["friends"]] == [p["tmi"] for p in FRIEND_TMI] and "p1" in card["sourceIds"]
     assert any("TMI: 공부를 잘하고" in f["text"] for f in job["research"]["facts"])  # 문구를 쓸 AI에게도 전달
+
+
+# ---------- 보관함 관리: 이름 바꾸기·삭제 ----------
+def test_rename_keeps_research_and_survives_reload(client, people_fake):
+    job_id, _ = start_ai(client)
+    info = wait(client, job_id, "waiting_outline")["researchVersion"]
+    path = research_library._path(info["id"])
+    before = json.loads(path.read_text(encoding="utf-8"))
+    assert library(client)[0]["name"] == ""  # 기본 이름은 화면에서 조사일·유형으로 만듭니다
+
+    r = client.patch(f"/api/research-library/{info['id']}", json={"name": "  짱구\n 1차   조사  "})
+    assert r.status_code == 200 and r.json()["name"] == "짱구 1차 조사"
+    after = json.loads(path.read_text(encoding="utf-8"))
+    assert after["name"] == "짱구 1차 조사"
+    assert {k: v for k, v in after.items() if k != "name"} == before  # 조사 자료·출처·날짜·번호는 그대로
+    # 다시 불러와도(새로고침) 이름이 유지됩니다
+    assert library(client)[0]["name"] == "짱구 1차 조사"
+    assert client.get(f"/api/research-library/{info['id']}").json()["name"] == "짱구 1차 조사"
+    # 긴 이름은 40자로 자르고, 빈 이름이면 기본 이름으로 되돌립니다
+    assert len(client.patch(f"/api/research-library/{info['id']}", json={"name": "가" * 80}).json()["name"]) == research_library.NAME_MAX
+    assert client.patch(f"/api/research-library/{info['id']}", json={"name": "   "}).json()["name"] == ""
+    assert "name" not in json.loads(path.read_text(encoding="utf-8"))
+    assert client.patch("/api/research-library/" + "0" * 32, json={"name": "x"}).status_code == 404
+    assert client.patch("/api/research-library/../etc", json={"name": "x"}).status_code in (404, 405)
+
+
+def test_delete_removes_only_that_version_and_keeps_jobs(client, people_fake):
+    job_id, _ = start_ai(client)
+    first = wait(client, job_id, "waiting_outline")["researchVersion"]
+    job_id2, _ = start_ai(client, researchMode="new")
+    second = wait(client, job_id2, "waiting_outline")["researchVersion"]
+    # 첫 버전으로 새 작업을 만들어 둡니다 (사용 중인 버전)
+    job_id3, _ = start_ai(client, researchMode="saved", researchVersion=first["id"])
+    using = wait(client, job_id3, "waiting_outline")
+    jobs_before = {j: (jobs.job_dir(j) / "job.json").read_text(encoding="utf-8") for j in (job_id, job_id2, job_id3)}
+    second_before = research_library._path(second["id"]).read_text(encoding="utf-8")
+
+    usage = client.get(f"/api/research-library/{first['id']}/usage").json()["usedBy"]
+    assert {u["id"] for u in usage} == {job_id, job_id3}  # 새로 조사해 저장한 작업 + 저장된 자료로 시작한 작업
+
+    r = client.delete(f"/api/research-library/{first['id']}")
+    assert r.status_code == 200 and r.json()["deleted"] == first["id"] and len(r.json()["usedBy"]) == 2
+    assert [v["id"] for v in library(client)] == [second["id"]]  # 이 버전만 지워짐
+    assert research_library._path(second["id"]).read_text(encoding="utf-8") == second_before
+    # 연결된 작업은 복사해 둔 자료를 그대로 씁니다 (작업 파일 변화 없음)
+    assert {j: (jobs.job_dir(j) / "job.json").read_text(encoding="utf-8") for j in jobs_before} == jobs_before
+    job = get(client, job_id3)
+    assert job["research"]["fromLibrary"]["id"] == first["id"] and job["research"]["sources"] and len(job["outline"]["cards"]) == 5
+    assert api(client, job_id3, "POST", "/outline/approve").status_code == 200  # 지운 뒤에도 작업은 계속 진행
+    # 지운 버전으로는 새로 시작할 수 없고, 다시 지우면 404
+    _, r = start_ai(client, researchMode="saved", researchVersion=first["id"])
+    assert r.status_code == 409 and "새로 조사하기" in r.json()["detail"]
+    assert client.delete(f"/api/research-library/{first['id']}").status_code == 404
+    assert client.get(f"/api/research-library/{first['id']}/usage").status_code == 404
+
+
+def test_new_version_number_does_not_repeat_after_delete(client, people_fake):
+    ids = []
+    for _ in range(2):
+        job_id, _ = start_ai(client, researchMode="new")
+        ids.append(wait(client, job_id, "waiting_outline")["researchVersion"])
+    client.delete(f"/api/research-library/{ids[0]['id']}")
+    job_id, _ = start_ai(client, researchMode="new")
+    third = wait(client, job_id, "waiting_outline")["researchVersion"]
+    assert third["number"] == 3 and [v["number"] for v in library(client)] == [3, 2]

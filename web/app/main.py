@@ -328,6 +328,36 @@ async def research_library_versions(topic: str = "", contentType: str = ""):
     return {"versions": found}
 
 
+class LibraryRename(Strict):
+    name: str = Field(default="", max_length=200)
+
+
+@app.patch("/api/research-library/{version_id}")
+async def rename_research_version(version_id: str, body: LibraryRename):
+    """버전 이름만 바꿉니다. 빈 이름이면 기본 이름(조사일·유형)으로 되돌립니다. 조사 자료는 고치지 않습니다."""
+    version = research_library.rename(version_id, body.name)
+    if version is None:
+        raise HTTPException(404, "저장된 조사 자료를 찾을 수 없어요")
+    return version
+
+
+@app.get("/api/research-library/{version_id}/usage")
+async def research_version_usage(version_id: str):
+    """지우기 전에 확인: 이 버전과 연결된 작업 목록."""
+    if research_library.get(version_id) is None:
+        raise HTTPException(404, "저장된 조사 자료를 찾을 수 없어요")
+    return {"usedBy": jobs.research_version_usage(version_id)}
+
+
+@app.delete("/api/research-library/{version_id}")
+async def delete_research_version(version_id: str):
+    """버전 하나만 지웁니다. 그 자료로 만든 작업은 복사해 둔 자료를 그대로 씁니다."""
+    result = jobs.delete_research_version(version_id)
+    if result is None:
+        raise HTTPException(404, "저장된 조사 자료를 찾을 수 없어요")
+    return result
+
+
 @app.get("/api/research-library/{version_id}")
 async def research_library_version(version_id: str):
     version = research_library.get(version_id)

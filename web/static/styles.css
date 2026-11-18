@@ -339,6 +339,11 @@ body.format-template .legacy-only, body:not(.format-template) .template-only { d
 /* 조사 자료 보관함 (시작 화면) */
 .research-library { display: grid; gap: 8px; margin-top: 8px; }
 .research-library select { max-width: 100%; }
+.library-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.library-rename { display: grid; gap: 6px; }
+.library-rename input { width: 100%; padding: 8px 12px; color: var(--ink); font: 400 .95rem/1.5 var(--font-body); background: var(--cream); border: 2px solid var(--line); border-radius: 12px; }
+.library-rename .hint { margin: 0; }
+.btn-danger { color: #8c1d40; }
 .library-view summary { cursor: pointer; font-size: .9rem; }
 .library-items, .library-sources, .library-people { margin: 6px 0; padding-left: 1.1em; font-size: .88rem; display: grid; gap: 3px; overflow-wrap: anywhere; }
 .edit-group legend { margin-bottom: 4px; padding: 0; font-family: var(--font-display); font-size: .92rem; }

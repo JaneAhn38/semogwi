@@ -2033,7 +2033,8 @@
   }
 
   // ---------- 조사 자료 보관함 (저장된 자료 사용 / 새로 조사하기) ----------
-  const library = { key: "", versions: [], details: new Map(), timer: 0 };
+  const library = { key: "", versions: [], details: new Map(), timer: 0, chosenId: "", renaming: "", busy: false };
+  const LIBRARY_NAME_MAX = 40;
   const selectedResearchMode = () => ($("job-form").elements.researchMode && $("job-form").elements.researchMode.value) || "new";
 
   function scheduleLibrary() {
@@ -2063,9 +2064,81 @@
     renderLibrary();
   }
 
+  // 기본 이름: 조사일 + 콘텐츠 유형. 사용자가 이름을 바꾸면 그 이름을 씁니다 (서버에 저장)
+  const defaultVersionName = (v) => `${v.researchedAt} ${typeLabelOf(v.contentType)}`;
+  const versionName = (v) => v.name || defaultVersionName(v);
+
   function versionLabel(v) {
-    const type = typeLabelOf(v.contentType);
-    return `#${v.number} · ${v.researchedAt} 조사 · 읽은 출처 ${v.sourceCount}개 · ${type}`;
+    return `${versionName(v)} · #${v.number} · 읽은 출처 ${v.sourceCount}개`;
+  }
+
+  // 이름 변경·삭제 뒤 목록을 서버에서 다시 받아 옵니다 (새로고침해도 같은 결과)
+  async function reloadLibrary() {
+    library.key = "";
+    library.details.clear();
+    await loadLibrary();
+  }
+
+  async function renameVersion(v, name) {
+    library.busy = true;
+    try {
+      await api(`/api/research-library/${v.id}`, jsonInit("PATCH", { name }));
+      library.renaming = "";
+      show("form-error", "");
+    } catch (error) {
+      show("form-error", error.message);
+    } finally {
+      library.busy = false;
+    }
+    await reloadLibrary();
+  }
+
+  async function deleteVersion(v) {
+    library.busy = true;
+    try {
+      // 지우기 전에 이 버전과 연결된 작업을 확인합니다. 작업은 자료를 복사해 두어서 지워도 내용이 바뀌지 않습니다
+      const { usedBy } = await api(`/api/research-library/${v.id}/usage`);
+      const running = usedBy.filter((u) => u.state === "running").length;
+      const linked = usedBy.length
+        ? `
+
+이 자료와 연결된 작업 ${usedBy.length}개${running ? `(진행 중 ${running}개)` : ""}는 시작할 때 자료를 복사해 두어서 그대로 유지돼요. 다만 이 자료를 다시 골라 새 카드뉴스를 만들 수는 없어요.`
+        : "";
+      if (!confirm(`'${versionName(v)}' (#${v.number}) 조사 자료를 삭제할까요?
+이 버전만 지워지고 되돌릴 수 없어요. 다른 버전은 그대로예요.${linked}`)) return;
+      await api(`/api/research-library/${v.id}`, { method: "DELETE" });
+      if (library.chosenId === v.id) library.chosenId = "";
+      show("form-error", "");
+    } catch (error) {
+      show("form-error", error.message);
+      return;
+    } finally {
+      library.busy = false;
+    }
+    await reloadLibrary();
+  }
+
+  function libraryActions(v) {
+    if (library.renaming === v.id) {
+      const input = el("input", { type: "text", value: versionName(v), maxLength: LIBRARY_NAME_MAX, "aria-label": "조사 버전 이름", dataset: { libraryName: v.id },
+        onkeydown: (e) => {
+          if (e.key === "Enter") { e.preventDefault(); renameVersion(v, input.value); } // 시작 폼이 제출되지 않게
+          if (e.key === "Escape") { library.renaming = ""; renderLibrary(); }
+        } });
+      setTimeout(() => { input.focus(); input.select(); });
+      return el("div", { class: "library-rename" },
+        input,
+        el("div", { class: "library-actions" },
+          el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "저장", dataset: { librarySave: v.id }, onclick: () => renameVersion(v, input.value) }),
+          el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "기본 이름으로", title: defaultVersionName(v), onclick: () => renameVersion(v, "") }),
+          el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "취소", onclick: () => { library.renaming = ""; renderLibrary(); } })),
+        el("small", { class: "hint", textContent: `${LIBRARY_NAME_MAX}자까지 · 비우면 기본 이름(${defaultVersionName(v)})으로 돌아가요. 조사 내용은 바뀌지 않아요.` }));
+    }
+    return el("div", { class: "library-actions" },
+      el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "이름 바꾸기", disabled: library.busy, dataset: { libraryRename: v.id },
+        onclick: () => { library.renaming = v.id; renderLibrary(); } }),
+      el("button", { class: "btn btn-ghost btn-small btn-danger", type: "button", textContent: "삭제", disabled: library.busy, dataset: { libraryDelete: v.id },
+        onclick: () => deleteVersion(v) }));
   }
 
   async function renderLibrary() {
@@ -2083,12 +2156,15 @@
       box.replaceChildren(el("small", { class: "hint", textContent: `저장된 자료 ${library.versions.length}개: ${versionLabel(library.versions[0])}` }));
       return;
     }
-    const select = el("select", { id: "research-version", "aria-label": "사용할 조사 버전", onchange: () => renderLibrary() });
+    const select = el("select", { id: "research-version", "aria-label": "사용할 조사 버전",
+      onchange: (e) => { library.chosenId = e.target.value; library.renaming = ""; renderLibrary(); } });
     const current = box.querySelector("#research-version");
-    const chosen = (current && library.versions.find((v) => v.id === current.value)) || library.versions[0];
+    const chosen = library.versions.find((v) => v.id === library.chosenId) || (current && library.versions.find((v) => v.id === current.value)) || library.versions[0];
+    library.chosenId = chosen.id;
     for (const v of library.versions) select.append(el("option", { value: v.id, textContent: versionLabel(v), selected: v.id === chosen.id }));
     const detail = el("div", { class: "library-detail" }, el("small", { class: "hint", textContent: "자료를 불러오는 중이에요" }));
     box.replaceChildren(el("label", { class: "edit-field" }, el("span", { textContent: "조사 버전" }), select),
+      libraryActions(chosen),
       chosen.staleNote ? el("p", { class: "notice", textContent: chosen.staleNote }) : "", detail);
     if (!library.details.has(chosen.id)) {
       try {

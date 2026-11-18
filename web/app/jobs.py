@@ -414,6 +414,34 @@ def research_versions(content_type: str, topic: str) -> list[dict]:
     return research_library.versions(content_type, topic)
 
 
+def research_version_usage(version_id: str) -> list[dict]:
+    """이 조사 버전과 연결된 작업 (그 자료로 시작했거나, 새로 조사해 그 버전을 저장한 작업).
+
+    작업은 시작할 때 자료를 복사해 두므로 버전을 지워도 작업 내용은 바뀌지 않습니다. 삭제 전에 알려 주는 데 씁니다.
+    """
+    used = []
+    if not DATA_DIR.is_dir():
+        return used
+    for path in DATA_DIR.glob("*/job.json"):
+        try:
+            job = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        linked = (job.get("researchVersion") or {}).get("id") == version_id or ((job.get("research") or {}).get("fromLibrary") or {}).get("id") == version_id
+        if linked:
+            used.append({"id": job.get("id"), "topic": job.get("topic", ""), "state": job.get("state", ""),
+                         "source": (job.get("researchVersion") or {}).get("source", "saved")})
+    return used
+
+
+def delete_research_version(version_id: str) -> dict | None:
+    """조사 버전 하나를 지웁니다. 연결된 작업은 복사해 둔 자료를 그대로 쓰므로 고치지 않습니다. 없으면 None."""
+    usage = research_version_usage(version_id)
+    if not research_library.delete(version_id):
+        return None
+    return {"deleted": version_id, "usedBy": usage}
+
+
 def _set_step(job: dict, key: str, status: str) -> None:
     for step in job["steps"]:
         if step["key"] == key:
