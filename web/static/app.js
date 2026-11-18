@@ -271,7 +271,7 @@
   function renderProblems(research) {
     const problems = [
       ...(research.policyStops || []).map((s) => `${s.name}: 이용규약상 자동 수집이 금지된 사이트라 읽지 않았어요`),
-      ...(research.searchFailures || []).map((f) => `검색 "${f.query}": ${f.reason}`),
+      ...(research.searchFailures || []).map((f) => `검색 "${f.query}": ${f.reason}${f.detail ? ` (오류 내용: ${f.detail})` : ""}`),
       ...(research.fetchFailures || []).map(failureText),
       ...(research.fetched || []).filter((f) => f.denied).map((f) => `${f.url}: 접근 제한 규칙으로 요청하지 않았어요`),
     ];
@@ -282,7 +282,7 @@
   function failureText(failure) {
     const reason = failure.label || "접속하지 못했어요";
     const code = failure.code ? ` (HTTP ${failure.code})` : "";
-    return `${failure.host}: ${reason}${code}, ${failure.attempts}번 시도`;
+    return `${failure.host}: ${reason}${code}, ${failure.attempts}번 시도${failure.detail ? ` (오류 내용: ${failure.detail})` : ""}`;
   }
 
   function renderMaterial() {

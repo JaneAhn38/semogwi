@@ -212,9 +212,10 @@ def fetch_failures(parsed: claude_cli.CliRun) -> list[dict]:
         if 200 <= code < 400 or fetch.get("denied"):
             continue
         host = site_policy.host_of(fetch["url"])
-        item = grouped.setdefault((host, code), {"host": host, "url": fetch["url"], "code": code, "attempts": 0,
+        item = grouped.setdefault((host, code), {"host": host, "url": fetch["url"], "code": code, "attempts": 0, "detail": "",
                                                  **site_policy.classify_failure(code, fetch.get("retryAfter"))})
         item["attempts"] += 1
+        item["detail"] = item["detail"] or fetch.get("detail", "")
     return list(grouped.values())
 
 
@@ -579,7 +580,8 @@ class AIProvider:
             new_facts = [{"text": str(f.get("text", ""))[:300], "sourceIds": [rename[i] for i in f.get("sourceIds", []) if i in rename], "origin": "ai"}
                          for f in data.get("facts", [])][:20]
             research = {**research, "sources": research["sources"] + new_sources, "facts": _dedupe_facts(research["facts"] + new_facts),
-                        "fetchFailures": research["fetchFailures"] + fetch_failures(parsed)}
+                        "fetchFailures": research["fetchFailures"] + fetch_failures(parsed),
+                        "searchFailures": research.get("searchFailures", []) + parsed.search_failures}
             raw = [{**c, "sourceIds": [rename.get(i, i) for i in c.get("sourceIds", [])]} for c in data.get("cards", [])]
             cards = _clean_cards(raw, {s["id"] for s in research["sources"]}, job)
             calls.append(claude_cli.call_meta("friends", parsed))

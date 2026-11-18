@@ -151,7 +151,8 @@ AI 호출이 실패하면 데모 결과로 대신하지 않고 이유를 표시�
 | `job.userMaterial` | 사용자가 입력한 원문 |
 | `research.sources[].origin`, `verification` | `user` / `user_provided`. 입력한 URL도 확인된 출처로 표시하지 않음 |
 | `research.facts[].origin` | `ai`(조사) 또는 `user`(사용자 제공) |
-| `research.fetchFailures` | 접속 실패한 사이트, 상태 코드, 시도 횟수 |
+| `research.fetchFailures` | 접속 실패한 사이트, 상태 코드, 시도 횟수, 오류 원문(`detail`) |
+| `research.searchFailures` | 실패한 검색어, 이유(검색 도구 오류·사용 거부·결과 없음), 오류 원문(`detail`) |
 
 - 사용자 자료만 근거인 카드는 출처 문구를 `출처: 판매처 (사용자 제공)`으로 서버가 맞추므로 PNG에도 남습니다. 직접 수정하면 사용자가 쓴 대로 들어갑니다.
 - 굿즈·팝업·콜라보에서 자료에 없는 숫자(가격, 날짜, 수량)가 문구에 있으면 1회 다시 쓰게 하고, 그래도 남으면 승인을 막습니다.

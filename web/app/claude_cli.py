@@ -136,6 +136,18 @@ def parse_stream(stdout: str) -> CliRun:
     return run
 
 
+ERROR_DETAIL_MAX = 300
+
+
+def error_detail(content, fallback=None) -> str:
+    """도구가 돌려준 오류 원문. 화면과 작업 기록에 그대로 남겨 실패 이유를 확인할 수 있게 합니다."""
+    if isinstance(content, list):
+        content = " ".join(str(b.get("text", "")) if isinstance(b, dict) else str(b) for b in content)
+    text = str(content or "").strip() or (fallback if isinstance(fallback, str) else "")
+    text = re.sub(r"</?tool_use_error>", "", text)
+    return " ".join(text.split())[:ERROR_DETAIL_MAX]
+
+
 def _read_failed_fetch(run: CliRun, event: dict, fetch_calls: dict[str, str]) -> None:
     """실패한 WebFetch는 정상 형식의 결과가 없으므로 오류 내용에서 상태 코드를 읽습니다."""
     content = (event.get("message") or {}).get("content")
@@ -146,7 +158,8 @@ def _read_failed_fetch(run: CliRun, event: dict, fetch_calls: dict[str, str]) ->
         if url:
             text = json.dumps(block.get("content"), ensure_ascii=False)
             found = re.search(r"\b([45]\d\d)\b", text)
-            entry = {"url": url, "code": int(found.group(1)) if found else 0}
+            entry = {"url": url, "code": int(found.group(1)) if found else 0,
+                     "detail": error_detail(block.get("content"), event.get("tool_use_result"))}
             if not found and re.search(r"denied|permission|not allowed", text, re.IGNORECASE):
                 entry["denied"] = True  # 차단 규칙으로 요청하지 않은 경우입니다
             run.fetches.append(entry)
@@ -158,8 +171,9 @@ def _read_failed_search(run: CliRun, event: dict, search_calls: dict[str, str]) 
         if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("is_error"):
             query = search_calls.get(block.get("tool_use_id", ""))
             if query is not None:
-                text = json.dumps(block.get("content"), ensure_ascii=False)
-                run.search_failures.append({"query": query[:200], "reason": "검색 도구 오류" if "denied" not in text.lower() else "검색 도구 사용 거부"})
+                detail = error_detail(block.get("content"), event.get("tool_use_result"))
+                run.search_failures.append({"query": query[:200], "reason": "검색 도구 오류" if "denied" not in detail.lower() else "검색 도구 사용 거부",
+                                            "detail": detail})
 
 
 def _read_tool_result(run: CliRun, result) -> bool:
