@@ -62,6 +62,7 @@ argument-hint: [주제] [캐릭터] [유형] [참고 자료 링크...]  또는  
 ## 5. fill-figma → 카드 PNG 5장
 - 원본 템플릿은 건드리지 않고 복제본에서 작업한다.
 - `image`가 있는 카드(card-01 ~ card-05)는 그 이미지를 `main-image`에 FIT으로 넣고, `image`가 `""`인 카드는 `main-image`를 숨긴다.
+- 프로젝트에 `backgrounds.json`이 있으면 승인된 card-02 ~ card-05의 배경을 FILL로 교체한다 (규격: `templates/backgrounds.md`). 없으면 템플릿 배경 그대로다. card-01은 고정 표지라 배경을 바꾸지 않는다. AI 배경 생성은 아직 연결되어 있지 않다.
 - PNG는 `projects/YYYY-MM-DD_주제/png/`에 저장한다.
 
 ## 6. 최종 검수 안내

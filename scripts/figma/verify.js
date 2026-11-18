@@ -6,8 +6,19 @@ await figma.setCurrentPageAsync(page);
 
 const problems = [];
 const exportFrames = [];
+const backgrounds = [];
 for (const s of INPUT.slides) {
   const fr = findOneFrame(page, s.frame);
+  // 배경은 프레임 채우기입니다. 지정한 카드는 IMAGE(FILL) 하나만, 나머지(card-01 포함)는 이미지 채우기가 없어야 합니다.
+  const frameFills = fr.fills === figma.mixed ? [] : fr.fills;
+  const frameImages = frameFills.filter(f => f.type === 'IMAGE');
+  if (s.hasBackground) {
+    if (frameFills.length !== 1 || frameImages.length !== 1) problems.push(`${s.frame}: 프레임 채우기가 배경 이미지 하나가 아닙니다 (${fillTypes(fr)})`);
+    else if (frameImages[0].scaleMode !== 'FILL') problems.push(`${s.frame}: 배경 맞춤 방식이 ${frameImages[0].scaleMode}입니다 (FILL이어야 함)`);
+    else backgrounds.push({ frame: s.frame, imageHash: frameImages[0].imageHash });
+  } else if (frameImages.length) {
+    problems.push(`${s.frame}: 배경을 지정하지 않았는데 프레임에 이미지가 있습니다`);
+  }
   const expected = Object.keys(INPUT.layers);
   if (fr.children.length !== expected.length) problems.push(`${s.frame}: 레이어 ${fr.children.length}개 (예상 ${expected.length}개)`);
   for (const [lname, ltype] of Object.entries(INPUT.layers)) {
@@ -35,4 +46,4 @@ for (const s of INPUT.slides) {
   }
   exportFrames.push({ frame: s.frame, id: fr.id, w: Math.round(fr.width), h: Math.round(fr.height) });
 }
-return { ok: problems.length === 0, pageId: page.id, problems, exportFrames };
+return { ok: problems.length === 0, pageId: page.id, problems, exportFrames, backgrounds };

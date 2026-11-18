@@ -11,6 +11,7 @@ Figma에 직접 접속하지 않으며, 표준 라이브러리만 사용합니�
     py scripts/fill_figma.py open-png   projects/날짜_주제/png
 
     validate   : slides.json 규격, 글자 수, 줄바꿈 위험, 이미지 파일·해상도·출처, 출력 폴더를 검사합니다.
+                 같은 폴더에 backgrounds.json이 있으면 배경 규격·승인·해시·출처도 검사합니다 (templates/backgrounds.md).
                  오류가 있으면 종료 코드 1, 경고만 있으면 0을 반환합니다.
     render     : Figma MCP use_figma에 넘길 JavaScript를 출력합니다.
                  단계: preflight, clone, fill-text, verify, signature
@@ -24,12 +25,13 @@ Figma에 직접 접속하지 않으며, 표준 라이브러리만 사용합니�
 """
 
 import argparse
+import hashlib
 import json
 import math
 import re
 import struct
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent.parent
 FIGMA_JS_DIR = Path(__file__).resolve().parent / "figma"
@@ -74,8 +76,19 @@ UPSCALE_WARN = 1.0    # FIT 배율이 1을 넘으면 확대(흐려짐) 경고
 UPSCALE_STRONG = 1.25  # 이 배율을 넘으면 강한 경고
 CUTOUT_SUGGEST_SIZE = 1024  # 누끼를 다시 만들 때 권장하는 --max-size (메모리 부담이 크지 않은 값)
 FIGMA_FORMATS = {"png": "image/png", "jpeg": "image/jpeg", "webp": "image/webp", "gif": "image/gif"}
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # Figma 업로드 한도
 
-STEPS = ["preflight", "clone", "fill-text", "verify", "signature"]
+# --- 배경 (templates/backgrounds.md). card-01은 고정 표지이므로 배경을 바꾸지 않음 ---
+BACKGROUND_FILE = "backgrounds.json"
+BACKGROUND_DIR = "input/backgrounds/"
+BACKGROUND_FRAMES = FRAMES[1:]
+BACKGROUND_FORMATS = {"png", "jpeg", "webp"}
+BACKGROUND_APPROVED = "승인됨"
+BACKGROUND_STATUSES = ("승인 대기", BACKGROUND_APPROVED, "거절됨")
+BACKGROUND_ORIGINS = ("temp", "ai")
+BACKGROUND_FIELDS = {"file", "status", "origin", "sha256", "note"}
+
+STEPS =["preflight", "clone", "fill-text", "verify", "signature"]
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +279,91 @@ def validate(slides_path: Path, check_output: bool = True):
     if existing:
         errors.append(f"{png_dir.relative_to(ROOT) if png_dir.is_relative_to(ROOT) else png_dir}에 이미 PNG가 있습니다 {existing} — 덮어쓰지 않도록 중단합니다")
 
-    return {"pageName": page_name, "errors": errors, "warnings": warnings, "rows": rows}
+    backgrounds = check_backgrounds(slides_path.parent, errors, warnings)
+    return {"pageName": page_name, "errors": errors, "warnings": warnings, "rows": rows, "backgrounds": backgrounds}
+
+
+def check_backgrounds(project_dir: Path, errors, warnings):
+    """backgrounds.json을 검사하고 {프레임: 업로드 정보}를 돌려줍니다. 파일이 없으면 {} (기존 프로젝트와 같은 동작)."""
+    path = project_dir / BACKGROUND_FILE
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        errors.append(f"{BACKGROUND_FILE} JSON 형식 오류: {e}")
+        return {}
+    cards = data.get("cards") if isinstance(data, dict) else None
+    if not isinstance(cards, dict):
+        errors.append(f"{BACKGROUND_FILE}: 'cards' 객체가 없습니다")
+        return {}
+
+    found = {}
+    for frame, card in cards.items():
+        if frame == FRAMES[0]:
+            errors.append(f"{BACKGROUND_FILE}: {frame}은 고정 표지라 배경을 지정할 수 없습니다")
+        elif frame not in BACKGROUND_FRAMES:
+            errors.append(f"{BACKGROUND_FILE}: 알 수 없는 카드입니다: {frame} ({BACKGROUND_FRAMES[0]} ~ {BACKGROUND_FRAMES[-1]}만 가능)")
+        elif card is not None:
+            info = check_background(frame, card, project_dir, errors, warnings)
+            if info:
+                found[frame] = info
+    return found
+
+
+def check_background(frame, card, project_dir: Path, errors, warnings):
+    """카드 하나의 배경을 검사합니다. 문제가 있으면 errors에 넣고 None을 돌려줍니다."""
+    before = len(errors)
+    if not isinstance(card, dict):
+        errors.append(f"{frame}: 배경 항목은 객체 또는 null이어야 합니다")
+        return None
+    extra = set(card) - BACKGROUND_FIELDS
+    if extra:
+        warnings.append(f"{frame}: 배경 규격에 없는 필드는 무시됩니다: {sorted(extra)}")
+    if card.get("status") not in BACKGROUND_STATUSES:
+        errors.append(f"{frame}: 배경 status는 {BACKGROUND_STATUSES} 중 하나여야 합니다 (현재: {card.get('status')!r})")
+    elif card["status"] != BACKGROUND_APPROVED:
+        errors.append(f"{frame}: 승인되지 않은 배경은 쓸 수 없습니다 (현재: {card['status']}). 쓰지 않으려면 null로 두세요")
+    origin = card.get("origin")
+    if origin not in BACKGROUND_ORIGINS:
+        errors.append(f"{frame}: 배경 origin은 {BACKGROUND_ORIGINS} 중 하나여야 합니다 (현재: {origin!r})")
+    elif origin == "temp" and not project_dir.name.endswith("_테스트"):
+        warnings.append(f"{frame}: 임시 이미지(origin: temp) 배경입니다 — 테스트 외 게시 금지")
+
+    rel = card.get("file")
+    if not isinstance(rel, str) or not rel:
+        errors.append(f"{frame}: 배경 file이 없습니다")
+        return None
+    rel = rel.replace("\\", "/")
+    if Path(rel).is_absolute() or ".." in PurePosixPath(rel).parts or not rel.startswith(BACKGROUND_DIR):
+        errors.append(f"{frame}: 배경 file은 프로젝트의 {BACKGROUND_DIR} 아래 상대 경로여야 합니다: {rel}")
+        return None
+    path = project_dir / rel
+    if not path.is_file():
+        errors.append(f"{frame}: 배경 파일이 없습니다: {rel}")
+        return None
+
+    fmt, w, h = image_info(path)
+    if fmt not in BACKGROUND_FORMATS:
+        errors.append(f"{frame}: 배경은 PNG/JPG/WebP만 쓸 수 있습니다 (현재: {fmt}): {rel}")
+    elif (w, h) != FRAME_SIZE:
+        errors.append(f"{frame}: 배경은 {FRAME_SIZE[0]}x{FRAME_SIZE[1]}이어야 합니다 (현재: {w}x{h}). 잘리지 않도록 크기를 먼저 맞추세요")
+    if path.stat().st_size > MAX_UPLOAD_BYTES:
+        errors.append(f"{frame}: 배경이 10MB를 넘어 Figma에 업로드할 수 없습니다")
+    if hashlib.sha256(path.read_bytes()).hexdigest() != card.get("sha256"):
+        errors.append(f"{frame}: 배경 파일의 sha256이 기록과 다릅니다 — 승인 뒤 파일이 바뀌었을 수 있습니다: {rel}")
+
+    # 카드 이미지와 같은 기준: 프로젝트 sources.md에 출처가 있고 사용 허가가 '허가됨'이어야 함
+    rel_to_root = (project_dir / rel).relative_to(ROOT).as_posix() if project_dir.is_relative_to(ROOT) else rel
+    row = find_source_row(rel_to_root, project_dir / "sources.md")
+    if row is None:
+        errors.append(f"{frame}: 프로젝트 sources.md에 이 배경의 출처가 없습니다: {rel_to_root}")
+    elif row["permission"] != "허가됨":
+        errors.append(f"{frame}: 사용 권한이 확인되지 않은 배경입니다 ('{row['permission']}')")
+
+    if len(errors) > before:
+        return None
+    return {"path": rel_to_root, "format": fmt, "contentType": FIGMA_FORMATS[fmt], "origin": origin, "size": f"{w}x{h}"}
 
 
 def check_image(fr, image, character, errors, warnings, project_dir: Path = None):
@@ -369,6 +466,8 @@ def print_validation(result):
             src = "숨김" if r["sourceHidden"] else f"{r['source']}/{SOURCE_MAX}"
             img = f"{r['image']} [{r['imageState']}]" if r["image"] else "(없음)"
             print(f"{r['frame']:8} {r['title']:>3}/{TITLE_MAX} {r['body']:>3}/{BODY_MAX} {r['bodyLines']:>3} {src:>8}  {img}")
+    for frame, bg in result.get("backgrounds", {}).items():
+        print(f"배경 {frame}: {bg['path']} [{bg['format']} {bg['size']}, {bg['contentType']}, {bg['origin']}]")
     for e in result["errors"]:
         print(f"[오류] {e}")
     for w in result["warnings"]:
@@ -402,6 +501,7 @@ def render(step: str, slides_path: Path) -> str:
                 "body": s["body"].replace("\r", ""),
                 "source": s.get("source", "") or "",
                 "hasImage": bool(s.get("image")),
+                "hasBackground": s["frame"] in result["backgrounds"],
             }
             for s in data["slides"]
         ],
