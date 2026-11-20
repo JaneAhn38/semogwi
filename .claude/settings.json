@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "deny": [
+      "WebFetch(domain:chiikawamarket.jp)",
+      "WebFetch(domain:*.chiikawamarket.jp)"
+    ]
+  }
+}

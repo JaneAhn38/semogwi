@@ -400,6 +400,20 @@ def test_options_list_restricted_sites(client):
     assert sites == [{"domain": "chiikawamarket.jp", "name": "치이카와 마켓"}]
 
 
+def test_terminal_settings_deny_every_restricted_site():
+    # 터미널(/cardnews 등)의 Claude Code도 웹앱과 같은 차단 규칙을 따르는지. 금지 사이트를 추가하면 .claude/settings.json에도 넣어야 합니다
+    from pathlib import Path
+    settings = Path(__file__).resolve().parents[2] / ".claude" / "settings.json"
+    deny = json.loads(settings.read_text(encoding="utf-8"))["permissions"]["deny"]
+    for site in site_policy.restricted_sites():
+        assert f"WebFetch(domain:{site['domain']})" in deny and f"WebFetch(domain:*.{site['domain']})" in deny
+
+
+def test_product_fetch_script_is_removed():
+    from pathlib import Path
+    assert not (Path(__file__).resolve().parents[2] / "scripts" / "fetch_product.py").exists()
+
+
 def test_team_files_are_documented():
     from pathlib import Path
     text = (Path(__file__).resolve().parent.parent / "docs" / "site-access-policy.md").read_text(encoding="utf-8")
