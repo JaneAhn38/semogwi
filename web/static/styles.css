@@ -478,3 +478,8 @@ body.format-template .legacy-only, body:not(.format-template) .template-only { d
 .review-edit input { width: 100%; padding: 6px 10px; color: var(--ink); font: 400 .9rem/1.5 var(--font-body); background: var(--cream); border: 2px solid var(--line); border-radius: 10px; }
 .review-edit .hint { margin: 0; }
 .item-supplement { color: var(--ink-soft); font-size: .84rem; }
+.more-round { color: var(--ink-soft); font-size: .8rem; font-weight: 700; }
+#research-more textarea { width: 100%; resize: vertical; }
+.notes-source { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.notes-source select { flex: 0 1 200px; }
+.notes-source input { flex: 1 1 240px; }

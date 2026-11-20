@@ -101,6 +101,8 @@ def _normalize(job: dict) -> dict:
     job.setdefault("templateSet", None)  # 없으면 예전 형식 3(표지 + 본문 반복) 또는 기존 방식
     job.setdefault("typeSource", "user")
     job.setdefault("notes", "")
+    job.setdefault("notesKind", "")  # 참고 자료의 출처 종류 ("" / official / namuwiki / other). 공식을 골라도 공식 확인으로 만들지 않습니다
+    job.setdefault("notesUrl", "")  # 참고 자료를 옮겨 온 주소 (사용자 제공, 자동으로 읽지 않음)
     job.setdefault("typeReason", "")
     job.setdefault("detailImages", [])  # 자료 조사용 상세페이지 이미지 (카드에 넣는 이미지와 따로 둡니다)
     job.setdefault("detailExtraction", None)  # AI가 상세 이미지에서 읽은 결과
@@ -108,6 +110,7 @@ def _normalize(job: dict) -> dict:
     job.setdefault("researchVersion", None)  # 조사 자료 보관함의 버전 (새로 조사해 저장했거나, 저장된 자료로 시작한 경우)
     job.setdefault("researchStage", None)  # 조사 단계가 끝났는지 (조사와 구성안 작성을 나눈 작업). 구성안만 다시 쓸 때 씁니다
     job.setdefault("researchBase", None)  # '저장된 자료 사용': 보완 조사의 바탕이 된 저장 버전 {id, number, researchedAt, name}
+    job.setdefault("researchDraft", None)  # 조사 결과 화면의 '추가 조사' 결과 (통합 전 초안, 통합하기 전에는 research를 바꾸지 않음)
     for asset in job["assets"]:
         asset.setdefault("sha256", None)
         asset.setdefault("useVariant", "original")
@@ -274,6 +277,8 @@ def create_draft(job_id: str) -> dict:
         "typeSource": "user",
         "typeReason": "",
         "notes": "",
+        "notesKind": "",
+        "notesUrl": "",
         "detailImages": [],
         "detailExtraction": None,
         "detailFetch": None,
@@ -292,7 +297,8 @@ def create(job_id: str, topic: str, content_type: str, style: str, url: str, ass
     return start(job_id)
 
 
-def update_input(job_id: str, topic: str, content_type: str, url: str, notes: str | None = None) -> dict:
+def update_input(job_id: str, topic: str, content_type: str, url: str, notes: str | None = None,
+                 notes_kind: str | None = None, notes_url: str | None = None) -> dict:
     """입력값은 어느 단계에서든 고칠 수 있습니다. 이미 만든 구성안의 문구는 자동으로 바꾸지 않습니다."""
     job = _require_job(job_id)
     if templates.is_template_job(job) and content_type != job["contentType"]:
@@ -300,6 +306,10 @@ def update_input(job_id: str, topic: str, content_type: str, url: str, notes: st
     job.update(topic=topic, contentType=content_type, url=url)
     if notes is not None:
         job["notes"] = notes
+    if notes_kind is not None:
+        job["notesKind"] = notes_kind
+    if notes_url is not None:
+        job["notesUrl"] = notes_url
     save(job)
     return job
 
@@ -385,7 +395,7 @@ def _start_from_library(job: dict, mode: str, version_id: str | None) -> dict:
     for step in job["steps"]:
         step["mode"] = "real"
     _apply_type(job, content_type, "user")
-    job["research"] = research_library.research_for_job(version, str(job.get("notes") or "").strip())
+    job["research"] = research_library.research_for_job(version, str(job.get("notes") or "").strip(), job.get("notesKind", ""), job.get("notesUrl", ""))
     job["researchBase"] = {"id": version["id"], "number": version["number"], "researchedAt": version["researchedAt"], "name": version.get("name", "")}
     job["researchVersion"] = {"id": version["id"], "number": version["number"], "researchedAt": version["researchedAt"], "source": "saved"}
     job["researchStage"] = None
@@ -431,6 +441,8 @@ def _require_review(job_id: str) -> dict:
     job = _require(job_id, "waiting_research")
     if not (job.get("research") or {}).get("supplement"):
         raise JobConflict("검토할 추가 조사 결과가 없어요")
+    if job.get("researchDraft"):
+        raise JobConflict(DRAFT_PENDING)
     return job
 
 
@@ -469,6 +481,8 @@ def _refresh_people(job: dict) -> None:
 def retry_supplement(job_id: str) -> dict:
     """검토 단계에서 추가 조사를 다시 합니다 (지금 자료를 바탕으로)."""
     job = _require(job_id, "waiting_research")
+    if job.get("researchDraft"):
+        raise JobConflict(DRAFT_PENDING)
     state = claude_cli.status()
     if not state["available"]:
         raise JobConflict(state["reason"])
@@ -483,8 +497,8 @@ def approve_research(job_id: str) -> dict:
     job = _require_review(job_id)
     research = job["research"]
     supplement = research["supplement"]
-    if not supplement.get("failed") or supplement.get("edited"):
-        # 추가 조사가 됐거나 사용자가 고친 경우에만 새 버전을 만듭니다 (실패 후 그대로 진행하면 바탕 버전과 같음)
+    if not supplement.get("failed") or supplement.get("edited") or supplement.get("moreRounds"):
+        # 추가 조사가 됐거나 사용자가 고쳤거나 '추가 조사' 결과를 통합한 경우에만 새 버전을 만듭니다 (실패 후 그대로 진행하면 바탕 버전과 같음)
         try:
             summary = research_library.save(job, research)
             job["researchVersion"] = {"id": summary["id"], "number": summary["number"], "researchedAt": summary["researchedAt"],
@@ -498,6 +512,141 @@ def approve_research(job_id: str) -> dict:
     job.update(state="running", error=None)
     save(job)
     _start(job_id, _ai_research_then_compose(job_id, job, get_ai_provider(), compose_only=True))
+    return job
+
+
+# ---------- 조사 결과 화면의 '추가 조사' ----------
+# 사용자가 적은 내용을 지금 자료를 참고해 더 조사합니다. 결과는 초안(researchDraft)으로만 두고,
+# 사용자가 '통합'을 누를 때만 조사 자료(research)가 바뀝니다. 구성안은 그대로 두고 경고만 다시 계산합니다.
+MORE_STATES = ("waiting_research", "waiting_outline")
+DRAFT_PENDING = "확인하지 않은 추가 조사 결과가 있어요. 먼저 '통합' 또는 '버리기'를 골라 주세요"
+
+
+def _research_hash(research: dict | None) -> str:
+    return hashlib.sha256(json.dumps(research, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _require_more(job_id: str) -> dict:
+    job = _require(job_id, *MORE_STATES)  # AI 작업 중이면 여기서 막혀 같은 요청이 두 번 실행되지 않습니다
+    if not _is_ai(job):
+        raise JobConflict("추가 조사는 실제 AI 모드에서만 쓸 수 있어요")
+    if job.get("outline") and job["outline"].get("approved"):
+        raise JobConflict("구성안을 승인한 뒤에는 추가 조사를 할 수 없어요")
+    if not job.get("research") or not separates_research(job):
+        raise JobConflict("추가 조사할 조사 자료가 없어요")
+    return job
+
+
+def _require_draft(job_id: str) -> tuple[dict, dict]:
+    job = _require_more(job_id)
+    draft = job.get("researchDraft")
+    if not draft:
+        raise JobConflict("확인할 추가 조사 결과가 없어요")
+    return job, draft
+
+
+def _next_more_round(job: dict) -> int:
+    used = [r.get("round", 0) for r in (job.get("research") or {}).get("moreResearch") or []] + [r.get("round", 0) for r in job.get("moreResearchLog") or []]
+    return max(used, default=0) + 1
+
+
+def request_more_research(job_id: str, request: str) -> dict:
+    """추가 조사를 시작합니다. 화면과 작업 상태는 그대로 두고 AI 작업으로 실행합니다 (실패해도 지금 자료와 구성안은 그대로)."""
+    job = _require_more(job_id)
+    request = " ".join(str(request or "").split())[:research_merge.MORE_REQUEST_MAX]
+    if len(request) < 2:
+        raise JobConflict("추가로 조사할 내용을 적어 주세요")
+    if job.get("researchDraft"):
+        raise JobConflict(DRAFT_PENDING)
+    state = claude_cli.status()
+    if not state["available"]:
+        raise JobConflict(state["reason"])
+    round_no = _next_more_round(job)
+    base_hash = _research_hash(job["research"])
+    content_type = job["contentType"]
+
+    def work(snapshot):
+        return get_ai_provider().more_research(snapshot, snapshot["research"], request, round_no)
+
+    def apply(current, result):
+        # 조사하는 동안 자료나 단계가 바뀌었으면 결과를 쓰지 않습니다 (지금 자료를 덮지 않게)
+        approved = current.get("outline") and current["outline"].get("approved")
+        if (current["state"] not in MORE_STATES or approved or current["contentType"] != content_type
+                or _research_hash(current.get("research")) != base_hash):
+            current["aiError"] = "추가 조사 중에 조사 자료나 단계가 바뀌어 결과를 쓰지 않았어요. 지금 자료는 그대로예요"
+            return
+        research = result["research"]
+        if content_type == "character" and research.get("items"):
+            research["people"] = research_items.people_from(research)
+        current["researchDraft"] = {"round": round_no, "request": request, "at": datetime.now().isoformat(timespec="seconds"),
+                                    "contentType": content_type, "baseHash": base_hash, "research": research, "summary": result["summary"]}
+
+    return _start_ai_task(job, "research", None, work, apply)
+
+
+def choose_more_value(job_id: str, key: str, index: int) -> dict:
+    """초안에서 기존 값과 추가 조사 값이 다를 때 하나를 고릅니다. 지금 자료는 바꾸지 않습니다."""
+    job, draft = _require_draft(job_id)
+    try:
+        research_merge.choose_more_value(draft["research"], key, index)
+    except KeyError:
+        raise JobConflict("조사 항목을 찾을 수 없어요") from None
+    except ValueError as e:
+        raise JobConflict(str(e)) from None
+    if job["contentType"] == "character" and draft["research"].get("items"):
+        draft["research"]["people"] = research_items.people_from(draft["research"])
+    save(job)
+    return job
+
+
+def accept_more_research(job_id: str) -> dict:
+    """초안을 조사 자료로 통합합니다. 구성안 단계면 새 조사 버전으로 저장하고(이전 버전은 그대로), 구성안은 바꾸지 않고 경고만 다시 계산합니다.
+    통합 자료 검토 단계(waiting_research)면 '이 자료로 구성안 만들기'를 누를 때 검토 결과와 함께 새 버전으로 저장합니다."""
+    job, draft = _require_draft(job_id)
+    if draft.get("contentType") != job["contentType"] or _research_hash(job["research"]) != draft["baseHash"]:
+        raise JobConflict("추가 조사 뒤에 조사 자료가 바뀌었어요. 이 결과를 버리고 다시 조사해 주세요")
+    left = research_merge.open_conflicts(draft["research"], draft["round"])
+    if left:
+        labels = {i["key"]: i["label"] for i in draft["research"].get("items") or []}
+        raise JobConflict(f"기존 자료와 추가 조사 값이 다른 항목({', '.join(labels.get(k, k) for k in left)})에서 쓸 값을 먼저 골라 주세요")
+    research = draft["research"]
+    previous = job.get("researchVersion")
+    entry = {"round": draft["round"], "request": draft["request"], "at": draft["at"], "acceptedAt": datetime.now().isoformat(timespec="seconds"),
+             **{k: draft["summary"].get(k, []) for k in ("added", "extended", "confirmed", "conflicts", "sources", "people")},
+             "facts": draft["summary"].get("facts", 0),
+             "basedOn": {k: previous.get(k) for k in ("id", "number", "researchedAt")} if previous else None}
+    research["moreResearch"] = (research.get("moreResearch") or []) + [entry]
+    job["research"] = research
+    job["researchDraft"] = None
+    job.setdefault("moreResearchLog", []).append({"round": draft["round"], "request": draft["request"], "at": draft["at"], "result": "accepted"})
+    _refresh_people(job)
+    if job["state"] == "waiting_research":
+        job["research"]["supplement"]["moreRounds"] = job["research"]["supplement"].get("moreRounds", []) + [draft["round"]]
+    else:
+        if previous:
+            research["basedOn"] = entry["basedOn"]
+        try:
+            summary = research_library.save(job, research)
+            job["researchVersion"] = {"id": summary["id"], "number": summary["number"], "researchedAt": summary["researchedAt"],
+                                      "source": "more", "basedOn": entry["basedOn"], "round": draft["round"]}
+        except OSError:
+            pass  # 보관함에 쓰지 못해도 작업의 자료는 통합됩니다
+        if job.get("outline"):
+            job["outline"]["researchUpdated"] = {"round": draft["round"], "at": entry["acceptedAt"]}  # 구성안 다시 생성 안내
+            job["outline"]["issues"] = _issues(job)
+    save(job)
+    return job
+
+
+def discard_more_research(job_id: str) -> dict:
+    """초안을 버립니다. 지금 자료와 구성안은 바뀌지 않습니다 (요청 내용만 기록에 남김)."""
+    job = _require(job_id, *MORE_STATES)
+    draft = job.get("researchDraft")
+    if not draft:
+        raise JobConflict("버릴 추가 조사 결과가 없어요")
+    job.setdefault("moreResearchLog", []).append({"round": draft["round"], "request": draft["request"], "at": draft["at"], "result": "discarded"})
+    job["researchDraft"] = None
+    save(job)
     return job
 
 
@@ -766,6 +915,9 @@ def _issues(job: dict) -> dict:
             issues[card["frame"]]["warnings"].append("사용자가 제공한 자료가 들어 있어요. AI가 공식 페이지에서 확인한 내용이 아니니 게시 전에 확인해 주세요")
         if any(s["verification"] == "image" for s in cited):
             issues[card["frame"]]["warnings"].append("상세 이미지에서 AI가 읽은 정보가 들어 있어요. 조사 결과의 출처 이미지와 대조해 확인해 주세요")
+        aux = next((s["auxiliary"] for s in cited if s.get("auxiliary")), None)
+        if aux:
+            issues[card["frame"]]["warnings"].append(f"{aux['label']} 내용이 들어 있어요. 공식 자료가 아니니 공식 자료와 대조해 확인해 주세요")
         if state in ("user_provided", "image"):
             continue
         if state == "verified":
@@ -972,6 +1124,12 @@ def submit_material(job_id: str, material: dict) -> dict:
         raise JobConflict("실제 AI 모드에서만 쓸 수 있어요")
     if job.get("outline") and job["outline"]["approved"]:
         raise JobConflict("승인된 구성안이 있어요. 구성안 카드를 직접 수정해 주세요")
+    if material and material.get("sourceUrl"):
+        if site_policy.mirror_site(material["sourceUrl"]):
+            raise JobConflict("나무위키 미러 사이트 주소는 받지 않아요. 원본 문서나 공식 페이지 주소를 적어 주세요")
+        site = site_policy.auxiliary_site(material["sourceUrl"])
+        if site and job["contentType"] != "character":
+            raise JobConflict(f"{site['name']} 자료는 가격·일정·장소·콜라보 정보의 근거로 쓸 수 없어요. 공식 페이지에서 확인한 내용을 넣어 주세요")
     if material:
         job["userMaterial"] = {**material, "submittedAt": datetime.now().isoformat(timespec="seconds")}
     elif not job["detailImages"]:
@@ -1204,6 +1362,8 @@ def _start_outline_rewrite(job: dict, frames: list[str], new_version: bool) -> d
                 card.update(result["cards"][card["frame"]], edited=False, regenCount=card["regenCount"] + 1)
         if new_version:
             current["outline"]["version"] += 1
+        if set(frames) == set(FRAMES):
+            current["outline"].pop("researchUpdated", None)  # 통합된 자료로 구성안을 다시 썼으므로 안내를 거둡니다
         _revoke_outline(current)
         current["outline"]["issues"] = _issues(current)
 
@@ -1350,6 +1510,8 @@ def regenerate_outline_card(job_id: str, frame: str) -> dict:
 
 def approve_outline(job_id: str) -> dict:
     job = _require(job_id, "waiting_outline")
+    if job.get("researchDraft"):
+        raise JobConflict(DRAFT_PENDING)
     for frame, issue in job["outline"]["issues"].items():
         if issue["errors"]:
             raise JobConflict(f"{frame}: {issue['errors'][0]}")

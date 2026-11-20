@@ -8,5 +8,15 @@
       "checked": "2026-11-03 저장본 (2026-05-13 개정)"
     }
   ],
-  "official": []
+  "official": [],
+  "auxiliary": [
+    {
+      "domain": "namu.wiki",
+      "name": "나무위키",
+      "label": "나무위키(보조 출처)",
+      "items": {"character": ["personality", "friends", "family", "relations", "tmi"]},
+      "mirrors": ["namu.moe"],
+      "checked": "2026-11-20 robots.txt는 문서(/w/) 허용. 이용약관 원문은 403으로 확인 못 함. 문서 요청은 Cloudflare 403"
+    }
+  ]
 }

@@ -29,8 +29,9 @@ STALE_DAYS = 7
 # peopleResearch: 캐릭터별 이름·관계·TMI·근거·출처 / pipeline·researchedAtTime: 조사 방식과 시각 (비교용)
 # items 안에는 항목별 조사 결과(빈 이유)·충분성·근거 기록(evidence)·확인한 페이지(attempts)가 함께 저장됩니다
 # supplement·basedOn: 저장된 자료를 바탕으로 보완 조사한 버전의 통합 기록 (어느 버전에서, 무엇을 더했는지)
+# moreResearch: 조사 결과 화면의 '추가 조사'를 통합한 기록 (회차·요청 내용·더한 항목과 출처)
 KEEP = ("sources", "facts", "items", "missing", "queries", "searchPerformed", "partial", "peopleResearch", "pipeline", "researchedAtTime",
-        "supplement", "basedOn")
+        "supplement", "basedOn", "moreResearch")
 
 
 def topic_key(content_type: str, topic: str) -> str:
@@ -164,8 +165,9 @@ def delete(version_id: str) -> bool:
     return True
 
 
-def research_for_job(version: dict, notes: str = "") -> dict:
-    """작업에 넣을 조사 자료. 웹 조사를 하지 않았으므로 검색·접속 기록은 비우고, 어느 버전을 썼는지 남깁니다."""
+def research_for_job(version: dict, notes: str = "", notes_kind: str = "", notes_url: str = "") -> dict:
+    """작업에 넣을 조사 자료. 웹 조사를 하지 않았으므로 검색·접속 기록은 비우고, 어느 버전을 썼는지 남깁니다.
+    예전에 저장된 자료에도 지금 출처 규칙(나무위키 보조 출처·미러 제외)을 적용합니다. 저장된 파일은 고치지 않습니다."""
     saved = json.loads(json.dumps(version["research"]))
     research = {
         "searchPerformed": False, "queries": saved.get("queries", []), "searchResults": [], "fetched": [],
@@ -178,11 +180,12 @@ def research_for_job(version: dict, notes: str = "") -> dict:
         research["items"] = saved["items"]
     if saved.get("peopleResearch"):
         research["peopleResearch"] = saved["peopleResearch"]
+    if saved.get("moreResearch"):
+        research["moreResearch"] = saved["moreResearch"]
     if notes:
         # 시작 화면에 새로 적은 참고 자료는 사용자 제공 자료로 더합니다 (저장된 자료를 고치지 않음)
         research["sources"] = [s for s in research["sources"] if s.get("id") != research_items.USER_NOTES_ID] + [
-            {"id": research_items.USER_NOTES_ID, "title": "사용자가 입력한 참고 자료", "url": "", "kind": "user",
-             "verification": "user_provided", "origin": "user", "officialBasis": None}]
+            research_items.user_notes_source(notes_kind, notes_url, version["contentType"])]
         research["facts"] = [f for f in research["facts"] if research_items.USER_NOTES_ID not in f.get("sourceIds", [])] + [
             {"text": f"사용자 참고 자료: {notes[:4000]}", "sourceIds": [research_items.USER_NOTES_ID], "origin": "user"}]
-    return research
+    return research_items.apply_source_rules(research, version["contentType"])

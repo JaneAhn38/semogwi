@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Black+Han+Sans&family=Gaegu:wght@700&family=Sunflower:wght@500&family=Gowun+Batang&family=Noto+Sans+KR:wght@400;700&display=swap">
   <!-- 카드 글꼴(Jua, Gowun Dodum)은 로컬 파일이라 인터넷 없이도 그려집니다. 나머지는 예전 AI 디자인 작업용 -->
   <link rel="stylesheet" href="/fonts/fonts.css?v=11">
-  <link rel="stylesheet" href="/styles.css?v=11">
+  <link rel="stylesheet" href="/styles.css?v=13">
 </head>
 <body>
   <header class="site-header">
@@ -79,7 +79,17 @@
         <div class="field">
           <label for="notes">참고 자료 직접 입력 <span class="opt">선택</span> <span class="tag tag-demo demo-only">저장만 해요</span></label>
           <textarea id="notes" name="notes" rows="3" maxlength="4000" placeholder="공식 공지나 판매 페이지에서 직접 확인한 내용을 붙여 넣어 주세요"></textarea>
-          <small id="notes-hint" class="hint">AI가 조사할 때 함께 읽고, 카드에는 <b>사용자 제공</b> 자료로 표시돼요. 자동 접근이 금지된 사이트의 내용도 여기에 붙여 넣으면 돼요.</small>
+          <div class="notes-source">
+            <select id="notes-kind" name="notesKind" aria-label="참고 자료의 출처 종류">
+              <option value="">출처 종류 선택 안 함</option>
+              <option value="official">공식 출처</option>
+              <option value="namuwiki">나무위키</option>
+              <option value="other">기타</option>
+            </select>
+            <input id="notes-url" name="notesUrl" type="url" inputmode="url" maxlength="500" placeholder="자료를 옮겨 온 주소 (선택)" aria-label="참고 자료를 옮겨 온 주소">
+          </div>
+          <small id="notes-hint" class="hint">AI가 조사할 때 함께 읽고, 카드에는 <b>사용자 제공</b> 자료로 표시돼요. 자동 접근이 금지된 사이트의 내용도 여기에 붙여 넣으면 돼요.
+            '공식 출처'를 골라도 AI가 확인한 공식 자료로 표시하지 않아요. 나무위키 자료는 캐릭터 소개의 성격·친구·가족·TMI에만 <b>보조 출처</b>로 써요.</small>
         </div>
 
         <div class="field">
@@ -198,6 +208,7 @@
         <p class="panel-note">AI가 찾은 자료와 출처예요. 카드에 쓰기 전에 내용을 확인해 주세요.</p>
         <p id="research-version-note" class="notice" hidden></p>
         <div id="research-review" class="research-review" hidden></div>
+        <div id="research-more" class="research-review" hidden></div>
         <div id="research-checklist-wrap" hidden>
           <h3 class="sub-title">조사 항목</h3>
           <p class="panel-note">카드 5장에 필요한 항목이에요.</p>
@@ -315,6 +326,6 @@
   <!-- ?v=: 이미 옛 파일을 캐시한 브라우저도 새 파일을 받게 합니다. 파일을 바꾸면 함께 올립니다 -->
   <script src="/renderer.js?v=11"></script>
   <script src="/zip.js?v=11"></script>
-  <script src="/app.js?v=11"></script>
+  <script src="/app.js?v=13"></script>
 </body>
 </html>

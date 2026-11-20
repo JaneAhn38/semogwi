@@ -53,6 +53,52 @@ def is_registered_official(url: str) -> bool:
     return _find(url, "official") is not None
 
 
+# ---------- 보조 출처 (auxiliary) ----------
+# 공식 출처가 아니고 이용 조건도 확인 중인 사이트(나무위키). 정해진 유형·항목에만 2차 자료로 쓰고 공식 근거로는 쓰지 않습니다.
+# 미러 사이트(mirrors)는 원본이 아니므로 근거로 인정하지 않고 자동으로 읽지도 않습니다.
+def auxiliary_sites() -> list[dict]:
+    return list(_policy.get("auxiliary", []))
+
+
+def auxiliary_site(url: str) -> dict | None:
+    host = host_of(url)
+    return next((s for s in auxiliary_sites() if _matches(host, s["domain"])), None)
+
+
+def mirror_site(url: str) -> dict | None:
+    """보조 출처의 미러 사이트면 원본 사이트 정책을 돌려줍니다."""
+    host = host_of(url)
+    return next((s for s in auxiliary_sites() if any(_matches(host, m) for m in s.get("mirrors", []))), None)
+
+
+def auxiliary_tag(url: str, content_type: str | None) -> dict | None:
+    """출처에 붙일 보조 출처 표시. items: 이 유형에서 근거로 쓸 수 있는 조사 항목 (없으면 어느 항목의 근거도 아님)."""
+    site = auxiliary_site(url) or mirror_site(url)
+    if site is None:
+        return None
+    return {"site": site["domain"], "name": site["name"], "label": site["label"], "items": list(site.get("items", {}).get(content_type or "", []))}
+
+
+def _ai_blocked_domains(content_type: str | None) -> list[str]:
+    """AI가 읽지 않을 보조 출처 도메인: 미러 사이트, 그리고 이 유형에서 쓰지 않는 보조 출처 (요청을 줄이는 쪽으로만 씁니다)."""
+    domains = []
+    for site in auxiliary_sites():
+        domains += site.get("mirrors", [])
+        if content_type and not site.get("items", {}).get(content_type):
+            domains.append(site["domain"])
+    return domains
+
+
+def ai_blocked_labels(content_type: str | None) -> list[str]:
+    """프롬프트에 '읽지 않을 사이트'로 알릴 이름."""
+    labels = []
+    for site in auxiliary_sites():
+        labels += [f"{site['name']} 미러 {m}" for m in site.get("mirrors", [])]
+        if content_type and not site.get("items", {}).get(content_type):
+            labels.append(f"{site['name']} {site['domain']}")
+    return labels
+
+
 def classify_failure(code: int, retry_after: int | None = None) -> dict:
     """접속 실패의 뜻과, 그 사이트에 다시 요청하지 않을 시간을 정합니다."""
     if code == 429:
@@ -106,13 +152,14 @@ def cooldown_seconds(url: str) -> int:
     return max(0, cooldown_until(url) - int(time.time()))
 
 
-def deny_rules() -> list[str]:
-    """AI 호출에서 차단할 WebFetch 규칙. 금지 사이트와 대기 중인 사이트입니다.
+def deny_rules(content_type: str | None = None) -> list[str]:
+    """AI 호출에서 차단할 WebFetch 규칙. 금지 사이트, 대기 중인 사이트, 보조 출처의 미러 사이트,
+    그리고 content_type이 주어지면 그 유형에서 쓰지 않는 보조 출처(예: 굿즈 조사의 나무위키)입니다.
 
     `*.도메인`은 모든 깊이의 하위 도메인을 막지만 도메인 자체는 막지 않아 두 규칙을 함께 넣습니다.
     와일드카드는 Claude Code v2.1.172 이상에서 동작합니다.
     """
-    domains = [s["domain"] for s in restricted_sites()] + cooling_hosts()
+    domains = [s["domain"] for s in restricted_sites()] + cooling_hosts() + _ai_blocked_domains(content_type)
     rules = []
     for domain in dict.fromkeys(domains):
         rules += [f"WebFetch(domain:{domain})", f"WebFetch(domain:*.{domain})"]

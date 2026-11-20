@@ -470,7 +470,7 @@ def verify_items(content_type: str, raw_items: list, sources: list[dict], log: d
         report = reports.get(key)
         checked = [{"url": u, "result": attempt_result(u, log or {})} for u in dict.fromkeys((report or {}).get("checkedUrls", []))]
         if main["value"]:
-            state = _state(main, values, by_id)
+            state = _state(main, values, by_id, key)
         elif log is None and old.get(key, {}).get("state") in EMPTY_STATES:
             state = old[key]["state"]  # 다시 정리할 때는 예전 조사에서 정한 이유를 유지합니다
         else:
@@ -492,18 +492,30 @@ def verify_items(content_type: str, raw_items: list, sources: list[dict], log: d
     return items
 
 
-def _state(main: dict, values: list[dict], by_id: dict) -> str:
+def _counts_for(source: dict, key: str | None) -> bool:
+    """보조 출처(나무위키)는 정해진 항목의 근거로만 셉니다. key를 모르면(예전 호출) 그대로 셉니다."""
+    aux = source.get("auxiliary")
+    return not aux or key is None or key in aux.get("items", [])
+
+
+def _state(main: dict, values: list[dict], by_id: dict, key: str | None = None) -> str:
     if not main["value"]:
         return "missing"
     if len(values) > 1:
-        return "conflict"
-    cited = [by_id[i] for i in main["sourceIds"]]
+        return "conflict"  # 공식 값과 보조 출처 값이 달라도 여기서 사용자 검토로 갑니다
+    cited = [by_id[i] for i in main["sourceIds"] if i in by_id]
+    usable = [s for s in cited if _counts_for(s, key)]
+    if cited and not usable:
+        return "unverified"  # 보조 출처만 근거인데 그 항목에는 쓸 수 없음 (예: 나무위키의 생일·가격)
+    cited = usable
     verifications = {s["verification"] for s in cited}
     read = [s for s in cited if s["verification"] == "fetched"]
-    if any(s["kind"] == "official" for s in read):
+    if any(s["kind"] == "official" and not s.get("auxiliary") for s in read):
         return "verified"
     if read:
         return "secondary"
+    if cited and all(s.get("auxiliary") for s in cited):
+        return "secondary"  # 사용자가 옮긴 나무위키 자료: 사용자 제공이어도 2차 자료 수준 (공식만 허용하는 항목에는 부족)
     if "image" in verifications:
         return "image"
     if "user_provided" in verifications:
@@ -511,6 +523,51 @@ def _state(main: dict, values: list[dict], by_id: dict) -> str:
     if "search_result" in verifications:
         return "listed"
     return "unverified"
+
+
+# ---------- 출처 규칙 (최초 조사·추가 조사·보관함 공통) ----------
+NOTES_KINDS = {"": "사용자가 입력한 참고 자료", "official": "사용자가 입력한 참고 자료 (공식 출처라고 입력 · 검증 안 됨)",
+               "namuwiki": "나무위키에서 옮긴 참고 자료 (사용자 제공)", "other": "사용자가 입력한 참고 자료 (기타 출처)"}
+
+
+def user_notes_source(kind: str = "", url: str = "", content_type: str | None = None) -> dict:
+    """참고 자료 직접 입력의 출처(u1). 사용자가 '공식'을 골라도 공식 확인으로 만들지 않습니다 (verification은 늘 user_provided).
+    나무위키를 골랐거나 주소가 나무위키·미러면 보조 출처로 표시해 정해진 항목에만 2차 자료로 씁니다."""
+    kind = kind if kind in NOTES_KINDS else ""
+    url = url if re.match(r"^https?://", url or "") else ""
+    source = {"id": USER_NOTES_ID, "title": NOTES_KINDS[kind], "url": url, "kind": "user", "verification": "user_provided",
+              "origin": "user", "officialBasis": None, "userKind": kind}
+    aux = site_policy.auxiliary_tag(url, content_type) if url else None
+    if kind == "namuwiki" or aux:
+        source["auxiliary"] = aux or site_policy.auxiliary_tag("https://namu.wiki/", content_type)
+        source["title"] = NOTES_KINDS["namuwiki"]
+        source["userKind"] = "namuwiki"
+    return source
+
+
+def apply_source_rules(research: dict, content_type: str) -> dict:
+    """예전에 저장된 자료에도 지금 출처 규칙을 적용합니다: 나무위키 출처에 보조 출처 표시를 붙이고, 미러 사이트는 읽은 근거로 보지 않으며,
+    그 출처를 쓰는 항목의 상태를 다시 정합니다. 사용자가 고른 값·고친 값·출처 충돌은 그대로 둡니다. research를 고칩니다."""
+    changed = set()
+    for source in research.get("sources", []):
+        if source.get("origin") == "user":
+            continue
+        url = source.get("url", "")
+        tag = site_policy.auxiliary_tag(url, content_type) if url else None
+        if tag and source.get("auxiliary") != tag:
+            source.update(auxiliary=tag, kind="secondary", officialBasis=None)
+            changed.add(source["id"])
+        if url and site_policy.mirror_site(url) and source.get("verification") == "fetched":
+            source["verification"] = "mirror"
+            changed.add(source["id"])
+    if changed:
+        by_id = {s["id"]: s for s in research.get("sources", [])}
+        for item in research.get("items") or []:
+            if (item.get("value") and item.get("state") not in EMPTY_STATES | {"conflict", "user"}
+                    and set(item.get("sourceIds", [])) & changed):
+                main = {"value": item["value"], "sourceIds": item["sourceIds"]}
+                item["state"] = _state(main, [main], by_id, item["key"])
+    return research
 
 
 def facts_from_items(items: list[dict]) -> list[dict]:

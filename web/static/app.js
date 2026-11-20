@@ -19,6 +19,7 @@
     redesign: "AI가 이 카드만 다시 디자인하고 있어요. 1분 안팎 걸려요. 다른 카드는 그대로예요.",
     vision: "AI가 상세 이미지에서 상품 정보를 읽고 있어요. 이미지가 길면 1~2분 걸려요. 웹에는 접속하지 않아요.",
     retype: "AI가 바뀐 유형의 템플릿에 맞춰 구성안을 다시 쓰고 있어요. 저장된 조사 결과만 쓰고 검색은 다시 하지 않아요.",
+    research: "AI가 요청한 내용을 추가 조사하고 있어요. 2~5분 걸릴 수 있어요. 지금 조사 자료와 구성안은 그대로예요.",
   };
   const STATUS_TEXT = {
     running: "예시 작업을 진행하고 있어요. 실제 조사나 AI 생성은 하지 않아요.",
@@ -201,15 +202,16 @@
     state.className = `approval ${readCount ? "is-approved" : "is-needed"}`;
     renderResearchVersion();
     renderReview(research);
+    renderMore(research);
     renderPeople(research);
     renderChecklist(research);
     renderProblems(research);
     $("research-queries").replaceChildren(...research.queries.map((q) => el("li", { textContent: q })));
     $("research-sources").replaceChildren(...research.sources.map((s) =>
       // 확인 상태·분류 배지는 표시하지 않습니다 (verification·kind·officialBasis는 data 속성과 조사 데이터에 그대로)
-      el("li", { dataset: { verification: s.verification, kind: s.kind || "" } }, sourceLink(s))));
+      el("li", { dataset: { verification: s.verification, kind: s.kind || "" } }, sourceLink(s), sourceNote(s), roundTag(s.round))));
     $("research-facts").replaceChildren(...research.facts.map((f) =>
-      el("li", { dataset: { origin: f.origin || "ai" } }, f.text)));
+      el("li", { dataset: { origin: f.origin || "ai" } }, f.text, roundTag(f.round))));
   }
 
   // 캐릭터 소개: 친구·가족 캐릭터별로 찾은 TMI와 근거 문장·출처, 찾지 못한 캐릭터, 쓰지 않은 내용과 이유
@@ -303,6 +305,8 @@
       const reviewing = job.state === "waiting_research";
       const note = supplementNote(item);
       if (note) detail.append(el("span", { class: "item-supplement" }, note));
+      const aux = auxNote(item, research.sources);
+      if (aux) detail.append(el("span", { class: "item-supplement", dataset: { aux: item.key } }, aux));
       if (reviewing && item.savedConflict) {
         detail.append(conflictChooser(item));
       } else {
@@ -327,6 +331,10 @@
   let reviewEditing = "";  // 직접 수정 중인 조사 항목
 
   function supplementNote(item) {
+    return [savedSupplementNote(item), moreNote(item)].filter(Boolean).join(" ");
+  }
+
+  function savedSupplementNote(item) {
     if (item.userEdited) return "검토 중에 직접 수정한 값이에요.";
     if (item.chosen === "supplement") return "기존 자료와 달라서 추가 조사 값을 골랐어요.";
     if (item.chosen === "saved") return "기존 자료와 달라서 기존 값을 골랐어요.";
@@ -338,7 +346,7 @@
   }
 
   function conflictChooser(item) {
-    const options = [{ value: item.value, sourceIds: item.sourceIds, label: "기존 자료" }, ...(item.alternatives || []).map((a) => ({ ...a, label: a.origin === "supplement" ? "추가 조사" : "다른 출처" }))];
+    const options = [{ value: item.value, sourceIds: item.sourceIds, label: "기존 자료" }, ...(item.alternatives || []).map((a) => ({ ...a, label: altLabel(a) }))];
     return el("div", { class: "review-conflict", dataset: { conflict: item.key } },
       el("p", { class: "review-conflict-note", textContent: "기존 자료와 추가 조사 값이 달라요. 어느 값을 쓸지 골라 주세요. 고르지 않은 값도 기록에 남아요." }),
       ...options.map((option, index) => el("div", { class: "review-option" },
@@ -395,6 +403,163 @@
         onclick: () => action("research/supplement-retry") }) : ""));
     parts.push(el("small", { class: "hint", textContent: "구성안을 만들면 이 통합 자료가 새 조사 버전으로 저장돼요. 바탕이 된 저장 버전은 그대로 남아요." }));
     box.replaceChildren(el("h3", { class: "sub-title", textContent: "통합된 자료 검토" }), ...parts);
+  }
+
+  // ---------- 조사 결과 화면의 '추가 조사' (초안 → 통합 / 버리기) ----------
+  const MORE_STATES = ["waiting_research", "waiting_outline"];
+  const MORE_MAX = 300;
+  let moreText = "";  // 다시 그려도 입력 중인 내용을 잃지 않게 둡니다
+  const moreAvailable = () => Boolean(options && (options.features || []).includes("moreResearch"));
+  const MORE_RESULT = { added: "새로 찾은 항목", extended: "내용이 늘어난 항목", confirmed: "다른 출처에서도 확인한 항목", conflicts: "기존 값과 다른 항목" };
+
+  // ---------- 보조 출처(나무위키)와 공식 확인 구분 ----------
+  const NOTES_KIND_TEXT = { "": "사용자 제공", official: "사용자 제공 · 공식 출처라고 입력, 검증 안 됨", namuwiki: "사용자 제공 · 나무위키(보조 출처)", other: "사용자 제공 · 기타 출처" };
+
+  function sourceNote(source) {
+    const parts = [];
+    if (source.auxiliary) parts.push(source.auxiliary.label);
+    if (source.verification === "mirror") parts.push("미러 사이트라 근거로 쓰지 않음");
+    if (source.verification === "user_provided") parts.push("사용자 제공");
+    if (source.userKind === "official") parts.push("공식 출처라고 입력 · 검증 안 됨");
+    return parts.length ? el("span", { class: "more-round", textContent: ` · ${parts.join(" · ")}` }) : "";
+  }
+
+  function auxNote(item, sources) {
+    if (!item.value) return "";
+    const aux = (item.sourceIds || []).map((id) => sources.find((s) => s.id === id)).filter((s) => s && s.auxiliary);
+    if (!aux.length) return "";
+    const label = aux[0].auxiliary.label;
+    if (!aux.some((s) => (s.auxiliary.items || []).includes(item.key))) return `${label}는 이 항목의 근거로 쓰지 않아요 · 공식 확인 필요`;
+    if (item.state === "verified") return `공식 확인 · ${label}도 참고`;
+    if (item.state === "conflict") return `${label}와 다른 출처의 값이 달라요 · 확인 필요`;
+    return `${label} 근거 · 공식 확인 안 됨`;
+  }
+
+  function roundTag(round) {
+    return round ? el("span", { class: "more-round", textContent: ` · 추가 조사 ${round}회차` }) : "";
+  }
+
+  function altLabel(alt) {
+    if (alt.origin === "more") return `추가 조사 ${alt.round}회차`;
+    return alt.origin === "supplement" ? "추가 조사" : "다른 출처";
+  }
+
+  function moreNote(item) {
+    if (!item.moreRound) return "";
+    const head = `추가 조사 ${item.moreRound}회차:`;
+    if (item.moreChosen === "more") return `${head} 기존 자료와 달라서 추가 조사 값을 골랐어요.`;
+    if (item.moreChosen === "saved") return `${head} 기존 자료와 달라서 기존 값을 골랐어요.`;
+    return {
+      added: `${head} 새로 찾은 내용이에요.`,
+      extended: `${head} 내용이 늘었어요 (기존: ${item.previousValue || ""}).`,
+      confirmed: `${head} 같은 내용을 다른 출처에서도 확인했어요.`,
+      conflicts: `${head} 기존 값과 다른 값을 찾았어요.`,
+    }[item.moreResult] || "";
+  }
+
+  function draftLinks(ids, sources) {
+    return (ids || []).map((id) => sources.find((s) => s.id === id)).filter(Boolean).map((s) => el("span", {}, " ", sourceLink(s), sourceNote(s), roundTag(s.round)));
+  }
+
+  function renderMore(research) {
+    const box = $("research-more");
+    const approved = job.outline && job.outline.approved;
+    box.hidden = !(research && isTemplateJob() && MORE_STATES.includes(job.state) && !approved);
+    if (box.hidden) return;
+    const title = el("h3", { class: "sub-title", textContent: "추가 조사" });
+    if (job.mode !== "ai") {
+      // 데모 작업: 기능을 끄고 안내만 보여 줍니다
+      box.replaceChildren(title, el("p", { class: "review-summary", dataset: { moreDisabled: "" }, textContent: "추가 조사는 실제 AI 모드에서만 쓸 수 있어요. 데모 작업에서는 쓸 수 없어요." }));
+      return;
+    }
+    if (!moreAvailable()) {
+      box.replaceChildren(title, el("p", { class: "review-summary", textContent: "서버가 예전 코드로 실행 중이라 추가 조사를 쓸 수 없어요. 서버 창(run.bat)을 닫고 다시 실행한 뒤 새로고침해 주세요." }));
+      return;
+    }
+    const draft = job.researchDraft;
+    box.replaceChildren(title, ...(draft ? moreDraftParts(draft) : moreRequestParts()));
+  }
+
+  function moreRequestParts() {
+    const parts = [];
+    const updated = job.outline && job.outline.researchUpdated;
+    if (updated) {
+      parts.push(el("p", { class: "notice", dataset: { moreUpdated: "" },
+        textContent: `추가 조사 ${updated.round}회차 결과를 조사 자료에 통합했어요. 지금 구성안은 바꾸지 않았어요. 통합된 자료로 문구를 다시 쓰려면 구성안의 '전체 구성안 다시 만들기'를 눌러 주세요.` }));
+    }
+    const input = el("textarea", { rows: 2, maxLength: MORE_MAX, placeholder: "예: 굿즈 판매처와 가격, 캐릭터의 생일을 더 찾아 줘", "aria-label": "추가로 조사할 내용", dataset: { moreInput: "" } });
+    input.value = moreText;
+    const count = el("small", { class: "hint", textContent: `${moreText.length}/${MORE_MAX}` });
+    input.addEventListener("input", () => { moreText = input.value; count.textContent = `${moreText.length}/${MORE_MAX}`; });
+    const button = el("button", { class: "btn btn-ghost", type: "button", textContent: "추가 조사", dataset: { moreRequest: "" },
+      onclick: () => {
+        const text = input.value.trim();
+        if (text.length < 2) { show("action-error", "추가로 조사할 내용을 적어 주세요"); return; }
+        if (!confirm("적은 내용을 AI가 웹에서 추가 조사해요. Pro 사용 한도가 차감돼요. 진행할까요?")) return;
+        moreText = "";
+        action("research/more", jsonInit("POST", { request: text }));
+      } });
+    parts.push(el("p", { class: "review-summary", textContent: "부족한 내용이 있으면 적어 주세요. 지금 자료를 참고해 적은 내용만 더 찾아요. 결과는 따로 보여 주고, '통합'을 눌러야 조사 자료에 들어가요. 지금 자료와 구성안은 그대로예요." }),
+      input, count, el("div", { class: "actions" }, button));
+    return parts;
+  }
+
+  function moreDraftParts(draft) {
+    const research = draft.research;
+    const summary = draft.summary || {};
+    const round = draft.round;
+    const items = (research.items || []).filter((i) => i.moreRound === round);
+    const conflicts = items.filter((i) => i.savedConflict);
+    const counts = Object.entries(MORE_RESULT).map(([key, label]) => [label, (summary[key] || []).length]).filter(([, n]) => n)
+      .map(([label, n]) => `${label} ${n}개`);
+    const newSources = (research.sources || []).filter((s) => s.round === round);
+    const newFacts = (research.facts || []).filter((f) => f.round === round);
+    const newPeople = ((research.peopleResearch || {}).people || []).filter((p) => p.round === round);
+    const parts = [el("p", { class: "review-summary", dataset: { moreDraft: String(round) } },
+      el("b", { textContent: `추가 조사 ${round}회차 결과 (아직 통합 전)` }), ` · 요청: “${draft.request}” · `,
+      `${counts.length ? counts.join(" · ") : "조사 항목에 새로 더한 내용은 없어요"} · 새 출처 ${newSources.length}개 · 새 사실 ${newFacts.length}개`)];
+    if (items.length) {
+      parts.push(el("ul", { class: "research-checklist" }, ...items.map((item) => {
+        const detail = el("div", { class: "item-detail" }, el("span", { textContent: item.value }));
+        if (item.quote) detail.append(el("q", { textContent: item.quote }));
+        detail.append(el("span", { class: "item-supplement", textContent: moreNote(item) }));
+        const aux = auxNote(item, research.sources);
+        if (aux) detail.append(el("span", { class: "item-supplement", textContent: aux }));
+        if (item.savedConflict) {
+          const options = [{ value: item.value, sourceIds: item.sourceIds, label: "기존 자료" }, ...(item.alternatives || []).map((a) => ({ ...a, label: altLabel(a) }))];
+          detail.append(el("div", { class: "review-conflict", dataset: { moreConflict: item.key } },
+            el("p", { class: "review-conflict-note", textContent: "기존 값과 추가 조사 값이 달라요. 어느 값을 쓸지 골라 주세요. 고르지 않은 값도 기록에 남아요." }),
+            ...options.map((option, index) => el("div", { class: "review-option" },
+              el("span", {}, el("b", { textContent: `${option.label}: ` }), option.value, ...draftLinks(option.sourceIds, research.sources)),
+              el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "이 값 사용", dataset: { moreChoose: `${item.key}:${index}` },
+                onclick: () => action(`research/more/items/${item.key}/choose`, jsonInit("POST", { index })) })))));
+        } else {
+          detail.append(el("span", {}, "출처:", ...draftLinks(item.sourceIds, research.sources)));
+        }
+        return el("li", { dataset: { item: item.key } }, el("b", { textContent: item.label }), detail);
+      })));
+    }
+    if (newPeople.length) {
+      parts.push(el("ul", { class: "research-people" }, ...newPeople.map((p) => el("li", {},
+        el("b", { textContent: p.name }), ` TMI: ${p.tmi || "찾지 못했어요"}`, ...draftLinks(p.sourceIds, research.sources)))));
+    }
+    if (newSources.length) {
+      parts.push(el("h4", { class: "sub-title", textContent: "이번에 새로 쓴 출처" }),
+        el("ul", { class: "research-sources" }, ...newSources.map((s) => el("li", { dataset: { verification: s.verification, kind: s.kind || "" } }, sourceLink(s), sourceNote(s), roundTag(round)))));
+    }
+    if (newFacts.length) {
+      parts.push(el("details", { class: "research-facts" }, el("summary", { textContent: `새로 찾은 사실 ${newFacts.length}개 보기` }),
+        el("ul", {}, ...newFacts.map((f) => el("li", {}, f.text, ...draftLinks(f.sourceIds, research.sources))))));
+    }
+    if (conflicts.length) parts.push(el("p", { class: "review-conflict-note", textContent: `기존 값과 다른 항목이 ${conflicts.length}개 있어요. 쓸 값을 고른 뒤 통합할 수 있어요.` }));
+    parts.push(el("div", { class: "actions" },
+      el("button", { class: "btn btn-primary", type: "button", textContent: "통합", dataset: { moreAccept: "" }, onclick: () => action("research/more/accept") }),
+      el("button", { class: "btn btn-ghost", type: "button", textContent: "버리기", dataset: { moreDiscard: "" },
+        onclick: () => { if (confirm("이번 추가 조사 결과를 버릴까요? 지금 조사 자료와 구성안은 그대로예요.")) action("research/more/discard"); } })));
+    parts.push(el("small", { class: "hint", textContent: job.state === "waiting_research"
+      ? "통합하면 검토 중인 자료에 들어가고, '이 자료로 구성안 만들기'를 누를 때 새 조사 버전으로 저장돼요."
+      : "통합하면 조사 자료가 새 버전으로 저장되고 이전 버전은 그대로 남아요. 지금 구성안은 바뀌지 않아요." }));
+    return parts;
   }
 
   function renderProblems(research) {
@@ -734,12 +899,17 @@
     $("topic-count").textContent = `${$("topic").value.length} / ${options.limits.topicMax}자`;
   }
 
-  const readInput = () => ({ topic: $("topic").value.trim(), contentType: $("job-form").elements.contentType.value, url: $("url").value.trim(), notes: $("notes").value.trim() });
+  // 참고 자료의 출처 종류·주소는 서버가 받을 수 있을 때만 보냅니다 (예전 서버는 모르는 필드를 거절함)
+  const notesSourceAvailable = () => Boolean(options && (options.features || []).includes("notesSource"));
+  const readInput = () => ({ topic: $("topic").value.trim(), contentType: $("job-form").elements.contentType.value, url: $("url").value.trim(), notes: $("notes").value.trim(),
+    ...(notesSourceAvailable() ? { notesKind: $("notes-kind").value, notesUrl: $("notes-url").value.trim() } : {}) });
 
   function fillForm() {
     $("topic").value = job.topic;
     $("url").value = job.url;
     $("notes").value = job.notes || "";
+    $("notes-kind").value = job.notesKind || "";
+    $("notes-url").value = job.notesUrl || "";
     if (job.state !== "draft") {
       const modeRadio = [...$("job-form").elements.mode].find((r) => r.value === job.mode);
       if (modeRadio) modeRadio.checked = true;
@@ -1032,7 +1202,7 @@
       ["주제", job.topic],
       ["콘텐츠 유형", typeLabel],
       ["참고 URL", job.url || "없음"],
-      ["참고 자료", job.notes ? `직접 입력 ${job.notes.length}자 (사용자 제공)` : "없음"],
+      ["참고 자료", job.notes ? `직접 입력 ${job.notes.length}자 (${NOTES_KIND_TEXT[job.notesKind || ""]})` : "없음"],
       ["이미지", assets.length ? (placed ? `${assets.length}장 중 ${used.size}장을 카드에 사용` : `${assets.length}장`) : "없음"],
       template ? ["디자인", "고정 템플릿 5장"]
         : ["디자인 테마", theme.source === "ai" ? `${theme.label} (AI 선택)` : job.mode === "ai" ? "디자인 단계에서 AI가 정해요" : "기본 테마 (데모)"],
@@ -2305,7 +2475,10 @@
     const fromLibrary = job && job.research && job.research.fromLibrary;
     node.hidden = !info;
     if (!info) return;
-    if (info.source === "supplement") {
+    if (info.source === "more") {
+      const base = info.basedOn || {};
+      node.textContent = `추가 조사 ${info.round}회차 결과를 통합해 새 버전 #${info.number}로 저장했어요.${base.number ? ` 이전 버전 #${base.number}은 그대로예요.` : ""}`;
+    } else if (info.source === "supplement") {
       const base = info.basedOn || {};
       node.textContent = `저장된 자료 #${base.number}을 바탕으로 부족한 내용을 추가 조사해 합쳤고, 새 버전 #${info.number}(조사일 ${info.researchedAt})로 저장했어요. 바탕 버전은 그대로예요.`;
     } else if (info.source === "saved" && job.researchBase) {
@@ -2325,7 +2498,7 @@
       updateTopicCount();
       $("topic").removeAttribute("aria-invalid");
     });
-    for (const id of ["topic", "url", "notes", "type-options"]) $(id).addEventListener("change", saveDraftInput);
+    for (const id of ["topic", "url", "notes", "notes-kind", "notes-url", "type-options"]) $(id).addEventListener("change", saveDraftInput);
     $("images").addEventListener("change", (e) => {
       const files = [...e.target.files];
       e.target.value = "";

@@ -116,6 +116,8 @@ class InputBody(Strict):
     contentType: str
     url: str = ""
     notes: str = Field(default="", max_length=4000)  # 사용자가 직접 입력한 참고 자료
+    notesKind: Literal["", "official", "namuwiki", "other"] = ""  # 참고 자료의 출처 종류 (공식을 골라도 공식 확인이 아님)
+    notesUrl: str = Field(default="", max_length=URL_MAX)  # 참고 자료를 옮겨 온 주소 (자동으로 읽지 않음)
     mode: Literal["demo", "ai"] = "demo"
     researchMode: Literal["new", "saved"] = "new"  # 새로 조사하기 / 저장된 자료 사용
     researchVersion: str | None = Field(default=None, max_length=40)
@@ -209,6 +211,16 @@ def _check_input(topic: str, content_type: str, url: str, require_topic: bool = 
     return topic, content_type, _clean_url(url)
 
 
+def _check_notes_source(kind: str, url: str) -> str:
+    """참고 자료의 주소. 나무위키를 골랐으면 나무위키 주소만 받습니다 (미러 사이트는 원본이 아니라 받지 않음)."""
+    url = _clean_url(url)
+    if url and site_policy.mirror_site(url):
+        raise HTTPException(400, "나무위키 미러 사이트 주소는 받지 않아요. 나무위키 원본 문서 주소를 적어 주세요")
+    if kind == "namuwiki" and url and not site_policy.auxiliary_site(url):
+        raise HTTPException(400, "출처 종류가 나무위키면 namu.wiki 주소를 적어 주세요")
+    return url
+
+
 def _check_rights(name: str, rights: str, source: str) -> str:
     source = source.strip()[:SOURCE_MAX]
     if rights not in RIGHTS:
@@ -252,7 +264,7 @@ async def options():
         "templates": templates.public_templates(),
         "templateTypes": sorted(t for t in CONTENT_TYPES if templates.enabled(t)),
         # 서버가 제공하는 기능. 화면(app.js)만 새 파일이고 서버가 예전 코드로 실행 중이면 화면이 알아채고 안내합니다
-        "features": ["libraryManage"],
+        "features": ["libraryManage", "moreResearch", "notesSource"],
     }
 
 
@@ -307,13 +319,15 @@ async def get_job(job_id: str):
 @app.patch("/api/jobs/{job_id}/input")
 async def update_input(job_id: str, body: InputBody):
     topic, content_type, url = _check_input(body.topic, body.contentType, body.url, require_topic=False)
-    return _call(jobs.update_input, job_id, topic, content_type, url, body.notes.strip())
+    notes_url = _check_notes_source(body.notesKind, body.notesUrl)
+    return _call(jobs.update_input, job_id, topic, content_type, url, body.notes.strip(), body.notesKind, notes_url)
 
 
 @app.post("/api/jobs/{job_id}/start")
 async def start_job(job_id: str, body: InputBody):
     topic, content_type, url = _check_input(body.topic, body.contentType, body.url)
-    _call(jobs.update_input, job_id, topic, content_type, url, body.notes.strip())
+    notes_url = _check_notes_source(body.notesKind, body.notesUrl)
+    _call(jobs.update_input, job_id, topic, content_type, url, body.notes.strip(), body.notesKind, notes_url)
     return _call(jobs.start, job_id, body.mode, body.researchMode, body.researchVersion)
 
 
@@ -466,6 +480,35 @@ async def approve_research(job_id: str):
 @app.post("/api/jobs/{job_id}/research/supplement-retry")
 async def retry_supplement(job_id: str):
     return _call(jobs.retry_supplement, job_id)
+
+
+# ---------- 조사 결과 화면의 '추가 조사' (초안 → 통합 / 버리기) ----------
+class MoreResearchRequest(Strict):
+    request: str = Field(min_length=1, max_length=600)  # 서버가 공백을 정리한 뒤 300자로 자릅니다
+
+
+@app.post("/api/jobs/{job_id}/research/more", status_code=202)
+async def request_more_research(job_id: str, body: MoreResearchRequest):
+    """사용자가 적은 내용을 추가 조사합니다. 결과는 초안으로만 두고 지금 자료는 바꾸지 않습니다."""
+    return _call(jobs.request_more_research, job_id, body.request)
+
+
+@app.post("/api/jobs/{job_id}/research/more/items/{key}/choose")
+async def choose_more_value(job_id: str, key: str, body: ResearchChoice):
+    """초안에서 기존 값과 추가 조사 값이 다를 때 하나를 고릅니다 (0 = 기존 값)."""
+    return _call(jobs.choose_more_value, job_id, key, body.index)
+
+
+@app.post("/api/jobs/{job_id}/research/more/accept")
+async def accept_more_research(job_id: str):
+    """초안을 조사 자료로 통합합니다 (구성안은 그대로, 새 조사 버전 저장)."""
+    return _call(jobs.accept_more_research, job_id)
+
+
+@app.post("/api/jobs/{job_id}/research/more/discard")
+async def discard_more_research(job_id: str):
+    """초안을 버립니다. 지금 자료는 그대로입니다."""
+    return _call(jobs.discard_more_research, job_id)
 
 
 @app.post("/api/jobs/{job_id}/retry")

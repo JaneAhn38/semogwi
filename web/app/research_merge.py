@@ -82,7 +82,7 @@ def _restate(item: dict, by_id: dict) -> str:
     if not main["sourceIds"]:
         return item["state"]
     values = [main] + [a for a in item.get("alternatives", []) if a.get("value")]
-    return research_items._state(main, values, by_id)
+    return research_items._state(main, values, by_id, item["key"])
 
 
 def merge_item(base: dict | None, new: dict | None, by_id: dict, spec: dict) -> tuple[dict | None, str]:
@@ -273,10 +273,112 @@ def choose_value(research: dict, key: str, index: int) -> dict:
                 evidence=chosen.get("evidence", []), alternatives=[], chosen="saved" if index == 0 else "supplement")
     item.pop("savedConflict", None)
     by_id = {s["id"]: s for s in research.get("sources", [])}
-    item["state"] = research_items._state({"value": item["value"], "sourceIds": item["sourceIds"]}, [item], by_id) if item["sourceIds"] else "unverified"
+    item["state"] = research_items._state({"value": item["value"], "sourceIds": item["sourceIds"]}, [item], by_id, item["key"]) if item["sourceIds"] else "unverified"
     _refresh_facts(research, item)
     return item
 
 
 def _refresh_facts(research: dict, item: dict) -> None:
     research["facts"] = [f for f in research.get("facts", []) if f.get("item") != item["key"]] + research_items.facts_from_items([item])
+
+
+# ---------- 조사 결과 화면의 '추가 조사' (사용자가 적은 내용을 더 조사) ----------
+# 추가 조사 결과는 작업의 조사 자료(job.research)에 바로 넣지 않고 초안(job.researchDraft)으로 둡니다.
+# 초안은 '지금 자료 + 이번 회차 결과'를 합친 자료이고, 이번 회차에 생긴 것에는 회차 번호(moreRound)를 붙입니다.
+# 사용자가 '통합'을 누를 때만 초안이 조사 자료가 됩니다. '버리기'를 누르거나 실패하면 지금 자료는 그대로입니다.
+MORE_REQUEST_MAX = 300
+_LOG_KEYS = ("fetched", "fetchFailures", "searchFailures")
+
+
+def merge_more(base: dict, new: dict, content_type: str) -> dict:
+    """지금 자료(base) + 사용자 요청 추가 조사(new). base와 new는 고치지 않습니다.
+
+    통합 규칙은 보완 조사(merge)와 같고, 다음만 다릅니다.
+    - 보완 조사 기록(supplement·basedOn)·조사일·핵심 정보만 사용 여부(partial)는 지금 자료 그대로 둡니다
+      (이번 회차는 요청한 내용만 찾으므로 다른 항목을 다시 확인한 것이 아닙니다).
+    - 검색·접속 기록은 지금 기록에 이어 붙입니다.
+    - 둘 다 비어 있는 항목은, 이번 회차에서 찾아보지 않았으면 지금의 '빈 이유'를 그대로 둡니다.
+    """
+    merged = merge(base, new, content_type, {})
+    result = json.loads(json.dumps(base))
+    for key in ("sources", "facts", "items", "queries", "searchPerformed"):
+        result[key] = merged[key]
+    if merged.get("peopleResearch"):
+        result["peopleResearch"] = merged["peopleResearch"]
+    for key in _LOG_KEYS:
+        result[key] = base.get(key, []) + new.get(key, [])
+    result["searchResults"] = (base.get("searchResults", []) + new.get("searchResults", []))[-80:]
+    stops = base.get("policyStops", [])
+    result["policyStops"] = stops + [s for s in new.get("policyStops", []) if s not in stops]
+    result["retryAfter"] = max(base.get("retryAfter", 0) or 0, new.get("retryAfter", 0) or 0)
+    result["missing"] = list(dict.fromkeys(m for m in base.get("missing", []) + new.get("missing", []) if m))[:10]
+    base_items = {i["key"]: i for i in base.get("items") or []}
+    for index, item in enumerate(result["items"]):
+        old = base_items.get(item["key"])
+        if old is not None and not _has_value(old) and not _has_value(item) and item.get("state") == "not_searched":
+            result["items"][index] = json.loads(json.dumps(old))
+    return result
+
+
+def tag_round(base: dict, merged: dict, round_no: int) -> dict:
+    """이번 회차에서 생기거나 바뀐 것에 회차 번호를 붙이고 요약을 돌려줍니다. merged를 고칩니다.
+
+    보완 조사(merge)가 붙인 표시(item.supplement)는 지금 자료의 값으로 되돌려, 예전 보완 조사 표시와 섞이지 않게 합니다.
+    결과: {added, extended, confirmed, conflicts, sources, facts, people}
+    """
+    summary = {"added": [], "extended": [], "confirmed": [], "conflicts": [], "sources": [], "facts": 0, "people": []}
+    base_items = {i["key"]: i for i in base.get("items") or []}
+    for item in merged.get("items") or []:
+        old = base_items.get(item["key"])
+        if old is not None and "supplement" in old:
+            item["supplement"] = old["supplement"]
+        else:
+            item.pop("supplement", None)
+        old_alts = len((old or {}).get("alternatives", []))
+        for alt in item.get("alternatives", [])[old_alts:]:
+            alt.update(origin="more", round=round_no)
+        if not _has_value(item):
+            continue
+        if not _has_value(old):
+            kind = "added"
+        elif item["value"] != old["value"]:
+            kind = "extended"
+            item["previousValue"] = old["value"]
+        elif len(item.get("alternatives", [])) > old_alts and item.get("savedConflict"):
+            kind = "conflicts"
+        elif set(item.get("sourceIds", [])) - set(old.get("sourceIds", [])):
+            kind = "confirmed"
+        else:
+            continue
+        item.update(moreRound=round_no, moreResult=kind)
+        summary[kind].append(item["key"])
+    base_ids = {s["id"] for s in base.get("sources", [])}
+    for source in merged.get("sources", []):
+        if source["id"] not in base_ids:
+            source.update(addedBy="more", round=round_no)
+            summary["sources"].append(source["id"])
+    base_facts = {research_items._norm(f.get("text", "")) for f in base.get("facts", [])}
+    for fact in merged.get("facts", []):
+        if research_items._norm(fact.get("text", "")) not in base_facts:
+            fact["round"] = round_no
+            summary["facts"] += 1
+    base_people = {p["name"]: p for p in (base.get("peopleResearch") or {}).get("people", [])}
+    for person in (merged.get("peopleResearch") or {}).get("people", []):
+        before = base_people.get(person["name"])
+        if before is None or (person.get("tmi") and person.get("tmi") != before.get("tmi")):
+            person["round"] = round_no
+            summary["people"].append(person["name"])
+    return summary
+
+
+def open_conflicts(research: dict, round_no: int) -> list[str]:
+    """이번 회차에서 생긴, 아직 고르지 않은 다른 값."""
+    return [i["key"] for i in research.get("items") or [] if i.get("moreRound") == round_no and i.get("savedConflict")]
+
+
+def choose_more_value(research: dict, key: str, index: int) -> dict:
+    """초안에서 기존 값과 추가 조사 값 중 하나를 고릅니다 (0 = 기존 값). 고르지 않은 값은 dismissed에 남깁니다."""
+    item = choose_value(research, key, index)
+    item["moreChosen"] = "saved" if index == 0 else "more"
+    item.pop("chosen", None)  # 보완 조사 검토 표시(chosen)와 섞지 않습니다
+    return item
