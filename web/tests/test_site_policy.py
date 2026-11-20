@@ -191,7 +191,9 @@ def test_cli_passes_deny_rules(monkeypatch, tmp_path):
     class Done:
         returncode = 0
         stderr = ""
-        stdout = json.dumps({"type": "result", "subtype": "success", "structured_output": {"a": 1}})
+        stdout = "\n".join(json.dumps(e) for e in [
+            {"type": "system", "subtype": "init", "permissionMode": "dontAsk", "tools": ["StructuredOutput", "WebFetch"]},
+            {"type": "result", "subtype": "success", "structured_output": {"a": 1}}])
 
     def fake_run(args, **kwargs):
         seen["args"] = args

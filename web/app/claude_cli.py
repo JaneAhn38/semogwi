@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -52,6 +53,8 @@ class CliRun:
     five_hour_utilization: float | None = None
     resets_at: int | None = None
     credential_expires_at: str | None = None
+    permission_mode: str = ""  # CLI가 시작하면서 알려 준 실제 권한 모드 (init 이벤트)
+    init_tools: list[str] | None = None  # CLI가 시작하면서 알려 준 실제 도구 목록. None이면 init 이벤트가 없음
 
 
 def _clean_env() -> dict:
@@ -60,8 +63,29 @@ def _clean_env() -> dict:
     return env
 
 
+_NPM_EXE = Path("node_modules") / "@anthropic-ai" / "claude-code" / "bin" / "claude.exe"
+
+
 def _executable() -> str | None:
-    return shutil.which(CLAUDE_BIN)
+    """실행할 Claude Code 파일. npm 설치본의 claude.cmd는 그 안의 claude.exe를 찾아 직접 씁니다.
+
+    .cmd·.bat은 Windows가 cmd.exe로 실행하는데, cmd.exe는 인자에 든 줄바꿈 뒤를 버리고 따옴표·%·& 등도 다시 해석합니다.
+    그러면 권한 설정(--allowedTools, --permission-mode)이 잘려 검색이 "권한을 아직 안 줬다"며 거절됩니다 (2026-11-20 확인).
+    """
+    found = shutil.which(CLAUDE_BIN)
+    if not found or Path(found).suffix.lower() not in (".cmd", ".bat"):
+        return found
+    return str(_exe_behind_cmd(Path(found)) or found)
+
+
+def _exe_behind_cmd(cmd: Path) -> Path | None:
+    try:
+        text = cmd.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = ""
+    candidates = [cmd.parent / m.replace("\\", "/") for m in re.findall(r'"%dp0%\\([^"]+?\.exe)"', text, re.IGNORECASE)]
+    candidates.append(cmd.parent / _NPM_EXE)
+    return next((c for c in candidates if c.is_file()), None)
 
 
 def status(force: bool = False) -> dict:
@@ -103,6 +127,8 @@ def parse_stream(stdout: str) -> CliRun:
         kind = event.get("type")
         if kind == "system" and event.get("subtype") == "init":
             run.model = event.get("model", "")
+            run.permission_mode = str(event.get("permissionMode") or "")
+            run.init_tools = [str(t) for t in event.get("tools") or []]
         elif kind == "assistant":
             for block in (event.get("message") or {}).get("content") or []:
                 if block.get("type") == "tool_use" and block.get("name") == "WebFetch":
@@ -219,6 +245,40 @@ def _classify(run: CliRun, stderr: str, returncode: int) -> AIError:
     return AIError("error", f"AI 호출이 실패했어요 (종료 코드 {returncode}, {run.subtype or '결과 없음'}). 다시 시도해 주세요.")
 
 
+SETTINGS_LOST = ("Claude CLI에 실행 설정(도구 허용·권한 모드)이 전달되지 않아 결과를 쓰지 않았어요. "
+                 "Claude Code 설치 방식을 확인하거나 개발자에게 알려 주세요.")
+
+
+def build_args(exe: str, system_file: str, schema: dict, *, tools: tuple[str, ...], model: str, effort: str,
+               budget_usd: float, disallowed: tuple[str, ...]) -> list[str]:
+    args = [
+        exe, "-p", "--model", model, "--effort", effort,
+        "--output-format", "stream-json", "--verbose",
+        "--tools", ",".join(tools) if tools else "",
+        "--permission-mode", "dontAsk",
+        "--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands",
+        "--setting-sources", "",
+        "--max-budget-usd", str(budget_usd),
+        "--system-prompt-file", system_file,
+        "--json-schema", json.dumps(schema, ensure_ascii=False),
+    ]
+    if tools:
+        args += ["--allowedTools", ",".join(tools)]
+    if disallowed:
+        args += ["--disallowedTools", *disallowed]
+    if any("\n" in a or "\r" in a for a in args):
+        raise AIError("error", "AI 호출 인자에 줄바꿈이 있어 실행하지 않았어요.")  # 줄바꿈은 cmd.exe에서 뒤 인자를 잘라냅니다
+    return args
+
+
+def check_settings_applied(parsed: CliRun, tools: tuple[str, ...]) -> None:
+    """CLI가 실제로 받은 권한 모드와 도구가 요청과 같은지. 다르면 설정이 빠진 채 실행된 것이라 결과를 쓰지 않습니다."""
+    if parsed.init_tools is None or parsed.permission_mode != "dontAsk":
+        raise AIError("error", SETTINGS_LOST)
+    if set(parsed.init_tools) - {"StructuredOutput"} != set(tools):
+        raise AIError("error", SETTINGS_LOST)
+
+
 def run(prompt: str, system: str, schema: dict, *, tools: tuple[str, ...] = (), model: str = "sonnet",
         effort: str = "medium", timeout: int = 300, budget_usd: float = 1.0, disallowed: tuple[str, ...] = ()) -> CliRun:
     """프롬프트를 실행하고 구조화된 결과와 도구 사용 기록을 돌려줍니다. 실패하면 AIError를 냅니다."""
@@ -227,32 +287,25 @@ def run(prompt: str, system: str, schema: dict, *, tools: tuple[str, ...] = (), 
         raise AIError("unavailable", state["reason"])
     exe = _executable()
     WORK_DIR.mkdir(parents=True, exist_ok=True)
-    args = [
-        exe, "-p", "--model", model, "--effort", effort,
-        "--output-format", "stream-json", "--verbose",
-        "--json-schema", json.dumps(schema, ensure_ascii=False),
-        "--system-prompt", system,
-        "--tools", ",".join(tools) if tools else "",
-        "--permission-mode", "dontAsk",
-        "--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands",
-        "--setting-sources", "",
-        "--max-budget-usd", str(budget_usd),
-    ]
-    if tools:
-        args += ["--allowedTools", ",".join(tools)]
-    if disallowed:
-        args += ["--disallowedTools", *disallowed]
+    # 여러 줄 지시문은 명령줄이 아니라 파일로 넘깁니다 (명령줄 인자에는 줄바꿈이 없어야 합니다)
+    system_file = WORK_DIR / f"system-{uuid.uuid4().hex}.txt"
+    system_file.write_text(system, encoding="utf-8")
     try:
-        done = subprocess.run(args, input=prompt, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                              timeout=timeout, cwd=WORK_DIR, env=_clean_env())
-    except subprocess.TimeoutExpired:
-        raise AIError("timeout", f"AI 응답이 {timeout // 60}분 안에 끝나지 않아 중단했어요. 다시 시도해 주세요.") from None
-    except OSError:
-        raise AIError("unavailable", "Claude Code를 실행하지 못했어요.") from None
+        args = build_args(exe, str(system_file), schema, tools=tools, model=model, effort=effort, budget_usd=budget_usd, disallowed=disallowed)
+        try:
+            done = subprocess.run(args, input=prompt, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                  timeout=timeout, cwd=WORK_DIR, env=_clean_env())
+        except subprocess.TimeoutExpired:
+            raise AIError("timeout", f"AI 응답이 {timeout // 60}분 안에 끝나지 않아 중단했어요. 다시 시도해 주세요.") from None
+        except OSError:
+            raise AIError("unavailable", "Claude Code를 실행하지 못했어요.") from None
+    finally:
+        system_file.unlink(missing_ok=True)
 
     parsed = parse_stream(done.stdout)
     if done.returncode != 0 or parsed.is_error:
         raise _classify(parsed, done.stderr, done.returncode)
+    check_settings_applied(parsed, tools)
     if not isinstance(parsed.structured, dict):
         raise AIError("invalid", "AI가 요구한 JSON 형식으로 답하지 못했어요. 다시 시도해 주세요.")
     return parsed
