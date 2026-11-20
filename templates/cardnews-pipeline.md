@@ -1,6 +1,6 @@
 # 세모귀 카드뉴스 파이프라인 — 실행 구조 (시연 프로그램 연결 기준)
 
-> 최종 목표: 사용자가 **주제 / 사진 / 공식 상품 URL** 중 하나를 넣고 "카드뉴스 생성"을 누르면 PNG 5장이 만들어진다.
+> 최종 목표: 사용자가 **주제 / 사진** 중 하나를 넣고 "카드뉴스 생성"을 누르면 PNG 5장이 만들어진다.
 > 이 문서는 그 버튼이 `/cardnews` 파이프라인을 부를 때 필요한 **입력값, 실행 단계, 사용자 승인 지점, 출력 경로, 진행 상태 판정**을 정리한다.
 > 실행 규칙의 기준은 `.claude/commands/cardnews.md`와 각 Skill의 SKILL.md다. 이 문서와 다르면 SKILL.md를 따른다.
 
@@ -10,19 +10,18 @@
 
 | 입력 방식 | 필수 값 | 선택 값 | 판단 기준 |
 | --- | --- | --- | --- |
-| 주제 입력 | 주제, 캐릭터(`assets/characters/` 폴더 이름), 유형, 참고 자료(공식 링크 또는 붙여 넣은 공식 게시물) | 표지 원본 이미지 + 출처·사용 허가 | 아래 두 경우가 아니면 |
+| 주제 입력 | 주제, 캐릭터(`assets/characters/` 폴더 이름), 유형, 참고 자료(공식 링크 또는 붙여 넣은 공식 게시물) | 표지 원본 이미지 + 출처·사용 허가 | 사진 입력이 아니면 |
 | 사진 입력 | 이미지 파일 1장 이상 (`.png .jpg .jpeg .webp`) | 유형, 참고 자료, 사진을 카드 이미지로 쓸지 | 입력에 이미지 파일 경로가 있음 |
-| 공식 상품 URL 입력 | `https://chiikawamarket.jp/…/products/<상품>` | 유형 | 공식 쇼핑몰(`fetch_product.py`의 `OFFICIAL_HOSTS`) 상품 주소 |
 
-- 유형은 **캐릭터 소개 / 굿즈 소개 / 팝업스토어 일정 / 콜라보 내용** 네 가지다. 사진·URL 입력에서는 analyze-image가 제안하고 사용자가 확인한다.
+- 유형은 **캐릭터 소개 / 굿즈 소개 / 팝업스토어 일정 / 콜라보 내용** 네 가지다. 사진 입력에서는 analyze-image가 제안하고 사용자가 확인한다.
+- 공식 상품 URL 입력(`scripts/fetch_product.py`)은 2026-11-20 팀 결정으로 없앴다. 자동 접근 금지 사이트(`web/app/site_policy.json`, 지금은 치이카와 마켓)의 주소가 들어오면 열지 않고, 사용자에게 직접 본 내용이나 캡처를 받는다 (`.claude/commands/cardnews.md` 0단계).
 - 카드에는 **`[공식]` 항목만** 쓴다. 공식 출처가 부족하면 파이프라인이 멈추고 무엇이 부족한지 알린다 (빈칸을 추정으로 채우지 않음).
 
 ## 2. 실행 단계
 
 | 단계 | 담당 | 읽는 것 | 만드는 것 (`projects/YYYY-MM-DD_주제/`) | 자동 / 멈춤 |
 | --- | --- | --- | --- | --- |
-| 0-U | `scripts/fetch_product.py` (URL 입력만) | 상품 URL | `product.json`, `product-info.md`, `input/NN_*.jpg` | 자동. 종료 코드 0이 아니면 멈춤 |
-| 0-A | analyze-image (사진·URL 입력만) | `input/`, `product-info.md` | `image-analysis.md` | **멈춤 ① 분석 확인** |
+| 0-A | analyze-image (사진 입력만) | `input/` | `image-analysis.md` | **멈춤 ① 분석 확인** |
 | 1 | research-topic | 주제 입력값 또는 `image-analysis.md`(확인됨), 참고 자료 | `brief.md`, `references/` | 자동 (공식 정보 부족 시 멈춤) |
 | 2 | plan-cardnews | `brief.md`, `image-analysis.md` | `outline.md` | **멈춤 ② 구성안 승인** |
 | 3-U | **사용자 (업로드 화면)** | `outline.md` (이미지 권장 안내) | `input/cards/<파일>`, `card-images.json` | **멈춤 ③ 이미지 지정** |
@@ -36,8 +35,8 @@
 
 | 지점 | 언제 | 사용자가 보는 것 | 승인 기록 |
 | --- | --- | --- | --- |
-| ① 분석 확인 | 사진·URL 입력, 0-A 끝 | 확인된 요소, 공식 상품 정보, 식별 결과(확신도), 추정, 제안(주제·유형·중심 대상·키워드·카드 이미지 사용 여부) | `image-analysis.md` `상태: 확인됨` |
-| ② 구성안 승인 | 모든 입력, 2단계 끝 | 카드 5장 구성표, 뺀 내용, (사진·URL) 이미지 관련성 | `outline.md` `상태: 승인됨` |
+| ① 분석 확인 | 사진 입력, 0-A 끝 | 확인된 요소, 사용자 제공 상품 정보, 식별 결과(확신도), 추정, 제안(주제·유형·중심 대상·키워드·카드 이미지 사용 여부) | `image-analysis.md` `상태: 확인됨` |
+| ② 구성안 승인 | 모든 입력, 2단계 끝 | 카드 5장 구성표, 뺀 내용, (사진) 이미지 관련성 | `outline.md` `상태: 승인됨` |
 | ③ 이미지 지정 | 모든 입력, 구성안 승인 뒤 | 카드별 업로드 칸 (이미지 없음 선택 가능), 누끼 여부, 출처·저작권자·사용 권한 입력 | `card-images.json` 생성 (이미지를 하나도 안 쓰면 모든 카드 `null`) |
 
 **조건부 (해당할 때만 멈춤)**
@@ -45,7 +44,7 @@
 | 지점 | 조건 | 기록 |
 | --- | --- | --- |
 | 입력 부족 | 주제 입력에 필수 값이 없음 | - |
-| URL 가져오기 실패 | `fetch_product.py` 종료 코드 1·2·3 | 출력 메시지 |
+| 자동 접근 금지 사이트 | 입력에 금지 사이트 주소가 있음 → 열지 않고 직접 본 내용·캡처를 요청 | - |
 | 공식 정보 부족 | `[공식]` 항목만으로 5장을 못 채움 | `brief.md` "확인 필요" |
 | 카드 이미지 허가 | 지정 이미지의 사용 권한이 `허가됨`이 아님 → 그 카드는 이미지 없이 진행할지 다시 지정할지 확인 | 프로젝트 `sources.md`, `cutout-check.md` |
 | 이미지 처리 실패 | HEIC 등 지원하지 않는 형식, 10MB 초과, 누끼 결과 검사 실패 | `cutout-check.md` |
@@ -59,8 +58,8 @@
 | --- | --- | --- |
 | 최종 PNG 5장 | `projects/YYYY-MM-DD_주제/png/card-01.png ~ card-05.png` (1080 × 1350) | 포함 (폴더 이름이 `_테스트`로 끝나면 제외) |
 | Figma 결과 페이지 | 파일 `b7ersPQ6u13fVoCPjuwUs9`의 `세모귀_YYYY-MM-DD_주제` | - |
-| 중간 산출물 | 같은 폴더의 `image-analysis.md`, `brief.md`, `outline.md`, `cutout-check.md`, `slides.json`, `copy-check.md`, `product.json`, `product-info.md` | 포함 |
-| 입력 사진·상품 이미지 | 같은 폴더의 `input/` | **제외** |
+| 중간 산출물 | 같은 폴더의 `image-analysis.md`, `brief.md`, `outline.md`, `cutout-check.md`, `slides.json`, `copy-check.md` | 포함 |
+| 입력 사진 | 같은 폴더의 `input/` | **제외** |
 | 카드 업로드 이미지·배치용 이미지 | 같은 폴더의 `input/cards/`, `input/placed/` | **제외** |
 | 카드 이미지 출처 기록 | 같은 폴더의 `sources.md`, `card-images.json`, `card-images-result.json` | 포함 |
 | 사용자 사진에서 만든 누끼 | `assets/characters/<캐릭터>/original|cutout/user-*` | **제외** |
@@ -71,7 +70,7 @@
 
 | 폴더 상태 | 다음 동작 |
 | --- | --- |
-| `product.json`만 있음 (URL) / `input/`만 있음 (사진) | 0-A analyze-image |
+| `input/`만 있음 (사진) | 0-A analyze-image |
 | `image-analysis.md` `상태: 확인 대기` | **① 승인 대기** |
 | `image-analysis.md` 확인됨, `brief.md` 없음 | 1 research-topic |
 | `outline.md` `상태: 승인 대기` | **② 승인 대기** |

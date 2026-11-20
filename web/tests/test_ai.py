@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import time
+from pathlib import Path
 
 os.environ.setdefault("SEMOGWI_DATA_DIR", tempfile.mkdtemp())
 os.environ.setdefault("SEMOGWI_DEMO_DELAY", "0")
@@ -163,6 +164,81 @@ def test_cli_removes_api_billing_credentials(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "should-not-be-used")
     env = claude_cli._clean_env()
     assert "ANTHROPIC_API_KEY" not in env and "ANTHROPIC_AUTH_TOKEN" not in env
+
+
+def _stream(permission_mode="dontAsk", tools=("StructuredOutput", "WebFetch", "WebSearch"), init=True):
+    events = [{"type": "system", "subtype": "init", "model": "m", "permissionMode": permission_mode, "tools": list(tools)}] if init else []
+    events.append({"type": "result", "subtype": "success", "is_error": False, "structured_output": {"ok": True}, "result": "{}"})
+    return "\n".join(json.dumps(e) for e in events)
+
+
+@pytest.fixture
+def cli_run(monkeypatch):
+    """claude_cli.run을 실제 프로세스 없이 실행합니다. 넘긴 인자와 지시문 파일 내용을 기록합니다."""
+    seen = {}
+
+    def fake_run(args, **kwargs):
+        path = Path(args[args.index("--system-prompt-file") + 1])
+        seen.update(args=args, system=path.read_text(encoding="utf-8"), path=path)
+
+        class Done:
+            returncode, stdout, stderr = 0, seen["stdout"], ""
+        return Done()
+
+    monkeypatch.setattr(claude_cli, "status", lambda force=False: {"available": True})
+    monkeypatch.setattr(claude_cli, "_executable", lambda: "claude.exe")
+    monkeypatch.setattr(claude_cli.subprocess, "run", fake_run)
+    seen["stdout"] = _stream()
+    return seen
+
+
+def test_multiline_system_prompt_goes_to_file_not_command_line(cli_run):
+    # 2026-11-20: claude.cmd(cmd.exe)가 줄바꿈 뒤 인자를 버려 --allowedTools·--permission-mode가 사라졌던 문제
+    system = "첫 줄\n둘째 줄\n\n셋째 줄"
+    schema = {"type": "object", "description": "설명에\n줄바꿈", "properties": {"ok": {"type": "boolean"}}}
+    claude_cli.run("질문", system, schema, tools=("WebSearch", "WebFetch"), disallowed=("WebFetch(domain:chiikawamarket.jp)",))
+    args = cli_run["args"]
+    assert not any("\n" in a or "\r" in a for a in args)
+    assert "--system-prompt" not in args and cli_run["system"] == system
+    assert args[args.index("--allowedTools") + 1] == "WebSearch,WebFetch" and args[args.index("--permission-mode") + 1] == "dontAsk"
+    assert not cli_run["path"].exists()  # 실행이 끝나면 지시문 파일을 지웁니다
+
+
+def test_newline_in_command_line_argument_is_refused():
+    with pytest.raises(claude_cli.AIError):
+        claude_cli.build_args("claude.exe", "s.txt", {}, tools=("WebFetch",), model="sonnet", effort="low", budget_usd=0.1,
+                              disallowed=("WebFetch(domain:a.example)\n--permission-mode",))
+
+
+@pytest.mark.parametrize("stdout", [
+    _stream(permission_mode="default"),  # 권한 모드가 빠짐
+    _stream(tools=("Task", "Bash", "WebFetch", "WebSearch", "StructuredOutput")),  # 도구 제한이 빠짐
+    _stream(tools=("StructuredOutput", "WebFetch")),  # 요청한 도구가 없음
+    _stream(init=False),  # 시작 정보가 없음
+])
+def test_run_stops_when_cli_did_not_receive_settings(cli_run, stdout):
+    cli_run["stdout"] = stdout
+    with pytest.raises(claude_cli.AIError) as error:
+        claude_cli.run("질문", "지시", {}, tools=("WebSearch", "WebFetch"))
+    assert error.value.message == claude_cli.SETTINGS_LOST
+
+
+def test_run_without_tools_expects_only_structured_output(cli_run):
+    cli_run["stdout"] = _stream(tools=("StructuredOutput",))
+    assert claude_cli.run("질문", "지시", {}).structured == {"ok": True}
+
+
+def test_npm_cmd_launcher_resolves_to_its_exe(tmp_path, monkeypatch):
+    cmd = tmp_path / "claude.cmd"
+    cmd.write_text('@ECHO off\r\nSETLOCAL\r\n"%dp0%\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe"   %*\r\n', encoding="utf-8")
+    monkeypatch.setattr(claude_cli.shutil, "which", lambda name: str(cmd))
+    assert claude_cli._executable() == str(cmd)  # claude.exe가 없으면 .cmd를 그대로 씁니다 (지시문은 파일로 가므로 잘리지 않음)
+    exe = tmp_path / "node_modules" / "@anthropic-ai" / "claude-code" / "bin" / "claude.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_bytes(b"")
+    assert Path(claude_cli._executable()) == exe
+    monkeypatch.setattr(claude_cli.shutil, "which", lambda name: str(exe))
+    assert Path(claude_cli._executable()) == exe
 
 
 def test_status_refuses_non_subscription_login(monkeypatch):

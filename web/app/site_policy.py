@@ -106,6 +106,14 @@ def cooldown_seconds(url: str) -> int:
     return max(0, cooldown_until(url) - int(time.time()))
 
 
+def blocked_by_rule(url: str) -> str:
+    """deny_rules로 AI 호출에서 막는 사이트인지. "restricted"(금지 사이트), "cooldown"(대기 중), 아니면 ""."""
+    if restricted_site(url):
+        return "restricted"
+    host = host_of(url)
+    return "cooldown" if any(_matches(host, h) for h in cooling_hosts()) else ""
+
+
 def deny_rules() -> list[str]:
     """AI 호출에서 차단할 WebFetch 규칙. 금지 사이트와 대기 중인 사이트입니다.
 

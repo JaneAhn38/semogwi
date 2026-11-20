@@ -86,6 +86,10 @@ class CardImageBody(Strict):
     variant: Literal["original", "cutout"] = "original"
 
 
+class IdentityBody(Strict):
+    name: str = Field(max_length=100)
+
+
 class SlotAdjustBody(Strict):
     scale: float = Field(ge=jobs.SCALE_RANGE[0], le=jobs.SCALE_RANGE[1])
     dx: float = Field(ge=jobs.OFFSET_RANGE[0], le=jobs.OFFSET_RANGE[1])
@@ -384,6 +388,12 @@ async def upload_slot_image(job_id: str, frame: str, slot: str, image: UploadFil
 @app.put("/api/jobs/{job_id}/cards/{frame}/slots/{slot}/adjust")
 async def adjust_slot_image(job_id: str, frame: str, slot: str, body: SlotAdjustBody):
     return _call(jobs.adjust_slot_image, job_id, frame, slot, body.scale, body.dx, body.dy)
+
+
+@app.put("/api/jobs/{job_id}/cards/{frame}/slots/{slot}/identity")
+async def confirm_slot_identity(job_id: str, frame: str, slot: str, body: IdentityBody):
+    """친구 칸 사진의 캐릭터 이름을 확정합니다. 친구 문구는 확정한 이름으로만 씁니다."""
+    return _call(jobs.confirm_identity, job_id, frame, slot, body.name)
 
 
 @app.post("/api/jobs/{job_id}/cards/{frame}/slots/{slot}/restore")
