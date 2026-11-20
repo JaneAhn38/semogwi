@@ -273,7 +273,7 @@
       ...(research.policyStops || []).map((s) => `${s.name}: 이용규약상 자동 수집이 금지된 사이트라 읽지 않았어요`),
       ...(research.searchFailures || []).map((f) => `검색 "${f.query}": ${f.reason}${f.detail ? ` (오류 내용: ${f.detail})` : ""}`),
       ...(research.fetchFailures || []).map(failureText),
-      ...(research.fetched || []).filter((f) => f.denied).map((f) => `${f.url}: 접근 제한 규칙으로 요청하지 않았어요`),
+      ...(research.fetched || []).filter((f) => f.denied).map(deniedText),
     ];
     $("research-problems-wrap").hidden = !problems.length;
     $("research-problems").replaceChildren(...problems.map((text) => el("li", { textContent: text })));
@@ -282,7 +282,16 @@
   function failureText(failure) {
     const reason = failure.label || "접속하지 못했어요";
     const code = failure.code ? ` (HTTP ${failure.code})` : "";
-    return `${failure.host}: ${reason}${code}, ${failure.attempts}번 시도${failure.detail ? ` (오류 내용: ${failure.detail})` : ""}`;
+    return `${failure.host}: ${reason}${code}${failure.detail ? ` (오류 내용: ${failure.detail})` : ""}, ${failure.attempts}번 시도`;
+  }
+
+  // 우리 차단 규칙(금지 사이트·대기 중 사이트)일 때만 "접근 제한 규칙"이라고 씁니다.
+  // rule이 없는 예전 기록은 금지 사이트 목록으로 판단하고, 아니면 읽기 실패로 보여 줍니다
+  function deniedText(fetch) {
+    const host = (() => { try { return new URL(fetch.url).hostname.replace(/^www\./, ""); } catch { return ""; } })();
+    const restricted = (options.restrictedSites || []).some((s) => host === s.domain || host.endsWith(`.${s.domain}`));
+    if (fetch.rule || restricted) return `${fetch.url}: 접근 제한 규칙으로 요청하지 않았어요`;
+    return `${fetch.url}: 읽기 실패 (오류 내용: ${fetch.detail || "기록되지 않았어요"})`;
   }
 
   function renderMaterial() {

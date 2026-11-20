@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from . import site_policy
+
 CLAUDE_BIN = os.environ.get("SEMOGWI_CLAUDE_BIN", "claude")
 WORK_DIR = Path(os.environ.get("SEMOGWI_DATA_DIR", Path(__file__).resolve().parent.parent / "data")) / "claude-workdir"
 _BILLING_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY")
@@ -161,7 +163,11 @@ def _read_failed_fetch(run: CliRun, event: dict, fetch_calls: dict[str, str]) ->
             entry = {"url": url, "code": int(found.group(1)) if found else 0,
                      "detail": error_detail(block.get("content"), event.get("tool_use_result"))}
             if not found and re.search(r"denied|permission|not allowed", text, re.IGNORECASE):
-                entry["denied"] = True  # 차단 규칙으로 요청하지 않은 경우입니다
+                rule = site_policy.blocked_by_rule(url)
+                if rule:
+                    entry.update(denied=True, rule=rule)  # 우리 차단 규칙(금지 사이트·대기 중 사이트)으로 요청하지 않은 경우
+                else:
+                    entry["refused"] = True  # 도구가 거부했지만 우리 규칙은 아님: 읽기 실패로 보여 줍니다
             run.fetches.append(entry)
 
 

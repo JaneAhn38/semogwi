@@ -212,8 +212,10 @@ def fetch_failures(parsed: claude_cli.CliRun) -> list[dict]:
         if 200 <= code < 400 or fetch.get("denied"):
             continue
         host = site_policy.host_of(fetch["url"])
-        item = grouped.setdefault((host, code), {"host": host, "url": fetch["url"], "code": code, "attempts": 0, "detail": "",
-                                                 **site_policy.classify_failure(code, fetch.get("retryAfter"))})
+        refused = bool(fetch.get("refused"))
+        # 도구가 거부했지만 우리 규칙은 아닌 경우: 사이트 탓인지 모르므로 대기 시간을 두지 않습니다
+        info = {"label": "읽기 실패", "blocked": False, "cooldown": 0} if refused else site_policy.classify_failure(code, fetch.get("retryAfter"))
+        item = grouped.setdefault((host, code, refused), {"host": host, "url": fetch["url"], "code": code, "attempts": 0, "detail": "", **info})
         item["attempts"] += 1
         item["detail"] = item["detail"] or fetch.get("detail", "")
     return list(grouped.values())
