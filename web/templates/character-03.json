@@ -43,7 +43,7 @@
           "key": "description",
           "label": "설명",
           "type": "multiline",
-          "max": 30
+          "max": 60
         }
       ],
       "item": "personality"
@@ -122,7 +122,7 @@
       "type": "pill",
       "field": "traits.0.label",
       "x": 476,
-      "y": 377,
+      "y": 337,
       "h": 38,
       "align": "left",
       "padX": 17,
@@ -137,7 +137,7 @@
       "field": "traits.0.keyword",
       "box": {
         "x": 476,
-        "y": 428,
+        "y": 386,
         "w": 500,
         "h": 52
       },
@@ -154,9 +154,9 @@
       "field": "traits.0.description",
       "box": {
         "x": 476,
-        "y": 496,
+        "y": 448,
         "w": 484,
-        "h": 92
+        "h": 170
       },
       "font": "body",
       "size": 30,
@@ -165,7 +165,7 @@
       "color": "inkSoft",
       "align": "left",
       "valign": "top",
-      "maxLines": 2
+      "maxLines": 4
     },
     {
       "type": "rect",
@@ -198,7 +198,7 @@
       "type": "pill",
       "field": "traits.1.label",
       "x": 104,
-      "y": 777,
+      "y": 737,
       "h": 38,
       "align": "left",
       "padX": 17,
@@ -213,7 +213,7 @@
       "field": "traits.1.keyword",
       "box": {
         "x": 104,
-        "y": 828,
+        "y": 786,
         "w": 500,
         "h": 52
       },
@@ -230,9 +230,9 @@
       "field": "traits.1.description",
       "box": {
         "x": 104,
-        "y": 896,
+        "y": 848,
         "w": 484,
-        "h": 92
+        "h": 170
       },
       "font": "body",
       "size": 30,
@@ -241,7 +241,7 @@
       "color": "inkSoft",
       "align": "left",
       "valign": "top",
-      "maxLines": 2
+      "maxLines": 4
     },
     {
       "type": "footer",
@@ -258,12 +258,12 @@
         {
           "label": "공식 설정",
           "keyword": "[특징 키워드]",
-          "description": "[이 특징이 드러나는 공식 장면을 한두 줄로]"
+          "description": "[이 특징이 드러나는 공식 장면을 두세 줄로]"
         },
         {
           "label": "공식 설정",
           "keyword": "[특징 키워드]",
-          "description": "[이 특징이 드러나는 공식 장면을 한두 줄로]"
+          "description": "[이 특징이 드러나는 공식 장면을 두세 줄로]"
         }
       ],
       "footer_note": "공식 설정만 담았어요"

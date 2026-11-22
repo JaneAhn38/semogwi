@@ -117,7 +117,9 @@ def test_deny_rules_cover_domain_and_all_subdomains(monkeypatch):
     rules = site_policy.deny_rules()
     assert rules[:2] == ["WebFetch(domain:chiikawamarket.jp)", "WebFetch(domain:*.chiikawamarket.jp)"]
     monkeypatch.setattr(site_policy, "cooling_hosts", lambda: ["slow.example"])
-    assert site_policy.deny_rules()[2:] == ["WebFetch(domain:slow.example)", "WebFetch(domain:*.slow.example)"]
+    assert site_policy.deny_rules()[2:4] == ["WebFetch(domain:slow.example)", "WebFetch(domain:*.slow.example)"]
+    # 보조 출처(나무위키)의 미러 사이트는 늘 막습니다 (그 뒤에 붙음)
+    assert site_policy.deny_rules()[4:] == ["WebFetch(domain:namu.moe)", "WebFetch(domain:*.namu.moe)"]
 
 
 def test_restricted_subdomain_page_never_counts_as_read():

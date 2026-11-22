@@ -1,0 +1,227 @@
+{
+  "v": 3,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-11-06T07:25:00Z"
+  },
+  "title": "세모귀 카드뉴스 템플릿 시안",
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [],
+  "boards": {
+    "PopupCover.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1080,
+      "h": 1350,
+      "title": "팝업스토어 · 01 표지",
+      "is_interactive": true
+    },
+    "PopupInfo.dc.html": {
+      "x": 1160,
+      "y": 0,
+      "w": 1080,
+      "h": 1350,
+      "title": "팝업스토어 · 02 운영 정보",
+      "is_interactive": true
+    },
+    "PopupGoods.dc.html": {
+      "x": 2320,
+      "y": 0,
+      "w": 1080,
+      "h": 1350,
+      "title": "팝업스토어 · 03 현장 한정 굿즈",
+      "is_interactive": true
+    },
+    "PopupPerks.dc.html": {
+      "x": 3480,
+      "y": 0,
+      "w": 1080,
+      "h": 1350,
+      "title": "팝업스토어 · 04 포토존·특전",
+      "is_interactive": true
+    },
+    "PopupWrap.dc.html": {
+      "x": 4640,
+      "y": 0,
+      "w": 1080,
+      "h": 1350,
+      "title": "팝업스토어 · 05 마무리",
+      "is_interactive": true
+    },
+    "GoodsCover.dc.html": {
+      "x": 0,
+      "y": 1750,
+      "w": 1080,
+      "h": 1350,
+      "title": "굿즈 판매 · 01 표지",
+      "is_interactive": true
+    },
+    "GoodsGrid.dc.html": {
+      "x": 1160,
+      "y": 1750,
+      "w": 1080,
+      "h": 1350,
+      "title": "굿즈 판매 · 02 라인업 한눈에",
+      "is_interactive": true
+    },
+    "GoodsPick.dc.html": {
+      "x": 2320,
+      "y": 1750,
+      "w": 1080,
+      "h": 1350,
+      "title": "굿즈 판매 · 03 주목할 굿즈",
+      "is_interactive": true
+    },
+    "GoodsHowto.dc.html": {
+      "x": 3480,
+      "y": 1750,
+      "w": 1080,
+      "h": 1350,
+      "title": "굿즈 판매 · 04 구매 방법",
+      "is_interactive": true
+    },
+    "GoodsWrap.dc.html": {
+      "x": 4640,
+      "y": 1750,
+      "w": 1080,
+      "h": 1350,
+      "title": "굿즈 판매 · 05 마무리",
+      "is_interactive": true
+    },
+    "CollabCover.dc.html": {
+      "x": 0,
+      "y": 3500,
+      "w": 1080,
+      "h": 1350,
+      "title": "콜라보 · 01 표지",
+      "is_interactive": true
+    },
+    "CollabInfo.dc.html": {
+      "x": 1160,
+      "y": 3500,
+      "w": 1080,
+      "h": 1350,
+      "title": "콜라보 · 02 어떤 콜라보?",
+      "is_interactive": true
+    },
+    "CollabMenu.dc.html": {
+      "x": 2320,
+      "y": 3500,
+      "w": 1080,
+      "h": 1350,
+      "title": "콜라보 · 03 제품·메뉴",
+      "is_interactive": true
+    },
+    "CollabPerks.dc.html": {
+      "x": 3480,
+      "y": 3500,
+      "w": 1080,
+      "h": 1350,
+      "title": "콜라보 · 04 혜택·이벤트",
+      "is_interactive": true
+    },
+    "CollabWrap.dc.html": {
+      "x": 4640,
+      "y": 3500,
+      "w": 1080,
+      "h": 1350,
+      "title": "콜라보 · 05 마무리",
+      "is_interactive": true
+    },
+    "Main.dc.html": {
+      "x": 0,
+      "y": 5250,
+      "w": 1080,
+      "h": 1350,
+      "title": "캐릭터 소개 · 01 표지",
+      "is_interactive": true
+    },
+    "CharProfile.dc.html": {
+      "x": 1160,
+      "y": 5250,
+      "w": 1080,
+      "h": 1350,
+      "title": "캐릭터 소개 · 02 프로필",
+      "is_interactive": true
+    },
+    "CharTraits.dc.html": {
+      "x": 2320,
+      "y": 5250,
+      "w": 1080,
+      "h": 1350,
+      "title": "캐릭터 소개 · 03 성격·특징",
+      "is_interactive": true
+    },
+    "CharFriends.dc.html": {
+      "x": 3480,
+      "y": 5250,
+      "w": 1080,
+      "h": 1350,
+      "title": "캐릭터 소개 · 04 친구들·TMI",
+      "is_interactive": true
+    },
+    "CharWrap.dc.html": {
+      "x": 4640,
+      "y": 5250,
+      "w": 1080,
+      "h": 1350,
+      "title": "캐릭터 소개 · 05 마무리",
+      "is_interactive": true
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "PopupCover.dc.html",
+    "PopupInfo.dc.html",
+    "PopupGoods.dc.html",
+    "PopupPerks.dc.html",
+    "PopupWrap.dc.html",
+    "GoodsCover.dc.html",
+    "GoodsGrid.dc.html",
+    "GoodsPick.dc.html",
+    "GoodsHowto.dc.html",
+    "GoodsWrap.dc.html",
+    "CollabCover.dc.html",
+    "CollabInfo.dc.html",
+    "CollabMenu.dc.html",
+    "CollabPerks.dc.html",
+    "CollabWrap.dc.html",
+    "CharProfile.dc.html",
+    "CharTraits.dc.html",
+    "CharFriends.dc.html",
+    "CharWrap.dc.html"
+  ],
+  "notes": {
+    "t1": {
+      "x": 0,
+      "y": -280,
+      "text": "1. 팝업스토어 — 포스터·일정형",
+      "kind": "title1",
+      "maxW": 5720
+    },
+    "t2": {
+      "x": 0,
+      "y": 1470,
+      "text": "2. 공식 굿즈 — 카탈로그형",
+      "kind": "title1",
+      "maxW": 5720
+    },
+    "t3": {
+      "x": 0,
+      "y": 3220,
+      "text": "3. 콜라보 — 매거진형",
+      "kind": "title1",
+      "maxW": 5720
+    },
+    "t4": {
+      "x": 0,
+      "y": 4970,
+      "text": "4. 캐릭터 소개 — 프로필 카드형",
+      "kind": "title1",
+      "maxW": 5720
+    }
+  },
+  "designSystems": []
+}

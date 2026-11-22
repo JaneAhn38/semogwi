@@ -5,6 +5,7 @@
 - 실제 도구 사용 기록(tool_use_result)을 함께 돌려줍니다. 출처 검증은 모델의 말이 아니라 이 기록을 기준으로 합니다.
 """
 
+import base64
 import json
 import os
 import re
@@ -189,7 +190,7 @@ def _read_failed_fetch(run: CliRun, event: dict, fetch_calls: dict[str, str]) ->
             entry = {"url": url, "code": int(found.group(1)) if found else 0,
                      "detail": error_detail(block.get("content"), event.get("tool_use_result"))}
             if not found and re.search(r"denied|permission|not allowed", text, re.IGNORECASE):
-                rule = site_policy.blocked_by_rule(url)
+                rule = site_policy.blocked_by_rule(url, text)
                 if rule:
                     entry.update(denied=True, rule=rule)  # 우리 차단 규칙(금지 사이트·대기 중 사이트)으로 요청하지 않은 경우
                 else:
@@ -250,7 +251,7 @@ SETTINGS_LOST = ("Claude CLI에 실행 설정(도구 허용·권한 모드)이 �
 
 
 def build_args(exe: str, system_file: str, schema: dict, *, tools: tuple[str, ...], model: str, effort: str,
-               budget_usd: float, disallowed: tuple[str, ...]) -> list[str]:
+               budget_usd: float, disallowed: tuple[str, ...], images: bool = False) -> list[str]:
     args = [
         exe, "-p", "--model", model, "--effort", effort,
         "--output-format", "stream-json", "--verbose",
@@ -262,6 +263,8 @@ def build_args(exe: str, system_file: str, schema: dict, *, tools: tuple[str, ..
         "--system-prompt-file", system_file,
         "--json-schema", json.dumps(schema, ensure_ascii=False),
     ]
+    if images:
+        args += ["--input-format", "stream-json"]  # 이미지는 명령줄이 아니라 표준 입력(stream-json)으로 보냅니다
     if tools:
         args += ["--allowedTools", ",".join(tools)]
     if disallowed:
@@ -277,11 +280,26 @@ def check_settings_applied(parsed: CliRun, tools: tuple[str, ...]) -> None:
         raise AIError("error", SETTINGS_LOST)
     if set(parsed.init_tools) - {"StructuredOutput"} != set(tools):
         raise AIError("error", SETTINGS_LOST)
+def image_message(prompt: str, images: list[tuple[str, str, bytes]]) -> str:
+    """이미지와 글을 한 사용자 메시지로 묶은 stream-json 입력 한 줄. images: [(설명, MIME, 바이트)]
+
+    이미지는 파일 경로가 아니라 내용(base64)으로 보냅니다. 그래서 AI에게 파일 읽기 도구를 주지 않아도 됩니다.
+    """
+    content = []
+    for label, mime, data in images:
+        content.append({"type": "text", "text": label})
+        content.append({"type": "image", "source": {"type": "base64", "media_type": mime, "data": base64.b64encode(data).decode("ascii")}})
+    content.append({"type": "text", "text": prompt})
+    return json.dumps({"type": "user", "message": {"role": "user", "content": content}}, ensure_ascii=False) + "\n"
 
 
 def run(prompt: str, system: str, schema: dict, *, tools: tuple[str, ...] = (), model: str = "sonnet",
-        effort: str = "medium", timeout: int = 300, budget_usd: float = 1.0, disallowed: tuple[str, ...] = ()) -> CliRun:
-    """프롬프트를 실행하고 구조화된 결과와 도구 사용 기록을 돌려줍니다. 실패하면 AIError를 냅니다."""
+        effort: str = "medium", timeout: int = 300, budget_usd: float = 1.0, disallowed: tuple[str, ...] = (),
+        images: list[tuple[str, str, bytes]] | None = None) -> CliRun:
+    """프롬프트를 실행하고 구조화된 결과와 도구 사용 기록을 돌려줍니다. 실패하면 AIError를 냅니다.
+
+    images를 주면 이미지와 함께 보냅니다 (상세 이미지 판독). 도구 없이 실행합니다.
+    """
     state = status()
     if not state["available"]:
         raise AIError("unavailable", state["reason"])
@@ -291,9 +309,10 @@ def run(prompt: str, system: str, schema: dict, *, tools: tuple[str, ...] = (), 
     system_file = WORK_DIR / f"system-{uuid.uuid4().hex}.txt"
     system_file.write_text(system, encoding="utf-8")
     try:
-        args = build_args(exe, str(system_file), schema, tools=tools, model=model, effort=effort, budget_usd=budget_usd, disallowed=disallowed)
+        args = build_args(exe, str(system_file), schema, tools=tools, model=model, effort=effort, budget_usd=budget_usd,
+                          disallowed=disallowed, images=bool(images))
         try:
-            done = subprocess.run(args, input=prompt, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            done = subprocess.run(args, input=image_message(prompt, images) if images else prompt, capture_output=True, text=True, encoding="utf-8", errors="replace",
                                   timeout=timeout, cwd=WORK_DIR, env=_clean_env())
         except subprocess.TimeoutExpired:
             raise AIError("timeout", f"AI 응답이 {timeout // 60}분 안에 끝나지 않아 중단했어요. 다시 시도해 주세요.") from None
