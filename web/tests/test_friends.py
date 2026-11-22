@@ -253,26 +253,74 @@ def test_demo_photos_need_confirmed_names_in_photo_order(client, fake):
     for slot in SLOTS:
         assert spec["images"][slot]["assetId"] == job["slotImages"]["card-04"][slot]["assetId"]
 
-    # 승인 뒤 친구 사진을 빼면 구성안 승인이 풀리고 그 친구도 빠집니다
+    # 승인 뒤 친구 사진을 빼면 구성안 승인이 풀립니다. 사진이 없어도 그 친구는 남습니다
     assert api(client, job_id, "PUT", "/cards/card-04/slots/friend_image_3", json={"assetId": None}).status_code == 200
     job = get(client, job_id)
     assert job["state"] == "waiting_outline" and not job["outline"]["approved"]
-    assert names(job) == ["파이리", "푸린"]
+    assert names(job) == ["파이리", "푸린", "이브이"]
+    assert photo_names(job) == [("friend_image_1", "파이리"), ("friend_image_2", "푸린")]
 
 
-def test_gap_between_photos_is_pulled_forward_with_its_name(client, fake):
+def test_friends_without_photos_stay_and_get_photo_slots(client, fake):
+    """브라우저에서 찾은 버그: 사진 1장을 확정하면 사진 없는 친구가 지워지고, 추가한 친구도 저장 뒤 사라졌습니다."""
     job_id = outline(client, "demo")
+    fields = copy.deepcopy(card04(get(client, job_id))["fields"])
+    fields["friends"] = [item("라이츄", "진화형", "꼬부기와 물놀이를 좋아해요"), item("꼬부기", "친구")]
+    assert save_card(client, job_id, fields).status_code == 200
+
+    # 1. 친구 1 칸에만 사진을 넣고 확정해도 사진 없는 꼬부기는 남습니다 (2명 유지)
     put_photo(client, job_id, "friend_image_1", b"fire")
-    put_photo(client, job_id, "friend_image_3", b"fox")
-    job = get(client, job_id)
-    # 1·3번에 사진이 있으면 3번 사진을 2번 자리로 당깁니다 (확인 기록도 사진을 따라감)
-    assert job["slotImages"]["card-04"]["friend_image_3"] is None and job["slotImages"]["card-04"]["friend_image_2"]
-    assert confirm(client, job_id, "friend_image_2", "이브이").status_code == 200
     assert confirm(client, job_id, "friend_image_1", "파이리").status_code == 200
     job = get(client, job_id)
-    assert names(job) == ["파이리", "이브이"]
-    assert photo_names(job) == [("friend_image_1", "파이리"), ("friend_image_2", "이브이")]
+    assert names(job) == ["파이리", "꼬부기"]
+    friend1 = card04(job)["fields"]["friends"][0]
+    assert friend1["relation"] == "" and friend1["tmi"] == ""  # 라이츄 이야기였던 관계·TMI는 버립니다
+    assert "라이츄" in job["outline"]["otherNames"]
+    errors = job["outline"]["issues"]["card-04"]["errors"]
+    assert not any("이상 필요" in e for e in errors) and not errors
+
+    # 2. "+ 친구 추가"로 이브이를 넣고 저장해도 사라지지 않습니다 (저장 전 번호 0, 1 + 새 항목)
+    fields = copy.deepcopy(card04(job)["fields"])
+    fields["friends"].append(item("이브이"))
+    assert save_card(client, job_id, fields, itemOrder={"friends": [0, 1, -1]}).status_code == 200
+    job = get(client, job_id)
+    assert names(job) == ["파이리", "꼬부기", "이브이"]
     assert not job["outline"]["issues"]["card-04"]["errors"]
+
+    # 3. 친구 수만큼 사진 칸이 보입니다 (3명이면 친구 3 칸까지)
+    tpl = templates.TEMPLATES["character-04"]
+    shown = [s["key"] for s in tpl["images"] if templates.condition_met(tpl, card04(job)["fields"], s.get("if"))]
+    assert shown == ["friend_image_1", "friend_image_2", "friend_image_3"]
+
+    # 사진 있는 친구와 없는 친구가 섞여도 N번 사진 = N번째 친구입니다
+    put_photo(client, job_id, "friend_image_3", b"fox")
+    job = get(client, job_id)
+    assert sum("이름을 확인하고 확정해" in e for e in job["outline"]["issues"]["card-04"]["errors"]) == 1  # 사진 있는 칸만
+    assert confirm(client, job_id, "friend_image_3", "이브이").status_code == 200
+    job = get(client, job_id)
+    assert names(job) == ["파이리", "꼬부기", "이브이"]
+    assert photo_names(job) == [("friend_image_1", "파이리"), ("friend_image_3", "이브이")]
+    assert job["slotImages"]["card-04"]["friend_image_2"] is None
+    assert not job["outline"]["issues"]["card-04"]["errors"]
+
+    # 미리보기에서도 2번째 친구는 사진 없이, 3번째 친구는 3번 사진으로 그려집니다
+    assert api(client, job_id, "POST", "/outline/approve").status_code == 200
+    job = wait(client, job_id, lambda j: j["state"] == "waiting_preview", "미리보기")
+    spec = job["preview"]["cards"][3]["spec"]
+    assert [f["name"] for f in spec["fields"]["friends"]] == ["파이리", "꼬부기", "이브이"]
+    assert spec["images"]["friend_image_2"] is None
+    assert spec["images"]["friend_image_3"]["assetId"] == job["slotImages"]["card-04"]["friend_image_3"]["assetId"]
+
+
+def test_confirmed_name_twice_in_list_is_reported(client, fake):
+    job_id = outline(client, "demo")
+    fields = copy.deepcopy(card04(get(client, job_id))["fields"])
+    fields["friends"] = [item("라이츄"), item("꼬부기")]
+    assert save_card(client, job_id, fields).status_code == 200
+    put_photo(client, job_id, "friend_image_1", b"fire")
+    assert confirm(client, job_id, "friend_image_1", "꼬부기").status_code == 200
+    errors = get(client, job_id)["outline"]["issues"]["card-04"]["errors"]
+    assert any("같은 캐릭터가 두 번" in e and "꼬부기" in e for e in errors)
 
 
 def test_reordering_friends_keeps_photo_and_confirmed_name_together(client, fake):
@@ -283,10 +331,11 @@ def test_reordering_friends_keeps_photo_and_confirmed_name_together(client, fake
     confirm(client, job_id, "friend_image_2", "푸린")
     fire = get(client, job_id)["slotImages"]["card-04"]["friend_image_1"]["assetId"]
     fields = copy.deepcopy(card04(get(client, job_id))["fields"])
-    fields["friends"] = list(reversed(fields["friends"]))
-    assert save_card(client, job_id, fields, itemOrder={"friends": [1, 0]}).status_code == 200
+    others = list(range(2, len(fields["friends"])))
+    fields["friends"] = [fields["friends"][1], fields["friends"][0]] + fields["friends"][2:]
+    assert save_card(client, job_id, fields, itemOrder={"friends": [1, 0, *others]}).status_code == 200
     job = get(client, job_id)
-    assert names(job) == ["푸린", "파이리"]
+    assert names(job)[:2] == ["푸린", "파이리"]
     assert job["slotImages"]["card-04"]["friend_image_2"]["assetId"] == fire
     assert photo_names(job) == [("friend_image_1", "푸린"), ("friend_image_2", "파이리")]
     assert not job["outline"]["issues"]["card-04"]["errors"]

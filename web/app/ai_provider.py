@@ -1215,12 +1215,17 @@ class AIProvider:
         trial = json.loads(json.dumps(job))
         trial["research"] = research
         target = next(c for c in trial["outline"]["cards"] if c["frame"] == frame)
+        field_key = friends.slots(job, frame)[0]["identify"]
+        before = json.loads(json.dumps((current[frame].get("fields") or {}).get(field_key) or []))
         target.update(cards[frame])
+        friends.keep_people(trial, frame, before)  # 사람 수·순서·이름은 그대로, AI는 관계·TMI만
         friends.sync(trial)
         errors = _card_errors({frame: target}, _strict_material(trial, research), trial)
         if errors:
             fixed, meta = self._rewrite(trial, research, [frame], {c["frame"]: c for c in trial["outline"]["cards"]}, errors)
             target.update(fixed.get(frame, {}))
+            friends.keep_people(trial, frame, before)
+            friends.sync(trial)
             calls.append(meta)
         card = {k: target[k] for k in ("role", "fields", "source", "sourceIds")}
         return {"card": card, "research": research if lacking else None, "calls": calls}

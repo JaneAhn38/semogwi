@@ -2,9 +2,11 @@
 
 - 칸(identify가 있는 이미지 자리)에 사진을 넣으면 그 사진의 캐릭터 이름을 확인해 slotIdentities에 둡니다.
 - 사진과 항목은 자리 번호로 잇습니다: friend_image_N(가족은 family_image_N)이 N번째 항목의 사진입니다.
-  사진이 1·3번처럼 띄엄띄엄 있으면 사진과 항목을 함께 앞자리로 당겨, 항상 N번 사진 = N번째 항목이 되게 합니다.
+  사진이 없는 항목도 지우지 않습니다. 1·3번에만 사진이 있으면 2번째 항목은 사진 없이 그려집니다.
+  항목을 지우거나 순서를 바꾸면 사진이 그 항목을 따라갑니다(templates.remap_item_slots).
 - 사용자가 이름을 확정하면 그 번호 항목의 이름을 서버가 정합니다. AI는 관계·TMI만 씁니다.
-- 칸에 사진이 있으면 그 카드에는 확정한 캐릭터와 중심 캐릭터 말고 다른 캐릭터 이름을 쓰지 않습니다.
+- 칸에 사진이 있으면 그 카드에는 목록의 캐릭터(확정한 이름, 사진 없는 항목의 이름)와 중심 캐릭터 말고
+  다른 캐릭터 이름을 쓰지 않습니다.
 - 카드에는 친구 또는 가족 중 고른 쪽(category)만 보이므로, 확인도 고른 쪽 칸만 합니다.
 
 slotIdentities[frame][slot] = {assetId, status, name, suggested, confidence, candidates, evidence, error}
@@ -113,12 +115,13 @@ def main_name(job: dict, cards: list[dict] | None = None) -> str:
 
 
 def sync(job: dict) -> bool:
-    """항목을 사진 순서와 확정한 이름에 맞춥니다. 바뀌었으면 True.
+    """확정한 이름을 그 번호의 항목에 넣습니다. 바뀌었으면 True.
 
-    - 칸에 사진이 없으면 항목을 그대로 둡니다 (AI가 조사한 대로).
-    - 사진이 있으면 사진이 있는 자리의 항목만, 번호 순서대로 남깁니다. 띄엄띄엄 있으면 사진과 함께 앞으로 당깁니다.
-    - 이름을 확정한 자리는 그 이름으로 씁니다. 같은 이름이던 항목의 관계·TMI는 이어 쓰고, 다른 캐릭터의 관계·TMI는 버립니다.
-    - 빠진 이름(사진과 맞지 않아 뺀 캐릭터)은 금지 이름으로 기억합니다.
+    - 항목 수와 순서는 그대로 둡니다. 사진이 없는 항목도 지우지 않습니다.
+    - 사진이 있고 이름을 확정한 N번 칸만 N번째 항목의 이름을 그 이름으로 씁니다. 원래 다른 캐릭터였으면
+      그 관계·TMI는 버리고, 목록에 같은 이름의 항목이 있었으면 그 관계·TMI를 이어 씁니다.
+    - 확정 전인 칸, 사진이 없는 칸의 항목은 건드리지 않습니다.
+    - 확정한 이름으로 바뀐 옛 이름(사진과 맞지 않은 캐릭터)은 금지 이름으로 기억합니다.
     """
     changed = False
     for frame in frames(job):
@@ -128,38 +131,47 @@ def sync(job: dict) -> bool:
         rekey(job, frame)
         field = _field(job, frame, card)
         name_key, subs = field["linkedName"], [s["key"] for s in field["fields"]]
-        keys = [s["key"] for s in slots(job, frame, card)]
-        images = (job.get("slotImages") or {}).get(frame) or {}
-        positions = [i for i, key in enumerate(keys) if images.get(key)]
-        if not positions:
-            continue
+        blank = {s: "" for s in subs}
         items = [i for i in card["fields"].get(field["key"]) or [] if isinstance(i, dict)]
         by_name = {i.get(name_key): i for i in items if i.get(name_key)}
-        new = []
-        for i in positions:
-            current = items[i] if i < len(items) else {}
-            record = identity(job, frame, keys[i])
-            if record and record["status"] == "confirmed":
-                name = record["name"]
-                base = current if current.get(name_key) == name else by_name.get(name, {})
-                new.append({**{s: "" for s in subs}, **base, name_key: name})
+        new, replaced = [dict(i) for i in items], []
+        for n, slot in enumerate(slots(job, frame, card)):
+            record = identity(job, frame, slot["key"])
+            if not record or record["status"] != "confirmed":
+                continue
+            name = record["name"]
+            while len(new) < n:
+                new.append(dict(blank))  # 앞 번호 항목이 없을 때만 (보통 칸이 보이지 않아 생기지 않음)
+            if n < len(new) and new[n].get(name_key) == name:
+                continue
+            if n < len(new) and new[n].get(name_key):
+                replaced.append(new[n][name_key])
+            entry = {**blank, **by_name.get(name, {}), name_key: name}
+            if n < len(new):
+                new[n] = entry
             else:
-                guess = (record or {}).get("suggested") or current.get(name_key) or ""
-                new.append({**{s: "" for s in subs}, **current, name_key: guess})  # 확정 전: 승인은 add_issues가 막습니다
-        kept = {i[name_key] for i in new}
-        remember(job, [i[name_key] for i in items if i.get(name_key) and i[name_key] not in kept])
-        if positions != list(range(len(positions))):
-            # 1·3번처럼 띄엄띄엄 있으면 사진도 앞자리로 당깁니다 (N번 사진 = N번째 항목)
-            moved = dict(images)
-            for j, key in enumerate(keys):
-                moved[key] = images.get(keys[positions[j]]) if j < len(positions) else None
-            job["slotImages"][frame] = moved
-            rekey(job, frame)
-            changed = True
+                new.append(entry)
+        remember(job, replaced)
         if new != items:
             card["fields"][field["key"]] = new
             changed = True
     return changed
+
+
+def keep_people(job: dict, frame: str, before: list[dict]) -> None:
+    """확정 뒤 AI가 다시 쓴 카드에서 항목 수·순서·이름을 다시 쓰기 전 목록으로 되돌립니다.
+
+    AI는 관계·TMI만 씁니다. 같은 이름 항목의 관계·TMI를 가져오고, 없으면 빈 문자열로 둡니다
+    (사용자가 남겨 둔 사진 없는 친구를 AI가 다른 캐릭터로 바꾸지 못하게).
+    """
+    card = _card(job, frame)
+    if not card or frame not in frames(job):
+        return
+    field = _field(job, frame, card)
+    name_key, blank = field["linkedName"], {s["key"]: "" for s in field["fields"]}
+    written = {i.get(name_key): i for i in _items(job, frame, card) if i.get(name_key)}
+    card["fields"][field["key"]] = [{**blank, **written.get(i.get(name_key), {}), name_key: i.get(name_key, "")}
+                                    for i in before if isinstance(i, dict)]
 
 
 def remember(job: dict, names: list[str]) -> None:
@@ -215,12 +227,30 @@ def _texts(job: dict, frame: str, card: dict) -> list[str]:
     return texts
 
 
+def _items(job: dict, frame: str, card: dict) -> list[dict]:
+    field = _field(job, frame, card)
+    return [i for i in (card.get("fields") or {}).get(field["key"]) or [] if isinstance(i, dict)]
+
+
+def _names(job: dict, frame: str, card: dict) -> list[str]:
+    """카드 목록에 있는 캐릭터 이름 (확정한 이름 + 사진 없는 항목의 이름), 순서대로."""
+    key = _field(job, frame, card)["linkedName"]
+    return [str(i.get(key) or "").strip() for i in _items(job, frame, card)]
+
+
+def numbered(job: dict, frame: str, card: dict | None = None) -> list[tuple[int, str, str]]:
+    """사진으로 확정한 (번호 1부터, 사진 자리, 이름). 번호 N = N번째 항목."""
+    keys = [s["key"] for s in slots(job, frame, card)]
+    return [(keys.index(key) + 1, key, name) for key, name in confirmed(job, frame, card)]
+
+
 def violations(job: dict, frame: str, card: dict, cards: list[dict] | None = None) -> list[str]:
-    """칸에 사진이 있는 카드에서, 확정한 캐릭터와 중심 캐릭터 말고 다른 캐릭터 이름을 찾습니다."""
+    """칸에 사진이 있는 카드에서, 목록의 캐릭터와 중심 캐릭터 말고 다른 캐릭터 이름을 찾습니다."""
     if frame not in frames(job) or not filled(job, frame, card):
         return []
-    chosen = confirmed(job, frame, card)
-    allowed = [n for _, n in chosen] + [main_name(job, cards)]
+    listed = [n for n in _names(job, frame, card) if n]
+    main = main_name(job, cards)
+    allowed = listed + [main]
     others = other_names(job, frame, allowed)
     hits = []
     for text in _texts(job, frame, card):
@@ -230,9 +260,8 @@ def violations(job: dict, frame: str, card: dict, cards: list[dict] | None = Non
         hits += [n for n in others if n in masked and n not in hits]
     if not hits:
         return []
-    names = ", ".join(n for _, n in chosen) or "없음"
-    main = main_name(job, cards)
-    return [f"확정하지 않은 캐릭터 이름이 들어 있어요: {', '.join(hits)}. 확정한 캐릭터({names}){f'와 중심 캐릭터({main})' if main else ''}만 써 주세요"]
+    names = ", ".join(listed) or "없음"
+    return [f"확정하지 않은 캐릭터 이름이 들어 있어요: {', '.join(hits)}. 목록의 캐릭터({names}){f'와 중심 캐릭터({main})' if main else ''}만 써 주세요"]
 
 
 def add_issues(job: dict, cards: list[dict], issues: dict) -> None:
@@ -252,11 +281,13 @@ def add_issues(job: dict, cards: list[dict], issues: dict) -> None:
             else:
                 errors.append(f"{labels[key]}: 사진 속 캐릭터 이름을 확인하고 확정해 주세요")
         field = _field(job, frame, card)
-        chosen = confirmed(job, frame, card)
-        if keys and len(chosen) == len(keys):
-            written = [i.get(field["linkedName"]) for i in card["fields"].get(field["key"]) or []]
-            if written != [n for _, n in chosen]:
-                errors.append(f"{field['label']} 이름이 사진에서 확정한 이름·순서와 맞지 않아요. 사진 칸에서 이름을 다시 확정해 주세요")
+        written = _names(job, frame, card)
+        for n, key, name in numbered(job, frame, card):
+            if n > len(written) or written[n - 1] != name:
+                errors.append(f"{field['label']} {n}번째 이름이 {labels[key]}에서 확정한 이름({name})과 맞지 않아요. 사진 칸에서 이름을 다시 확정해 주세요")
+        repeated = sorted({n for n in written if n and written.count(n) > 1})
+        if keys and repeated:
+            errors.append(f"{field['label']}에 같은 캐릭터가 두 번 들어 있어요: {', '.join(repeated)}. 사진 없는 항목을 지우거나 다른 캐릭터로 바꿔 주세요")
         errors += violations(job, frame, card, cards)
 
 
@@ -266,20 +297,24 @@ def rules_text(job: dict) -> str:
     for frame in frames(job):
         if not filled(job, frame):
             continue
-        field = _field(job, frame)
-        chosen = confirmed(job, frame)
+        card = _card(job, frame) or {"fields": {}}
+        field = _field(job, frame, card)
+        key_name = field["linkedName"]
+        written = _names(job, frame, card)
+        fixed = {n: (key, name) for n, key, name in numbered(job, frame, card)}
         main = main_name(job)
         category = (field.get("if") or "").partition("=")[2]
         lines.append(f"[사진으로 확정한 {field['label']}: {frame}]")
         if category:
             lines.append(f"- category는 {category}로 둔다.")
-        if chosen:
-            lines.append(f"- {field['key']}는 아래 목록 그대로, 이 순서로 {len(chosen)}명만 쓴다. {field['linkedName']}은 바꾸지 않는다 (N번째 항목 = N번 사진).")
-            lines += [f"  - {n}번째: {field['linkedName']}={name} (사진 {key})" for n, (key, name) in enumerate(chosen, 1)]
-        else:
-            lines.append(f"- 사진 속 캐릭터 이름을 아직 확정하지 않았다. {field['key']}는 빈 배열로 둔다.")
-        lines.append(f"- 이 카드의 관계·TMI 문구에는 확정한 캐릭터{f'와 중심 캐릭터({main})' if main else ''}만 쓴다. 목록에 없는 캐릭터 이름은 쓰지 않는다.")
-        lines.append("- 자료에 확정한 캐릭터의 정보가 없으면 그 캐릭터의 관계·TMI는 빈 문자열로 둔다. 다른 캐릭터 정보로 채우지 않는다.")
+        lines.append(f"- {field['key']}는 아래 목록 그대로, 이 순서로 {len(written)}명을 쓴다. {key_name}은 바꾸지 않는다 (N번째 항목 = N번 사진).")
+        for n, name in enumerate(written, 1):
+            if n in fixed:
+                lines.append(f"  - {n}번째: {key_name}={fixed[n][1]} (사진 {fixed[n][0]})")
+            else:
+                lines.append(f"  - {n}번째: {key_name}={name} (사진 없음 또는 이름 확정 전)")
+        lines.append(f"- 이 카드의 관계·TMI 문구에는 목록의 캐릭터{f'와 중심 캐릭터({main})' if main else ''}만 쓴다. 목록에 없는 캐릭터 이름은 쓰지 않는다.")
+        lines.append("- 자료에 그 캐릭터의 정보가 없으면 관계·TMI는 빈 문자열로 둔다. 다른 캐릭터 정보로 채우지 않는다.")
     return "\n".join(lines)
 
 

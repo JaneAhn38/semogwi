@@ -104,15 +104,12 @@ def test_slots_follow_friends_when_one_is_deleted(client):
 
 
 def test_wrong_item_order_is_ignored(client):
-    # 사진은 1·2번에 넣습니다. 2번에만 넣으면 사진 식별 규칙(띄엄띄엄 있으면 앞자리로 당김)이 1번으로 옮깁니다
-    job_id, ids = start_with_images(client, 2)
+    job_id, (asset,) = start_with_images(client, 1)
     assert edit(client, job_id, "card-04", {"friends": friends(3)}).status_code == 200
-    for n, asset in enumerate(ids, 1):
-        api(client, job_id, "PUT", f"/cards/card-04/slots/friend_image_{n}", json={"assetId": asset, "variant": "original"})
+    api(client, job_id, "PUT", "/cards/card-04/slots/friend_image_2", json={"assetId": asset, "variant": "original"})
     body = {"role": "친구", "fields": {"friends": friends(2)}, "source": "출처: 공식 계정", "itemOrder": {"friends": [1, 1]}}
     images = api(client, job_id, "PUT", "/outline/cards/card-04", json=body).json()["slotImages"]["card-04"]
-    # 순서가 맞지 않으면 이미지를 옮기지 않습니다
-    assert images["friend_image_1"]["assetId"] == ids[0] and images["friend_image_2"]["assetId"] == ids[1]
+    assert images["friend_image_2"]["assetId"] == asset  # 순서가 맞지 않으면 이미지를 옮기지 않습니다
 
 
 def test_suggestions_skip_slots_of_missing_friends(client):
