@@ -164,22 +164,23 @@ def test_field_states_and_issues(client, fake):
 def test_character_secondary_sources_are_allowed_but_listed_ones_warn(client, fake):
     fake.sources = [{"id": "w1", "title": "위키", "url": WIKI, "kind": "secondary"}, {"id": "b1", "title": "블로그", "url": BLOG, "kind": "secondary"}]
     fake.fetches = [{"url": WIKI, "code": 200}]
-    fake.items = [{"key": "birthday", "value": "확인된 내용", "quote": "", "sourceIds": ["w1"]},
-                  {"key": "favorite", "value": "확인된 내용", "quote": "", "sourceIds": ["b1"]}]
+    fake.items = [{"key": "birthday", "value": "5월 5일", "quote": "", "sourceIds": ["w1"]},
+                  {"key": "favorite", "value": "초코비", "quote": "", "sourceIds": ["b1"]}]
+    fake.overrides = {"card-02": {"profile_rows": [{"label": "생일", "value": "5월 5일"}, {"label": "좋아하는 것", "value": "초코비"}]}}
     job_id = start(client, mode="ai")
     job = wait(client, job_id, "waiting_outline")
     states = job["outline"]["fieldStates"]["card-02"]
-    assert states["birthday"] == "secondary" and states["favorite_things"] == "listed"
+    assert states["profile_rows.0"] == "secondary" and states["profile_rows.1"] == "listed"  # 프로필 줄마다 조사 값과 대조
     issue = job["outline"]["issues"]["card-02"]
     assert not issue["errors"] and any("근거를 확인하지 못한 정보예요: 좋아하는 것" in w for w in issue["warnings"])
 
 
 def test_missing_items_show_as_needing_input(client, fake):
-    fake.overrides = {"card-02": {"birthday": "", "creator": ""}}
+    fake.overrides = {"card-02": {"profile_rows": []}}
     job_id = start(client, mode="ai")
     job = wait(client, job_id, "waiting_outline")
-    states = job["outline"]["fieldStates"]["card-02"]
-    assert states["birthday"] == "missing" and states["creator"] == "missing"
+    card = job["outline"]["cards"][1]
+    assert card["fields"]["profile_rows"] == [] and not any(k.startswith("profile_rows.") for k in job["outline"]["fieldStates"]["card-02"])  # 근거 없는 줄을 채우지 않음
     assert all(i["state"] == "missing" for i in job["research"]["items"])  # 가짜 응답에 항목이 없으면 모두 정보 확인 필요
 
 

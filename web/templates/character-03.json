@@ -19,6 +19,15 @@
   },
   "fields": [
     {
+      "key": "page_title",
+      "label": "페이지 제목",
+      "type": "text",
+      "max": 14,
+      "placeholder": "이런 성격이에요",
+      "demo": "",
+      "hint": "조사한 성격을 한 문장으로 짧게 (예: 겁 많지만 다정해요). 비워 두면 '이런 성격이에요'"
+    },
+    {
       "key": "traits",
       "label": "성격과 특징",
       "type": "items",
@@ -77,7 +86,8 @@
     },
     {
       "type": "text",
-      "text": "이런 성격이에요",
+      "field": "page_title",
+      "fallback": "이런 성격이에요",
       "box": {
         "x": 72,
         "y": 178,

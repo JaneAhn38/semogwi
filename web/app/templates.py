@@ -22,13 +22,15 @@ FORMAT = 3
 ENABLED_TYPES = {"character", "goods", "collab", "popup"}  # 템플릿을 쓰는 유형. 테스트에서 비워 기존 방식을 검사할 수 있습니다
 FIELD_TYPES = {"text", "multiline", "list", "items", "pairs", "flag", "choice"}  # choice: 정해진 선택지 중 하나 (예: 친구/가족)
 ITEM_FIELD_TYPES = {"text", "multiline"}
-ELEMENT_TYPES = {"header", "footer", "rect", "circle", "line", "text", "image", "rows", "chips", "pill", "bullets", "check", "asset", "star", "stack", "columns"}
+ELEMENT_TYPES = {"header", "footer", "rect", "circle", "line", "text", "image", "rows", "chips", "pill", "bullets", "check", "asset", "star", "stack", "columns",
+                 "profile"}
 FREE = "free"  # 자유 구성 카드 (<유형>-free.json). card-02 ~ card-05에서 확보된 자료에 맞춰 AI가 고릅니다
 MULTILINE_MAX_LINES = 2
 DEMO_SOURCE = "출처: 데모 (실제 출처 아님)"
 LEGACY_SET = {"character": ["character-cover"] + ["character-body"] * 4}  # 예전 형식 3 작업
 # 디자인을 바꾼 템플릿의 예전 판. 저장된 작업이 예전 필드(old_key)를 갖고 있으면 예전 판으로 엽니다 (내용을 옮기거나 버리지 않음)
-OLD_VERSIONS = {"character-04": {"id": "character-04-v1", "old_key": "tmi_items"},
+OLD_VERSIONS = {"character-02": {"id": "character-02-v1", "old_key": "birthday"},  # 고정 4줄(이름·생일·좋아하는 것·작가) 프로필
+                "character-04": {"id": "character-04-v1", "old_key": "tmi_items"},
                 "character-05": {"id": "character-05-v1", "old_key": "recommend_for"}}
 
 # PNG에 자리표시 문구가 남지 않게 합니다: [캐릭터 이름], MM월 DD일, YYYY.MM.DD 같은 틀.
@@ -63,7 +65,8 @@ def _path_ok(path: str, fields: dict[str, dict]) -> bool:
 
 
 def _conditions(expr) -> list[str]:
-    """조건은 문자열 하나 또는 목록(모두 만족)입니다. 'friends.0'은 값이 있을 때, 'category=family'는 그 값일 때."""
+    """조건은 문자열 하나 또는 목록(모두 만족)입니다. 'friends.0'은 값이 있을 때, 'category=family'는 그 값일 때,
+    '!next_name'은 값이 비어 있을 때."""
     if not expr:
         return []
     return [expr] if isinstance(expr, str) else list(expr)
@@ -71,8 +74,9 @@ def _conditions(expr) -> list[str]:
 
 def _condition_ok(expr, fields: dict[str, dict]) -> bool:
     for cond in _conditions(expr):
-        path, eq, value = cond.partition("=")
-        if not _path_ok(path, fields):
+        negate = cond.startswith("!")
+        path, eq, value = cond.removeprefix("!").partition("=")
+        if not _path_ok(path, fields) or (negate and eq):
             return False
         field = fields[path.split(".")[0]]
         if eq and (field["type"] != "choice" or value not in {o["value"] for o in field["options"]}):
@@ -84,14 +88,15 @@ def condition_met(tpl: dict, values: dict, expr) -> bool:
     """카드 값에서 조건이 맞는지. 저장된 값이 없으면 필드 기본값으로 봅니다 (예: 예전 카드의 카테고리는 '친구')."""
     defaults = {f["key"]: f.get("default") for f in tpl["fields"]}
     for cond in _conditions(expr):
-        path, eq, expected = cond.partition("=")
+        negate = cond.startswith("!")
+        path, eq, expected = cond.removeprefix("!").partition("=")
         value = _get_path(values or {}, path)
         if value in (None, "") and "." not in path:
             value = defaults.get(path)
         if eq:
             if str(value or "") != expected:
                 return False
-        elif not value:
+        elif bool(value) == negate:
             return False
     return True
 
@@ -121,10 +126,21 @@ def _check_template(tpl: dict, name: str) -> None:
             raise TemplateError(f"{name}: {field['key']}의 minItems·defaultItems·maxItems가 맞지 않아요")
         if field["type"] == "choice" and (not field.get("options") or field.get("default") not in {o["value"] for o in field["options"]}):
             raise TemplateError(f"{name}: {field['key']} 선택지와 기본값이 맞지 않아요")
+        # editor: list → 구성안에서 항목을 추가·삭제하는 편집기 (0개부터). verifyItems → 줄마다 조사 값과 대조할 조사 항목
+        if field.get("editor") == "list" and not (field["type"] == "items" and field.get("maxItems", 0) >= 1):
+            raise TemplateError(f"{name}: {field['key']}의 목록 편집기는 items 필드에만 쓸 수 있어요")
+        if field.get("verifyItems") and (field["type"] != "items" or {f["key"] for f in field.get("fields", [])} != {"label", "value"}
+                                         or not set(field["verifyItems"]) <= set(research.keys_of(tpl["contentType"]))):
+            raise TemplateError(f"{name}: {field['key']}의 verifyItems는 label·value 항목과 있는 조사 항목만 쓸 수 있어요")
         fields[field["key"]] = field
     for field in tpl["fields"]:
         if field.get("if") and not _condition_ok(field["if"], fields):
             raise TemplateError(f"{name}: {field['key']}의 조건이 잘못됐어요 ({field['if']})")
+    # nextTeaser: 다음 캐릭터 예고 카드. 이름·힌트·공개 문구 칸은 사용자 입력 칸이고, 힌트·공개 문구에는 기본 문구가 있어야 합니다
+    teaser = tpl.get("nextTeaser")
+    if teaser and not (all(fields.get(teaser.get(k), {}).get("userOnly") for k in ("name", "hint", "reveal"))
+                       and all(fields[teaser[k]].get("placeholder") for k in ("hint", "reveal"))):
+        raise TemplateError(f"{name}: nextTeaser의 칸은 사용자 입력 칸이어야 하고 힌트·공개 문구에 기본 문구가 있어야 해요")
     # inherit: 표지(card-01)의 값을 그대로 보여 주는 필드 (예: 브랜드명). 이 카드에서는 고치지 않습니다
     for key in tpl.get("inherit", []):
         if key in fields:
@@ -146,6 +162,9 @@ def _check_template(tpl: dict, name: str) -> None:
             raise TemplateError(f"{name}: 없는 필드를 써요 ({el['if']})")
         if kind == "image" and el.get("slot") not in slots:
             raise TemplateError(f"{name}: 없는 이미지 자리를 그려요 ({el.get('slot')})")
+        # ifNoImage: 그 이미지 자리가 비어 있을 때만 그립니다 (예: 다음 캐릭터 이미지가 없으면 '?')
+        if el.get("ifNoImage") and el["ifNoImage"] not in slots:
+            raise TemplateError(f"{name}: 없는 이미지 자리를 조건으로 써요 ({el['ifNoImage']})")
         if kind == "stack":
             # 내용 양에 맞춰 높이가 바뀌는 묶음: 소개 문장(multiline) · 정보 줄(pairs) · 참고 사항(list) · 이미지 자리
             expected = {"lead": "multiline", "rows": "pairs", "notes": "list"}
@@ -161,6 +180,14 @@ def _check_template(tpl: dict, name: str) -> None:
                 raise TemplateError(f"{name}: columns는 name·relation·tmi가 있는 items 필드여야 해요")
             if any(f"{el.get('slotPrefix')}{i}" not in slots for i in range(1, field["maxItems"] + 1)):
                 raise TemplateError(f"{name}: columns의 이미지 자리가 인원 수만큼 있어야 해요")
+        if kind == "profile":
+            # 프로필: 이름(필수) + 프로필 줄 0~3개 + 소개 문장. 줄 수와 이미지 유무에 따라 이미지 크기·줄 간격·배치를 정합니다
+            expected = {"name": "text", "rows": "items", "intro": "multiline", "tags": "list"}
+            for part, field_type in expected.items():
+                if el.get(part) and (fields.get(el[part]) or {}).get("type") != field_type:
+                    raise TemplateError(f"{name}: profile의 {part}는 {field_type} 필드여야 해요")
+            if not el.get("name") or not el.get("rows") or el.get("slot") not in slots:
+                raise TemplateError(f"{name}: profile에는 name·rows 필드와 이미지 자리가 있어야 해요")
         if (el.get("fallback") or el.get("prefix")) and not el.get("field"):
             raise TemplateError(f"{name}: fallback·prefix는 field가 있는 글자 요소에만 쓸 수 있어요")
         # fallback: 값이 비었을 때 보여 줄 기본 안내 문구. 고정 문구처럼 자리표시를 쓰면 안 됩니다
@@ -500,9 +527,10 @@ def move_fields(job: dict, card: dict, template_id: str) -> dict:
     target = TEMPLATES[template_id]
     if template_id.endswith(f"-{FREE}"):
         # 카드에 보이던 값만 옮깁니다 (다른 카테고리로 보관 중인 목록은 섞지 않음)
-        rows = [row for field in current["fields"] if card["fields"].get(field["key"]) and field["key"] not in ("heading",)
+        rows = [row for field in current["fields"] if card["fields"].get(field["key"]) and field["key"] not in ("heading", "page_title")
                 and field_active(current, field, card["fields"]) for row in _rows_of(field, card["fields"][field["key"]])]
-        fields = _free_fields(target, card["fields"].get("heading") or (card.get("role") or current["label"])[:16], rows,
+        heading = card["fields"].get("heading") or card["fields"].get("page_title")  # 페이지 제목은 자유 구성의 카드 제목으로
+        fields = _free_fields(target, heading or (card.get("role") or current["label"])[:16], rows,
                               card["fields"].get("lead", ""), card["fields"].get("notes", []))
         return {"fields": fields, "missing": []}
     by_label = {r["label"]: r["value"] for r in card["fields"].get("points") or []}
@@ -560,6 +588,8 @@ def _rows_of(field: dict, value) -> list[dict]:
         return [{"label": label, "value": " · ".join(value)}]
     if field["type"] == "pairs":
         return [{"label": p["label"][:8], "value": p["value"]} for p in value]
+    if field["type"] == "items" and {f["key"] for f in field["fields"]} == {"label", "value"}:
+        return [{"label": p["label"][:8], "value": p["value"]} for p in value if p.get("label") and p.get("value")]  # 프로필 줄은 그대로
     if field["type"] == "items":
         rows = []
         for item in value:
@@ -704,9 +734,29 @@ def default_slot_images(job: dict, permitted: list[dict]) -> dict:
     queue = list(permitted)
     for frame in FRAMES:
         for slot in active_slots(job, frame):
-            if queue:
+            if queue and not slot.get("userOnly"):  # 사용자만 넣는 자리(예: 다음 캐릭터 이미지)는 채우지 않습니다
                 images[frame][slot["key"]] = queue.pop(0)
     return images
+
+
+def keep_user_fields(old: dict | None, new: dict) -> dict:
+    """AI나 데모가 카드를 다시 써도 사용자만 입력하는 칸(userOnly, 예: 다음 캐릭터 이름·힌트·회차)은 그대로 둡니다."""
+    if not old or old.get("template") != new.get("template") or new.get("template") not in TEMPLATES:
+        return new
+    keys = [f["key"] for f in TEMPLATES[new["template"]]["fields"] if f.get("userOnly")]
+    if not keys:
+        return new
+    kept = {k: (old.get("fields") or {}).get(k, (new.get("fields") or {}).get(k)) for k in keys}
+    return {**new, "fields": {**(new.get("fields") or {}), **kept}}
+
+
+def next_teaser(tpl: dict) -> dict | None:
+    """다음 캐릭터 예고 카드의 칸 이름과 기본 문구. {"name", "hint", "reveal", "hintDefault", "revealDefault"}"""
+    spec = tpl.get("nextTeaser")
+    if not spec:
+        return None
+    fields = {f["key"]: f for f in tpl["fields"]}
+    return {**spec, "hintDefault": fields[spec["hint"]]["placeholder"], "revealDefault": fields[spec["reveal"]]["placeholder"]}
 
 
 def upgrade_card(card: dict) -> str | None:

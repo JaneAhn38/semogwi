@@ -23,8 +23,8 @@ def test_new_design_definition_and_reference_files():
     assert {"다음 캐릭터도 보고 싶다면", "NEXT CHARACTER", "다음 편 예고", "팔로우하면 다음 친구를 제일 먼저 만나요!",
             "저장해 두고 다음 편도 기다려 주세요"} <= set(texts)
     fallbacks = {e["field"]: e["fallback"] for e in tpl["elements"] if e.get("fallback")}
-    assert fallbacks == {"next_episode": "다음 회차", "next_name": "???", "next_hint": "다음 캐릭터는 아직 비밀이에요",
-                         "next_date": "곧 공개 예정", "teaser": "다음 편에서 또 다른 귀여운 친구를 소개할게요"}
+    assert fallbacks == {"next_hint": "어떤 친구일지 기대해 주세요",
+                         "next_date": "다음 게시물에서 만나요!", "teaser": "다음 편에서 또 다른 귀여운 친구를 소개할게요"}
     assert next(e for e in tpl["elements"] if e.get("field") == "next_episode")["prefix"] == "No. "
     # 이전 디자인은 예전 작업용으로 남깁니다
     old = templates.TEMPLATES["character-05-v1"]

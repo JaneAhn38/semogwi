@@ -302,13 +302,15 @@ const SemogwiRenderer = (() => {
   function conditionMet(tpl, fields, expr) {
     const list = Array.isArray(expr) ? expr : [expr];
     return list.every((cond) => {
-      const [path, expected] = cond.split("=");
+      const negate = cond.startsWith("!"); // "!next_name": 값이 비어 있을 때
+      const [path, expected] = (negate ? cond.slice(1) : cond).split("=");
       let value = getPath(fields || {}, path);
       if ((value === undefined || value === null || value === "") && !path.includes(".")) {
         const field = (tpl.fields || []).find((f) => f.key === path);
         value = field ? field.default : value;
       }
-      return expected === undefined ? !isEmpty(value) : String(value ?? "") === expected;
+      if (expected === undefined) return negate ? isEmpty(value) : !isEmpty(value);
+      return String(value ?? "") === expected;
     });
   }
 
@@ -831,6 +833,93 @@ const SemogwiRenderer = (() => {
     return { overflow, missing };
   }
 
+  // 프로필(캐릭터 소개 2페이지): 이름 + 프로필 줄 0~3개 + 소개 문장. 빈 줄을 만들지 않고, 줄 수·이미지 유무·태그 유무에 따라
+  // 이미지 크기와 줄 간격을 정한 뒤 영역 안에서 세로 가운데에 둡니다. 이름만 있으면 이름을 크게 쓰고 소개 문장을 아래에 둡니다.
+  async function drawProfile(ctx, tpl, el, spec, options) {
+    const overflow = [];
+    const missing = [];
+    const name = String(getPath(spec.fields, el.name) || "");
+    const rows = (getPath(spec.fields, el.rows) || []).filter((r) => r && r.label && r.value).slice(0, 3);
+    const intro = el.intro ? String(getPath(spec.fields, el.intro) || "") : "";
+    const hasTags = el.tags && !isEmpty(getPath(spec.fields, el.tags));
+    const top = el.top;
+    const space = (hasTags ? el.bottom : el.bottomNoTags || el.bottom) - top;
+    const lines = [...(name ? [{ label: "이름", value: name, key: el.name }] : []), ...rows.map((r) => ({ ...r, key: el.rows }))];
+    const count = Math.max(1, Math.min(4, lines.length));
+    const image = spec.images && spec.images[el.slot];
+    const I = el.image;
+    const size = image ? Math.min(space, I.sizes[String(count)] || I.sizes["4"]) : 0;
+    if (image) {
+      const box = { x: el.x, y: top + (space - size) / 2, w: size, h: size };
+      await drawSlot(ctx, tpl, { type: "image", slot: el.slot, box, radius: I.radius, fill: I.fill, inset: I.inset }, spec, options);
+    } else missing.push(el.slot); // 이미지가 없으면 빈 자리를 그리지 않고 글을 상자 너비 전체로 넓힙니다
+    const textX = image ? el.x + size + I.gap : el.x;
+    const textW = el.x + el.w - textX;
+    const introOpt = { ...el.introText, align: image || lines.length > 1 ? "left" : "center", valign: "top" };
+    const measureIntro = (h) => fitLines(ctx, tpl, intro, introOpt, textW, h);
+
+    if (lines.length >= 2) {
+      // 줄 모드: 왼쪽 항목명(가장 긴 이름에 맞춘 너비) + 오른쪽 내용. 줄이 적을수록 줄 간격을 넓힙니다
+      const rowH = el.rowHeights[String(count)] || el.rowHeights["4"];
+      setFont(ctx, tpl, el.label.font, el.label.size);
+      const labelW = Math.min(210, Math.max(120, ...lines.map((l) => ctx.measureText(l.label).width + 24)));
+      const rowsH = rowH * lines.length;
+      const introFit = intro ? measureIntro(Math.max(0, space - rowsH - 18)) : null;
+      const introH = introFit ? introFit.lines.length * introFit.size * LINE_HEIGHT : 0;
+      const block = rowsH + (introFit ? 18 + introH : 0);
+      // 이미지가 없으면 줄 묶음을 상자 가운데에 둡니다 (왼쪽에 몰려 오른쪽이 비지 않게). 소개 문장이 있으면 그 너비까지 맞춥니다
+      setFont(ctx, tpl, el.value.font, el.value.size);
+      const valueW = Math.max(...lines.map((l) => ctx.measureText(l.value).width));
+      const introW = introFit ? Math.max(...introFit.lines.map((l) => { setFont(ctx, tpl, el.introText.font, introFit.size); return ctx.measureText(l).width; })) : 0;
+      const blockW = Math.min(textW, Math.max(labelW + valueW + 8, introW));
+      const left = image ? textX : textX + (textW - blockW) / 2;
+      const width = image ? textW : textW - (left - textX);
+      let y = top + Math.max(0, (space - block) / 2);
+      // 항목명(Jua)과 내용(고운돋움)은 글꼴이 달라 같은 middle 기준이어도 높이가 미묘하게 다릅니다.
+      // 두 글꼴 모두 한글 '가'의 실제 잉크 중심을 줄 가운데에 맞추고, 글자 크기는 모든 줄이 같게 씁니다
+      const labelFits = lines.map((l) => fitLines(ctx, tpl, l.label, { ...el.label, maxLines: 1 }, labelW - 8, rowH));
+      const valueFits = lines.map((l) => fitLines(ctx, tpl, l.value, { ...el.value, maxLines: 1 }, width - labelW, rowH));
+      const labelSize = Math.min(...labelFits.map((f) => f.size));
+      const valueSize = Math.min(...valueFits.map((f) => f.size));
+      const rowText = (text, opt, size, x, cy) => {
+        setFont(ctx, tpl, opt.font, size, opt.letterSpacing || 0);
+        ctx.textBaseline = "alphabetic";
+        ctx.textAlign = "left";
+        ctx.fillStyle = tplColor(tpl, opt.color || "ink");
+        const ref = ctx.measureText("가");
+        ctx.fillText(text, x, cy + (ref.actualBoundingBoxAscent - ref.actualBoundingBoxDescent) / 2);
+        if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+      };
+      lines.forEach((line, i) => {
+        if (labelFits[i].overflow || valueFits[i].overflow) overflow.push(line.key);
+        const cy = y + rowH / 2;
+        rowText(line.label, el.label, labelSize, left, cy);
+        rowText(line.value, el.value, valueSize, left + labelW, cy);
+        y += rowH;
+      });
+      if (introFit) {
+        if (introFit.overflow) overflow.push(el.intro);
+        drawTextBox(ctx, tpl, intro, { ...introOpt, box: { x: left, y: y + 18, w: width, h: introH } });
+      }
+      return { overflow, missing };
+    }
+
+    // 이름만 있는 경우: 이름을 크게 쓰고 그 아래에 소개 문장 (이미지가 없으면 가운데 정렬)
+    const align = image ? "left" : "center";
+    const nameFit = fitLines(ctx, tpl, name, { ...el.nameLarge, maxLines: 1 }, textW, el.nameLarge.size * LINE_HEIGHT);
+    const nameH = nameFit.size * LINE_HEIGHT;
+    const introFit = intro ? measureIntro(Math.max(0, space - nameH - 20)) : null;
+    const introH = introFit ? introFit.lines.length * introFit.size * LINE_HEIGHT : 0;
+    const block = nameH + (introFit ? 20 + introH : 0);
+    const y = top + Math.max(0, (space - block) / 2);
+    if (name && drawTextBox(ctx, tpl, name, { ...el.nameLarge, box: { x: textX, y, w: textW, h: nameH }, align, valign: "middle", maxLines: 1 })) overflow.push(el.name);
+    if (introFit) {
+      if (introFit.overflow) overflow.push(el.intro);
+      drawTextBox(ctx, tpl, intro, { ...introOpt, align, box: { x: textX, y: y + nameH + 20, w: textW, h: introH } });
+    }
+    return { overflow, missing };
+  }
+
   // 결과: overflow(글자가 칸을 넘침), overflowFields(넘친 필드), missingImages(비어 있는 이미지 자리)
   async function renderTemplate(canvas, spec, tpl, options) {
     canvas.width = WIDTH;
@@ -845,6 +934,7 @@ const SemogwiRenderer = (() => {
     };
     for (const el of tpl.elements) {
       if (el.if && !conditionMet(tpl, spec.fields, el.if)) continue;
+      if (el.ifNoImage && spec.images && spec.images[el.ifNoImage]) continue; // 예: 다음 캐릭터 이미지가 있으면 '?'를 그리지 않음
       if (el.type === "header") await drawHeader(ctx, tpl, el);
       else if (el.type === "footer") mark(drawFooter(ctx, tpl, el, spec), "source");
       else if (el.type === "rect" || el.type === "circle") paint(ctx, tpl, el);
@@ -865,6 +955,10 @@ const SemogwiRenderer = (() => {
         if (result.missing) missingImages.push(el.slot);
       } else if (el.type === "columns") {
         const result = await drawColumns(ctx, tpl, el, spec, options);
+        mark(result.overflow, "");
+        missingImages.push(...result.missing);
+      } else if (el.type === "profile") {
+        const result = await drawProfile(ctx, tpl, el, spec, options);
         mark(result.overflow, "");
         missingImages.push(...result.missing);
       } else if (el.type === "asset") await drawLogo(ctx, el.box.x, el.box.y, el.box.w, el.box.h);

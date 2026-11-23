@@ -58,6 +58,9 @@ SPECS = {
         {"key": "tmi", "label": "캐릭터별 TMI", "importance": "high", "many": True,
          "hint": "친구·가족 캐릭터별로 확인된 짧은 사실. '이름: 내용 / 이름: 내용'처럼 한 value에 적는다. 캐릭터마다 60자 이내"},
         {"key": "official_account", "label": "공식 계정", "importance": "normal", "hint": "공식 SNS 계정 이름이나 주소"},
+        {"key": "profile_extra", "label": "기타 공식 프로필", "importance": "normal", "many": True,
+         "hint": "작품이 공식으로 밝힌 프로필 중 생일·좋아하는 것 외의 항목 (예: 도감 번호, 타입, 분류, 키, 소속). "
+                 "'항목: 값, 항목: 값'처럼 항목 이름과 값을 함께 적는다. 출처에 없는 항목은 쓰지 않는다"},
     ],
     "goods": [
         {"key": "product_names", "label": "상품명", "official": True, "importance": "core", "core": "name", "many": True,
@@ -581,6 +584,44 @@ def facts_from_items(items: list[dict]) -> list[dict]:
     return facts
 
 
+# ---------- 캐릭터 프로필 줄 (character-02의 profile_rows) ----------
+# 프로필 줄은 항목 이름을 정해 두지 않으므로, 조사 항목 중 근거가 있는 값에서만 고르고(서버 보충) 줄마다 조사 값과 대조합니다.
+PROFILE_LABELS = {"birthday": "생일", "favorite": "좋아하는 것", "creator": "작가"}  # 고정 이름이 있는 후보 (나머지는 profile_extra의 '항목: 값')
+
+
+def profile_candidates(items: list[dict] | None, label_max: int = 6, value_max: int = 16) -> list[dict]:
+    """근거가 확인된 조사 값으로 만든 프로필 줄 후보 {label, value, sourceIds}. 칸보다 길면 자르지 않고 뺍니다 (지어내지 않음)."""
+    by_key = {i["key"]: i for i in items or []}
+    rows = []
+    for key in ("profile_extra", "birthday", "favorite", "creator"):
+        item = by_key.get(key)
+        if not item or not item.get("value") or not _usable(item):
+            continue
+        if key == "profile_extra":
+            pairs = [p.split(":", 1) for p in re.split(r"\s*[,，/]\s*", item["value"]) if ":" in p]
+            entries = [(label.strip(), value.strip()) for label, value in pairs]
+        else:
+            entries = [(PROFILE_LABELS[key], item["value"].strip())]
+        for label, value in entries:
+            if label and value and len(label) <= label_max and len(value) <= value_max:
+                rows.append({"label": label, "value": value, "sourceIds": list(item.get("sourceIds", []))})
+    return rows
+
+
+def profile_row_state(row: dict, items: list[dict] | None, keys: list[str]) -> str:
+    """프로필 줄 하나의 근거 상태: 그 값이 들어 있는 조사 항목의 상태. 어느 조사 값에도 없으면 unverified (근거 없음)."""
+    value = _norm(row.get("value", ""))
+    if not value:
+        return "missing"
+    for item in items or []:
+        if item["key"] not in keys:
+            continue
+        values = [item.get("value", "")] + [a.get("value", "") for a in item.get("alternatives", [])]
+        if any(v and value in _norm(v) for v in values):
+            return item["state"]
+    return "unverified"
+
+
 def field_states(cards: list[dict], templates_of, items: list[dict] | None, card_state) -> dict:
     """카드 필드마다 어떤 근거에서 왔는지 표시합니다. {frame: {field: state}}
 
@@ -594,6 +635,11 @@ def field_states(cards: list[dict], templates_of, items: list[dict] | None, card
         card_level = fallback.get(card_state(card), "unverified")
         states = {}
         for field in tpl["fields"]:
+            if field.get("verifyItems"):
+                # 프로필 줄: 줄마다 'profile_rows.0'처럼 따로 상태를 둡니다
+                for n, row in enumerate(card["fields"].get(field["key"]) or []):
+                    states[f"{field['key']}.{n}"] = profile_row_state(row, items, field["verifyItems"])
+                continue
             key = field.get("item")
             if not key or field["type"] == "flag":
                 continue

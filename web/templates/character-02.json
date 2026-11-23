@@ -27,25 +27,49 @@
       "item": "official_name"
     },
     {
-      "key": "birthday",
-      "label": "생일",
-      "type": "text",
-      "max": 12,
-      "item": "birthday"
+      "key": "profile_rows",
+      "label": "프로필 항목",
+      "type": "items",
+      "maxItems": 3,
+      "editor": "list",
+      "unit": "개",
+      "verifyItems": [
+        "birthday",
+        "favorite",
+        "creator",
+        "profile_extra",
+        "official_name",
+        "series",
+        "debut",
+        "personality"
+      ],
+      "fields": [
+        {
+          "key": "label",
+          "label": "항목명",
+          "type": "text",
+          "max": 6,
+          "required": true,
+          "placeholder": "예: 타입"
+        },
+        {
+          "key": "value",
+          "label": "내용",
+          "type": "text",
+          "max": 16,
+          "required": true,
+          "placeholder": "예: 전기"
+        }
+      ],
+      "hint": "이름을 뺀 프로필 항목. 조사 항목의 생일·좋아하는 것·제작자·기타 공식 프로필 중 출처로 확인된 것만 0~3개 고른다 (예: 도감 번호 / 타입 / 분류). 확인되지 않은 항목은 넣지 않고 '모름' 같은 빈 값도 쓰지 않는다"
     },
     {
-      "key": "favorite_things",
-      "label": "좋아하는 것",
-      "type": "text",
-      "max": 14,
-      "item": "favorite"
-    },
-    {
-      "key": "creator",
-      "label": "작가",
-      "type": "text",
-      "max": 14,
-      "item": "creator"
+      "key": "profile_intro",
+      "label": "소개 문장",
+      "type": "multiline",
+      "max": 50,
+      "item": "personality",
+      "hint": "프로필 항목이 1개 이하일 때만 쓴다. 성격·특징 조사 항목에서 확인된 내용만 한 문장으로. 확인된 내용이 없으면 비운다"
     },
     {
       "key": "feature_tags",
@@ -192,50 +216,38 @@
       "maxLines": 1
     },
     {
-      "type": "image",
+      "type": "profile",
+      "name": "character_name",
+      "rows": "profile_rows",
+      "intro": "profile_intro",
       "slot": "character_image",
-      "box": {
-        "x": 113,
-        "y": 422,
-        "w": 297,
-        "h": 297
-      },
-      "radius": 27,
-      "fill": "paper",
-      "inset": 14
-    },
-    {
-      "type": "rows",
-      "x": 449,
-      "y": 443,
-      "rowHeight": 62,
-      "labelWidth": 150,
-      "valueX": 610,
-      "valueWidth": 360,
-      "maxRows": 4,
-      "labelDy": 0,
-      "valueDy": 6,
-      "items": [
-        {
-          "label": "이름",
-          "field": "character_name"
-        },
-        {
-          "label": "생일",
-          "field": "birthday"
-        },
-        {
-          "label": "좋아하는 것",
-          "field": "favorite_things"
-        },
-        {
-          "label": "작가",
-          "field": "creator"
+      "tags": "feature_tags",
+      "x": 113,
+      "w": 855,
+      "top": 402,
+      "bottom": 737,
+      "bottomNoTags": 815,
+      "image": {
+        "radius": 27,
+        "fill": "paper",
+        "inset": 14,
+        "gap": 40,
+        "sizes": {
+          "1": 320,
+          "2": 320,
+          "3": 297,
+          "4": 297
         }
-      ],
+      },
+      "rowHeights": {
+        "2": 76,
+        "3": 66,
+        "4": 62
+      },
       "label": {
         "font": "display",
         "size": 30,
+        "minSize": 22,
         "color": "inkSoft"
       },
       "value": {
@@ -243,6 +255,19 @@
         "size": 30,
         "minSize": 22,
         "color": "inkSoft"
+      },
+      "nameLarge": {
+        "font": "display",
+        "size": 52,
+        "minSize": 36,
+        "color": "ink"
+      },
+      "introText": {
+        "font": "body",
+        "size": 30,
+        "minSize": 22,
+        "color": "inkSoft",
+        "maxLines": 3
       }
     },
     {
@@ -318,9 +343,21 @@
     "source": "출처: [공식 계정 / 홈페이지]",
     "fields": {
       "character_name": "[캐릭터 이름]",
-      "birthday": "[MM월 DD일]",
-      "favorite_things": "[좋아하는 것]",
-      "creator": "[작가 / 출처]",
+      "profile_rows": [
+        {
+          "label": "[항목1]",
+          "value": "[내용]"
+        },
+        {
+          "label": "[항목2]",
+          "value": "[내용]"
+        },
+        {
+          "label": "[항목3]",
+          "value": "[내용]"
+        }
+      ],
+      "profile_intro": "",
       "feature_tags": [
         "[특징1]",
         "[특징2]",

@@ -29,7 +29,7 @@ def test_friends_template_definition():
     assert [s["key"] for s in tpl["images"]] == [f"friend_image_{i}" for i in range(1, 5)] + [f"family_image_{i}" for i in range(1, 5)]
     assert any(el["type"] == "columns" for el in tpl["elements"])
     assert not any(el.get("field") == "tmi_items" for el in tpl["elements"])
-    trait = templates.TEMPLATES["character-03"]["fields"][0]
+    trait = next(f for f in templates.TEMPLATES["character-03"]["fields"] if f["key"] == "traits")
     assert next(s for s in trait["fields"] if s["key"] == "description")["max"] == 60
     assert TMI_60 and len(TMI_60) == 60
 

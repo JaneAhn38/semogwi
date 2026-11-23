@@ -82,6 +82,7 @@ class Fake:
         self.rewrite_overrides = None
         self.classified = "popup"
         self.fetched = True
+        self.teaser = {"hint": "", "hintSourceIds": [], "reveal": "다음 게시물에서 만나요!"}
 
     def __call__(self, prompt, system, schema, *, tools=(), disallowed=(), **kwargs):
         self.calls.append({"prompt": prompt, "system": system, "schema": schema, "tools": tools})
@@ -92,6 +93,9 @@ class Fake:
             return run
         if "theme" in props or "elements" in json.dumps(props):
             raise AssertionError("고정 템플릿 작업은 디자인 AI를 부르면 안 돼요")
+        if "reveal" in props:
+            run.structured = self.teaser  # 다음 캐릭터 예고 문구 (마무리 카드 버튼)
+            return run
         if "people" in props:
             run.structured = {"sources": [], "people": [], "missing": []}  # 캐릭터별 2차 조사: 기본은 찾지 못함
             return run
@@ -200,9 +204,16 @@ def test_labels_of_optional_fields_hide_with_value(tid, label, field):
 
 
 def test_requested_character_profile_fields():
-    keys = {f["key"] for f in templates.TEMPLATES["character-02"]["fields"]}
-    assert {"character_name", "birthday", "favorite_things", "creator", "feature_tags", "debut_year", "debut_work"} <= keys
+    fields = {f["key"]: f for f in templates.TEMPLATES["character-02"]["fields"]}
+    # 이름은 필수, 나머지 프로필은 고정 칸이 아니라 조사 결과에 따라 0~3개 (구성안에서 추가·삭제)
+    assert {"character_name", "profile_rows", "profile_intro", "feature_tags", "debut_year", "debut_work"} <= set(fields)
+    assert fields["character_name"]["required"] and not {"birthday", "favorite_things", "creator"} & set(fields)
+    rows = fields["profile_rows"]
+    assert rows["type"] == "items" and rows["maxItems"] == 3 and rows["editor"] == "list" and not rows.get("minItems")
     assert templates.TEMPLATES["character-02"]["images"][0]["key"] == "character_image"
+    # 예전 카드용 판은 고정 4줄 그대로
+    old = {f["key"] for f in templates.TEMPLATES["character-02-v1"]["fields"]}
+    assert {"character_name", "birthday", "favorite_things", "creator"} <= old and "character-02-v1" not in templates.body_choices("character")
     assert templates.TEMPLATES["goods-02"]["fields"][0]["maxItems"] == 4 and len(templates.TEMPLATES["goods-02"]["images"]) == 4
 
 
@@ -247,7 +258,10 @@ def test_static_files_are_revalidated(client):
     ("character-02", {"character_name": ""}, "꼭 필요한 항목"),
     ("character-02", {"character_name": "가" * 13}, "12자 이내"),
     ("character-02", {"character_name": "치이", "feature_tags": ["하나", "둘", "셋", "넷"]}, "3개까지"),
-    ("character-02", {"character_name": "치이", "birthday": "MM월 DD일"}, "자리표시"),
+    ("character-02", {"character_name": "치이", "profile_rows": [{"label": "[항목]", "value": "MM월 DD일"}]}, "자리표시"),
+    ("character-02", {"character_name": "치이", "profile_rows": [{"label": "타입", "value": "전기"}] * 4}, "3개까지"),
+    ("character-02", {"character_name": "치이", "profile_rows": [{"label": "타입", "value": ""}]}, "꼭 필요한"),
+    ("character-02", {"character_name": "치이", "profile_rows": [{"label": "아주긴항목이름", "value": "전기"}]}, "6자 이내"),
     ("character-03", {"traits": [{"label": "공식 설정", "keyword": "", "description": "설명"}]}, "특징 키워드: 꼭 필요한"),
     ("character-03", {"traits": [{"keyword": "울보"}] * 3}, "2개까지"),
     ("goods-02", {"goods": [{"name": "[굿즈 이름]", "kind": "", "price": ""}]}, "자리표시"),
@@ -473,7 +487,7 @@ def test_renderer_has_no_mascot_placeholder_for_empty_slot():
 def test_edit_validation_and_preview_rebuild(client):
     job_id = start(client)
     wait(client, job_id, "waiting_outline")
-    fields = {"character_name": "하치와레", "birthday": "", "favorite_things": "", "creator": "", "feature_tags": ["다정함"], "debut_year": "", "debut_work": "", "profile_no": ""}
+    fields = {"character_name": "하치와레", "profile_rows": [], "profile_intro": "", "feature_tags": ["다정함"], "debut_year": "", "debut_work": "", "profile_no": ""}
     r = edit(client, job_id, "card-02", {**fields, "debut_work": "[작품]"})
     assert r.status_code == 409 and "자리표시" in r.json()["detail"]
     assert edit(client, job_id, "card-02", fields).status_code == 200

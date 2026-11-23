@@ -947,6 +947,9 @@ def _check_fields_against_research(job: dict, cards: list[dict], issues: dict) -
         tpl = templates.template_for(job, card["frame"])
         notes = issues[card["frame"]]
         for field in tpl["fields"]:
+            if field.get("verifyItems"):
+                _check_profile_rows(card, field, states[card["frame"]], notes)
+                continue
             state = states[card["frame"]].get(field["key"])
             item = items.get(field.get("item"))
             strict = bool(item and item["strict"]) or (item is None and job["contentType"] != "character")
@@ -964,6 +967,21 @@ def _check_fields_against_research(job: dict, cards: list[dict], issues: dict) -
                 target.append(message)
         if tpl["id"].endswith(f"-{templates.FREE}"):
             _check_free_card(card, items, notes)
+
+
+def _check_profile_rows(card: dict, field: dict, states: dict, notes: dict) -> None:
+    """프로필 줄마다 조사 값과 대조합니다. 조사 값에 없는 줄은 근거 없음, 출처끼리 다른 값은 충돌로 알립니다 (캐릭터 소개는 경고)."""
+    for n, row in enumerate(card["fields"].get(field["key"]) or []):
+        state = states.get(f"{field['key']}.{n}")
+        label = row.get("label") or f"{field['label']} {n + 1}"
+        if state == "conflict":
+            message = f"출처마다 값이 달라요: {label} ({row.get('value', '')}). 공식 자료를 확인해 직접 고쳐 주세요"
+        elif state in ("listed", "unverified"):
+            message = f"근거를 확인하지 못한 정보예요: {label}"
+        else:
+            continue
+        if message not in notes["warnings"]:
+            notes["warnings"].append(message)
 
 
 def _check_free_card(card: dict, items: dict, notes: dict) -> None:
@@ -987,7 +1005,8 @@ def _check_free_card(card: dict, items: dict, notes: dict) -> None:
 def _make_outline(job: dict) -> None:
     version = (job["outline"]["version"] + 1) if job.get("outline") else 1
     if templates.is_template_job(job):
-        made = [templates.demo_card(job, frame, version - 1) for frame in FRAMES]
+        old = {c["frame"]: c for c in (job.get("outline") or {}).get("cards", [])}
+        made = [templates.keep_user_fields(old.get(frame), templates.demo_card(job, frame, version - 1)) for frame in FRAMES]
     else:
         made = get_provider().create_outline(job)
     cards = [{**c, "edited": False, "regenCount": 0} for c in made]
@@ -1359,7 +1378,8 @@ def _start_outline_rewrite(job: dict, frames: list[str], new_version: bool) -> d
     def apply(current, result):
         for card in current["outline"]["cards"]:
             if card["frame"] in result["cards"]:
-                card.update(result["cards"][card["frame"]], edited=False, regenCount=card["regenCount"] + 1)
+                # 사용자만 입력하는 칸(다음 캐릭터 이름·힌트·공개 문구·회차)은 다시 써도 그대로 둡니다
+                card.update(templates.keep_user_fields(card, result["cards"][card["frame"]]), edited=False, regenCount=card["regenCount"] + 1)
         if new_version:
             current["outline"]["version"] += 1
         if set(frames) == set(FRAMES):
@@ -1498,7 +1518,7 @@ def regenerate_outline_card(job_id: str, frame: str) -> dict:
         return _start_outline_rewrite(job, [frame], new_version=False)
     count = card["regenCount"] + 1
     if templates.is_template_job(job):
-        new = templates.demo_card(job, frame, job["outline"]["version"] + count)
+        new = templates.keep_user_fields(card, templates.demo_card(job, frame, job["outline"]["version"] + count))
     else:
         new = get_provider().create_outline_card(job, frame, job["outline"]["version"] + count)
     card.update(new, edited=False, regenCount=count)
@@ -1506,6 +1526,72 @@ def regenerate_outline_card(job_id: str, frame: str) -> dict:
     _revoke_outline(job)
     save(job)
     return job
+
+
+# ---------- 다음 캐릭터 예고 (마무리 카드) ----------
+_DATE_RE = re.compile(r"\d|[월화수목금토일]요일|오늘|내일|모레|이번\s*주|다음\s*주|주말|이번\s*달|다음\s*달")
+
+
+def _teaser_evidence(job: dict, source_ids: list[str]) -> str:
+    """힌트 근거로 쓸 수 있는 자료 글. 공식 출처(나무위키 같은 보조 출처 제외)와 사용자가 준 자료만 봅니다."""
+    research = job.get("research") or {}
+    by_id = {s["id"]: s for s in research.get("sources", [])}
+    ok = {i for i in source_ids if i in by_id and not by_id[i].get("auxiliary") and by_id[i].get("kind") in ("official", "user")}
+    if not ok:
+        return ""
+    texts = [f.get("text", "") for f in research.get("facts", []) if ok & set(f.get("sourceIds", []))]
+    texts += [f"{i.get('value', '')} {i.get('quote', '')}" for i in research.get("items", []) if ok & set(i.get("sourceIds", []))]
+    texts += [f"{p.get('name', '')} {p.get('relation', '')} {p.get('tmi', '')}" for p in (research.get("peopleResearch") or {}).get("people", [])
+              if ok & set(p.get("sourceIds", []))]
+    if any(by_id[i].get("kind") == "user" for i in ok):
+        texts += [job.get("notes", ""), str((job.get("userMaterial") or {}).get("pasted", ""))]
+    return "\n".join(texts)
+
+
+def teaser_fields(job: dict, card: dict, result: dict) -> dict:
+    """AI가 쓴 힌트·공개 문구를 확인합니다. 근거가 없거나 다음 캐릭터 이름이 근거 자료에 없으면 힌트는 기본 문구,
+    공개 문구에 날짜·요일·시점이 있으면 기본 문구로 바꿉니다 (공개 날짜를 지어내지 않게)."""
+    tpl = templates.TEMPLATES[card["template"]]
+    spec = templates.next_teaser(tpl)
+    limits = {f["key"]: f["max"] for f in tpl["fields"]}
+    name = card["fields"].get(spec["name"], "")
+    hint = " ".join(str(result.get("hint") or "").split())
+    reveal = " ".join(str(result.get("reveal") or "").split())
+    evidence = _teaser_evidence(job, result.get("hintSourceIds") or [])
+    if not hint or len(hint) > limits[spec["hint"]] or not name or name not in evidence or templates.PLACEHOLDER_RE.search(hint):
+        hint = spec["hintDefault"]
+    if not reveal or len(reveal) > limits[spec["reveal"]] or _DATE_RE.search(reveal) or templates.PLACEHOLDER_RE.search(reveal):
+        reveal = spec["revealDefault"]
+    return {spec["hint"]: hint, spec["reveal"]: reveal}
+
+
+def write_next_teaser(job_id: str, frame: str) -> dict:
+    """'힌트·공개 문구 AI로 쓰기' 버튼. 누를 때만 AI를 1회 부릅니다 (검색 없음). 데모는 기본 문구를 넣습니다.
+    이름·회차·예고·이미지는 바꾸지 않고, 힌트와 공개 문구만 갱신합니다."""
+    job = _require(job_id, "waiting_outline", "waiting_preview", "done")
+    card = _outline_card(job, frame)
+    spec = templates.next_teaser(templates.TEMPLATES.get(card.get("template"), {})) if templates.is_template_job(job) else None
+    if not spec:
+        raise JobConflict("다음 캐릭터 예고 카드에서만 쓸 수 있어요")
+    name = card["fields"].get(spec["name"], "")
+    if not name:
+        raise JobConflict("다음 캐릭터 이름을 먼저 입력하고 저장해 주세요")
+
+    def apply(current, result):
+        target = _outline_card(current, frame)
+        if target.get("template") != card["template"] or target["fields"].get(spec["name"]) != name:
+            current["aiError"] = "그사이 다음 캐릭터 이름이 바뀌어서 문구를 넣지 않았어요. 다시 눌러 주세요."
+            return
+        target["fields"].update(teaser_fields(current, target, result))
+        target["edited"] = True
+        _revoke_outline(current)
+        current["outline"]["issues"] = _issues(current)
+
+    if not _is_ai(job) or not job.get("research"):
+        apply(job, {})  # 데모: 지어내지 않고 기본 문구
+        save(job)
+        return job
+    return _start_ai_task(job, "outline", frame, lambda snapshot: get_ai_provider().write_next_teaser(snapshot, frame), apply)
 
 
 def approve_outline(job_id: str) -> dict:
@@ -1894,6 +1980,8 @@ def slot_suggestions(job: dict) -> dict:
     suggestions = {}
     for frame in FRAMES:
         for slot in templates.active_slots(job, frame):  # 카드에 그려지지 않는 자리(없는 친구의 이미지)는 추천하지 않습니다
+            if slot.get("userOnly"):
+                continue  # 사용자만 넣는 자리(다음 캐릭터 이미지)에 이번 캐릭터 사진을 추천하지 않습니다
             if queue and not (current.get(frame) or {}).get(slot["key"]):
                 asset = queue.pop(0)
                 suggestions.setdefault(frame, {})[slot["key"]] = {"assetId": asset["id"], "variant": _variant_for(asset)}

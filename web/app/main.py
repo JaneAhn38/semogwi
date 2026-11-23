@@ -648,6 +648,12 @@ async def regenerate_outline_card(job_id: str, frame: str):
     return _call(jobs.regenerate_outline_card, job_id, frame)
 
 
+@app.post("/api/jobs/{job_id}/outline/cards/{frame}/next-teaser")
+async def write_next_teaser(job_id: str, frame: str):
+    # 다음 캐릭터 예고 카드의 힌트·공개 문구. 버튼을 눌렀을 때만 AI를 부릅니다 (검색 없이 1회)
+    return _call(jobs.write_next_teaser, job_id, frame)
+
+
 @app.post("/api/jobs/{job_id}/preview/approve")
 async def approve_preview(job_id: str):
     return _call(jobs.approve_preview, job_id)

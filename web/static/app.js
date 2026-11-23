@@ -1520,7 +1520,7 @@
       const dd = el("dd", { class: empty || !active ? "is-empty" : "", dataset: { field: field.key } });
       if (states[field.key]) dd.dataset.state = states[field.key]; // 근거 상태는 화면에 배지로 표시하지 않고 속성으로만 둡니다
       if (!active) dd.append("보관 중 · 카테고리를 바꾸면 카드에 보여요: ");
-      dd.append(empty ? (field.required ? "비어 있음 · 입력이 필요해요" : field.placeholder ? `비어 있음 · 기본 문구 '${field.placeholder}'로 보여요` : "비어 있음 · 카드에서 숨겨요") : fieldText(field, value === undefined && field.type === "choice" ? field.default : value));
+      dd.append(empty ? (field.required ? "비어 있음 · 입력이 필요해요" : field.emptyNote ? `비어 있음 · ${field.emptyNote}` : field.placeholder ? `비어 있음 · 기본 문구 '${field.placeholder}'로 보여요` : "비어 있음 · 카드에서 숨겨요") : fieldText(field, value === undefined && field.type === "choice" ? field.default : value));
       list.append(el("dt", { textContent: field.label }), dd);
     }
     if (hasSource(tpl)) list.append(el("dt", { textContent: "출처" }), el("dd", { class: card.source ? "" : "is-empty", textContent: card.source || "출처 없음" }));
@@ -1557,7 +1557,7 @@
         : el("textarea", { value: value || "", rows: 2, name: `field-${field.key}` });
       return editField(`${field.label}${field.required ? " (필수)" : ""}`, input, field.max);
     }
-    if (field.type === "items" && field.minItems) return itemsEditor(field, value);
+    if (field.type === "items" && (field.minItems || field.editor === "list")) return itemsEditor(field, value);
     const group = el("fieldset", { class: "edit-group", dataset: { group: field.key } }, el("legend", { textContent: `${field.label} · 최대 ${field.maxItems}개, 빈 칸은 카드에서 숨겨요` }));
     for (let i = 0; i < field.maxItems; i++) {
       if (field.type === "items") {
@@ -1583,11 +1583,14 @@
     return group;
   }
 
-  // 인원을 늘리고 줄일 수 있는 항목 (예: 친구 캐릭터 2~4명). 항목마다 저장 전 번호(orig)를 기억해 이미지가 그 항목을 따라가게 합니다
+  // 개수를 늘리고 줄일 수 있는 항목 (예: 친구 캐릭터 2~4명, 프로필 항목 0~3개). 항목마다 저장 전 번호(orig)를 기억해 이미지가 그 항목을 따라가게 합니다
+  // editor: "list"인 필드(프로필 항목)는 0개부터 쓸 수 있고 단위(unit)를 따로 정합니다. 친구·가족은 지금처럼 '명' 단위입니다
   function itemsEditor(field, value) {
+    const minItems = field.minItems || 0;
+    const unit = field.unit || "명";
     let rows = (value || []).map((item, i) => ({ item: { ...item }, orig: i }));
-    if (!rows.length) rows = Array.from({ length: field.defaultItems || field.minItems }, () => ({ item: {}, orig: -1 }));
-    while (rows.length < field.minItems) rows.push({ item: {}, orig: -1 });
+    if (!rows.length) rows = Array.from({ length: field.defaultItems || minItems }, () => ({ item: {}, orig: -1 }));
+    while (rows.length < minItems) rows.push({ item: {}, orig: -1 });
     const group = el("fieldset", { class: "edit-group items-editor", dataset: { group: field.key } });
     const legend = el("legend");
     const list = el("div", { class: "item-list" });
@@ -1600,22 +1603,24 @@
     const add = el("button", { class: "btn btn-ghost btn-small", type: "button", dataset: { itemAdd: field.key },
       onclick: () => { read(); if (rows.length < field.maxItems) rows.push({ item: {}, orig: -1 }); draw(); changed(); } });
     const draw = () => {
-      legend.textContent = `${field.label} · ${field.minItems}~${field.maxItems}명 (지금 ${rows.length}명)`;
+      legend.textContent = `${field.label} · ${minItems}~${field.maxItems}${unit} (지금 ${rows.length}${unit})`;
       add.textContent = `+ ${field.label.replace(/ 캐릭터$/, "")} 추가`;
       add.disabled = rows.length >= field.maxItems;
-      note.textContent = rows.length >= field.maxItems ? `최대 ${field.maxItems}명이에요.` : rows.length <= field.minItems ? `최소 ${field.minItems}명이 필요해요. 확인된 캐릭터가 부족하면 카드 구성을 '자유 구성'으로 바꿔 주세요.` : "";
+      note.textContent = rows.length >= field.maxItems ? `최대 ${field.maxItems}${unit}${unit === "명" ? "이에요" : "예요"}.`
+        : minItems && rows.length <= minItems ? `최소 ${minItems}${unit}이 필요해요. 확인된 캐릭터가 부족하면 카드 구성을 '자유 구성'으로 바꿔 주세요.`
+        : field.editor === "list" && !rows.length ? "확인된 프로필 항목이 없으면 비워 두세요. 카드는 이름과 소개 문장으로 꾸며져요." : "";
       list.replaceChildren(...rows.map((row, i) => {
         const box = el("div", { class: "item-row", dataset: { item: `${field.key}-${i}` } }, el("b", { textContent: `${i + 1}` }),
           el("input", { type: "hidden", name: `field-${field.key}-${i}-orig`, value: String(row.orig) }));
         for (const sub of field.fields) {
           const input = sub.type === "multiline"
-            ? el("textarea", { value: row.item[sub.key] || "", rows: 3, name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.default || "" })
-            : el("input", { type: "text", value: row.item[sub.key] || "", name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.default || "" });
+            ? el("textarea", { value: row.item[sub.key] || "", rows: 3, name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.placeholder || sub.default || "" })
+            : el("input", { type: "text", value: row.item[sub.key] || "", name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.placeholder || sub.default || "" });
           box.append(editField(`${sub.label}${sub.required ? " (필수)" : ""}`, input, sub.max));
         }
-        box.append(el("button", { class: "btn btn-ghost btn-small item-remove", type: "button", textContent: "삭제", disabled: rows.length <= field.minItems,
+        box.append(el("button", { class: "btn btn-ghost btn-small item-remove", type: "button", textContent: "삭제", disabled: rows.length <= minItems,
           dataset: { itemRemove: `${field.key}-${i}` }, "aria-label": `${field.label} ${i + 1} 삭제`,
-          onclick: () => { read(); if (rows.length > field.minItems) rows.splice(i, 1); draw(); changed(); } }));
+          onclick: () => { read(); if (rows.length > minItems) rows.splice(i, 1); draw(); changed(); } }));
         return box;
       }));
     };
@@ -1625,7 +1630,7 @@
     group.isBlank = () => { read(); return rows.every((row) => !Object.values(row.item).some((v) => String(v || "").trim())); };
     group.setItems = (items) => {
       rows = items.slice(0, field.maxItems).map((item) => ({ item: { ...item }, orig: -1 }));
-      while (rows.length < field.minItems) rows.push({ item: {}, orig: -1 });
+      while (rows.length < minItems) rows.push({ item: {}, orig: -1 });
       draw();
     };
     return group;
@@ -1702,6 +1707,42 @@
     return tpl.images.filter((slot) => !slot.if || SemogwiRenderer.conditionMet(tpl, fields, slot.if));
   }
 
+  // 마무리 카드: 다음 캐릭터 이름을 저장한 뒤 힌트·공개 문구를 AI로 씁니다. 버튼을 눌렀을 때만 AI를 부릅니다 (입력 중에는 부르지 않음)
+  function nextTeaserButton(form, card, tpl, error) {
+    const spec = tpl.nextTeaser;
+    const ai = job.mode === "ai";
+    const button = el("button", { class: "btn btn-ghost btn-small", type: "button", dataset: { nextTeaser: card.frame },
+      textContent: ai ? "힌트·공개 문구 AI로 쓰기" : "힌트·공개 문구 기본 문구로 채우기" });
+    const note = el("small", { class: "hint", textContent: ai
+      ? "이름을 저장하고, 조사 자료와 붙여 넣은 자료에서 확인된 특징만으로 힌트를 써요. 확인된 특징이 없으면 기본 문구를 넣고, 공개 날짜는 쓰지 않아요. (AI 1회, 검색 없음)"
+      : "데모에서는 AI를 부르지 않고 기본 문구를 넣어요." });
+    button.addEventListener("click", async () => {
+      error.hidden = true;
+      const draft = collectTemplate(form, card);
+      if (!String(draft.fields[spec.name] || "").trim()) {
+        error.textContent = "다음 캐릭터 이름을 먼저 입력해 주세요.";
+        error.hidden = false;
+        return;
+      }
+      const filled = draft.fields[spec.hint] || draft.fields[spec.reveal];
+      if (filled && !confirm("지금 쓴 힌트와 공개 문구를 새 문구로 바꿀까요?")) return;
+      button.disabled = true;
+      try {
+        await setJob(await api(`/api/jobs/${job.id}/outline/cards/${card.frame}`, jsonInit("PUT", draft)));
+      } catch (err) {
+        error.textContent = err.message;
+        error.hidden = false;
+        button.disabled = false;
+        return;
+      }
+      editingFrame = null;
+      outlineDraft = null;
+      await action(`outline/cards/${card.frame}/next-teaser`);
+      renderOutline();
+    });
+    return el("div", { class: "edit-field" }, button, note);
+  }
+
   function templateEditor(card) {
     const tpl = templateFor(card.frame);
     const error = el("p", { class: "error", role: "alert", hidden: true });
@@ -1734,6 +1775,7 @@
     if (hasSource(tpl)) {
       form.append(editField("출처", el("input", { type: "text", value: card.source, name: "source", placeholder: "출처: 공식 사이트 (모르면 비워 두세요)" }), 30));
     }
+    if (tpl.nextTeaser) form.append(nextTeaserButton(form, card, tpl, error));
     form.append(
       job.outline.approved ? el("p", { class: "notice", textContent: "내용을 바꿔 저장하면 승인이 해제돼서 구성안과 디자인을 다시 승인해야 해요." }) : "",
       error,
