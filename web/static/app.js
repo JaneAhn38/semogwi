@@ -14,7 +14,8 @@
   ];
   const AI_TASK_TEXT = {
     outline: "AI가 문구를 다시 쓰고 있어요. 저장된 조사 결과만 쓰고 검색은 다시 하지 않아요.",
-    friends: "AI가 확정한 친구에 맞춰 친구 카드를 다시 쓰고 있어요. 자료에 없는 친구만 짧게 찾아봐요.",
+    friends: "AI가 고른 친구를 조사하고 친구 카드만 다시 쓰고 있어요. TMI를 이미 찾은 친구는 다시 찾지 않아요.",
+    friends_pick: "AI가 친구 후보를 다시 추천하고 있어요. 조사 자료만 보고 골라요 (검색 안 함).",
     compose: "AI가 입력한 자료로 구성안을 쓰고 있어요. 사이트에는 접속하지 않아요.",
     design: "AI가 카드 5장을 다시 디자인하고 있어요. 1~3분 걸릴 수 있어요.",
     redesign: "AI가 이 카드만 다시 디자인하고 있어요. 1분 안팎 걸려요. 다른 카드는 그대로예요.",
@@ -26,13 +27,14 @@
     running: "예시 작업을 진행하고 있어요. 실제 조사나 AI 생성은 하지 않아요.",
     waiting_outline: "구성안을 확인하고 있어요. 승인해야 다음 단계로 넘어가요.",
     waiting_material: "자료가 더 필요해요. 아래에 직접 입력하면 이어서 진행해요.",
+    waiting_friends: "카드 4장에 넣을 친구를 2~4명 골라 주세요. 고르면 그 친구들만 조사해서 구성안을 써요.",
     waiting_research: "저장된 자료와 추가 조사 결과를 합쳤어요. 내용을 확인·수정한 뒤 '이 자료로 구성안 만들기'를 눌러 주세요.",
     waiting_preview: "카드 디자인을 확인하고 있어요. 승인해야 PNG를 받을 수 있어요.",
     done: "완료됐어요. 5단계에서 샘플 PNG를 받을 수 있어요.",
     failed: "제작이 멈췄어요.",
     interrupted: "작업이 중단됐어요.",
   };
-  const STEP_TEXT = { pending: "대기", active: "진행 중", done: "완료", failed: "실패", waiting: "승인 대기", material: "자료 입력 대기", skipped: "자동 조사 안 함", review: "자료 검토 대기" };
+  const STEP_TEXT = { pending: "대기", active: "진행 중", done: "완료", failed: "실패", waiting: "승인 대기", material: "자료 입력 대기", skipped: "자동 조사 안 함", review: "자료 검토 대기", friends: "친구 고르기 대기" };
   const MATERIAL_LABELS = {
     goods: { name: "상품명", price: "가격", seller: "판매처", features: "특징" },
     popup: { name: "행사명", price: "입장료·가격", seller: "장소", features: "기간·예약 방법 등" },
@@ -624,6 +626,134 @@
     return `${fetch.url}: 읽기 실패 (오류 내용: ${fetch.detail || "기록되지 않았어요"})`;
   }
 
+  // ---------- card-04 친구 고르기 ----------
+  // 고른 순서 = 카드 순서 = 사진 칸 번호. 고르기 전 목록(pickDraft)은 화면에만 두고, 버튼을 누를 때 서버로 보냅니다
+  const PICK_MIN = 2, PICK_MAX = 4, PICK_NAME_MAX = 8;
+  let pickDraft = null;
+  let pickDraftJob = null;
+  let repickOpen = false;
+
+  const pickNames = () => {
+    if (!pickDraft || pickDraftJob !== job.id) {
+      pickDraftJob = job.id;
+      pickDraft = [...(((job.friendPick || {}).chosen) || [])];
+    }
+    return pickDraft;
+  };
+
+  function friendPickPanel(mode) {
+    const pick = job.friendPick || { candidates: [] };
+    const chosen = pickNames();
+    const redraw = () => renderFriendPick();
+    const isChosen = (name) => chosen.includes(name);
+    const toggle = (name) => {
+      const i = chosen.indexOf(name);
+      if (i >= 0) chosen.splice(i, 1);
+      else if (chosen.length < PICK_MAX) chosen.push(name);
+      redraw();
+    };
+    const error = el("p", { class: "error", role: "alert", hidden: true });
+    const say = (text) => { error.textContent = text; error.hidden = !text; };
+
+    const candidates = el("ul", { class: "pick-candidates" }, ...(pick.candidates || []).map((c) => {
+      const order = chosen.indexOf(c.name);
+      const sources = (job.research ? (c.sourceIds || []).map((id) => job.research.sources.find((s) => s.id === id)).filter(Boolean) : []);
+      return el("li", { class: `pick-candidate${order >= 0 ? " is-picked" : ""}`, dataset: { candidate: c.name } },
+        el("button", { class: "pick-toggle", type: "button", "aria-pressed": String(order >= 0), disabled: order < 0 && chosen.length >= PICK_MAX,
+          onclick: () => toggle(c.name) },
+          el("span", { class: "pick-order", textContent: order >= 0 ? String(order + 1) : "+" }),
+          el("b", { textContent: c.name }), c.relation ? el("span", { class: "hint", textContent: ` · ${c.relation}` }) : ""),
+        el("p", { class: "pick-reason", textContent: c.reason || "" }),
+        sources.length ? el("div", { class: "card-links" }, el("span", { class: "hint", textContent: "출처 " }), ...sources.map(sourceLink))
+          : job.mode === "ai" ? "" : el("small", { class: "hint", textContent: "예시 후보 (출처 없음)" }));
+    }));
+
+    const manual = el("input", { type: "text", maxLength: PICK_NAME_MAX, placeholder: "목록에 없는 친구 이름", "aria-label": "직접 넣을 친구 이름" });
+    const addManual = () => {
+      const name = manual.value.replace(/\s+/g, " ").trim();
+      if (!name) return;
+      if (isChosen(name)) return say("이미 고른 친구예요.");
+      if (chosen.length >= PICK_MAX) return say(`친구는 ${PICK_MAX}명까지 고를 수 있어요.`);
+      chosen.push(name);
+      manual.value = "";
+      redraw();
+    };
+    manual.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addManual(); } });
+
+    const move = (i, d) => { const j = i + d; [chosen[i], chosen[j]] = [chosen[j], chosen[i]]; redraw(); };
+    const picked = el("ol", { class: "pick-chosen" }, ...chosen.map((name, i) =>
+      el("li", { dataset: { chosen: name } },
+        el("span", { class: "pick-order", textContent: String(i + 1) }), el("b", { textContent: name }),
+        el("small", { class: "hint", textContent: ` · ${i + 1}번 사진` }),
+        el("span", { class: "pick-moves" },
+          el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "↑", disabled: i === 0, "aria-label": `${name} 위로`, onclick: () => move(i, -1) }),
+          el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "↓", disabled: i === chosen.length - 1, "aria-label": `${name} 아래로`, onclick: () => move(i, 1) }),
+          el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "빼기", "aria-label": `${name} 빼기`, onclick: () => toggle(name) })))));
+
+    const ready = chosen.length >= PICK_MIN && chosen.length <= PICK_MAX;
+    const submit = el("button", { class: "btn btn-primary", type: "button", disabled: !ready, dataset: { pickSubmit: mode },
+      textContent: mode === "repick" ? "이 친구들로 친구 카드 다시 쓰기" : "이 친구들로 구성안 만들기",
+      onclick: async () => {
+        if (mode === "repick" && job.outline.approved && !confirm("구성안 승인이 해제돼요. 친구 카드를 다시 쓸까요?")) return;
+        await action("friends/pick", jsonInit("POST", { names: chosen }));
+        if (!$("action-error").hidden) return;
+        repickOpen = false;
+        renderOutline();
+        renderFriendPick();
+      } });
+    const again = el("button", { class: "btn btn-ghost", type: "button", dataset: { pickRecommend: "1" },
+      onclick: () => action("friends/recommend") }, "후보 다시 추천 ", el("span", { class: "btn-tag demo-only", textContent: "데모" }));
+    const close = mode === "repick" ? el("button", { class: "btn btn-ghost", type: "button", textContent: "닫기",
+      onclick: () => { repickOpen = false; pickDraft = null; renderOutline(); } }) : "";
+
+    return lockDisabled(el("div", { class: "friend-pick", dataset: { friendPick: mode } },
+      el("p", { class: "panel-note", textContent: "카드 4장(친구들 & TMI)에 넣을 친구를 2~4명 골라 주세요. 고른 순서대로 카드에 들어가고, N번째 친구가 N번 사진 칸이에요. 추천 이유는 고를 때만 보여 주고 카드 문구에는 쓰지 않아요." }),
+      pick.error ? el("p", { class: "notice", textContent: pick.error }) : "",
+      (pick.candidates || []).length ? candidates : el("p", { class: "hint", textContent: "추천할 친구를 찾지 못했어요. 아래에 직접 적어 주세요." }),
+      el("div", { class: "pick-manual" }, manual, el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "직접 넣기", onclick: addManual })),
+      el("h3", { class: "pick-title", textContent: `고른 친구 (${chosen.length}/${PICK_MAX})` }),
+      chosen.length ? picked : el("p", { class: "hint", textContent: "아직 고른 친구가 없어요." }),
+      error,
+      el("div", { class: "actions" }, submit, again, close),
+      el("small", { class: "hint", textContent: job.mode === "ai"
+        ? "고른 친구만 공식 출처를 먼저 조사해요. TMI를 이미 찾은 친구는 다시 찾지 않고, 출처에서 찾지 못한 TMI는 비워 둬요. '후보 다시 추천'은 누를 때만 AI를 불러요 (Pro 사용 한도 차감)."
+        : "데모에서는 조사 없이 고른 친구 이름으로 예시 카드를 만들어요." })));
+  }
+
+  // 작업 중(setBusy)이 끝나도 꺼 둬야 하는 버튼(인원이 모자란 제출, 맨 위의 ↑ 등)은 data-locked로 표시합니다
+  function lockDisabled(node) {
+    node.querySelectorAll("button:disabled").forEach((b) => { b.dataset.locked = "1"; });
+    return node;
+  }
+
+  function renderFriendPick() {
+    const open = job && job.state === "waiting_friends" && viewStep === 2;
+    $("friend-pick").hidden = !open;
+    if (open) $("friend-pick-body").replaceChildren(friendPickPanel("pick"));
+    if (repickOpen) {
+      const slot = document.querySelector('[data-repick-slot="card-04"]');
+      if (slot) slot.replaceChildren(friendPickPanel("repick"));
+    }
+  }
+
+  // card-04의 '친구 다시 고르기'와 '새로 넣은 친구 조사하기'
+  function friendCardControls(card) {
+    if (!isTemplateJob() || card.frame !== "card-04" || card.template !== "character-04" || job.contentType !== "character") return "";
+    const canEdit = job.state === "waiting_outline" && !job.aiTask;
+    const listed = ((card.fields || {}).friends || []).map((f) => String(f.name || "").trim()).filter(Boolean);
+    const chosen = (job.friendPick || {}).chosen || [];
+    const added = listed.filter((n) => !chosen.includes(n));
+    const buttons = [el("button", { class: "btn btn-ghost btn-small", type: "button", disabled: !canEdit, dataset: { repick: card.frame },
+      onclick: () => { repickOpen = !repickOpen; pickDraft = null; pickDraftJob = null; renderOutline(); } }, repickOpen ? "친구 다시 고르기 닫기" : "친구 다시 고르기")];
+    if (job.mode === "ai" && added.length && listed.length >= PICK_MIN && listed.length <= PICK_MAX) {
+      buttons.push(el("button", { class: "btn btn-ghost btn-small", type: "button", disabled: !canEdit, dataset: { researchAdded: card.frame },
+        title: `직접 넣은 친구(${added.join(", ")})를 조사하고 친구 카드를 다시 써요`,
+        onclick: () => action("friends/pick", jsonInit("POST", { names: listed })) }, `새로 넣은 친구 조사하기 (${added.join(", ")})`));
+    }
+    return lockDisabled(el("div", { class: "friend-card-controls" }, el("div", { class: "outline-buttons is-row" }, ...buttons),
+      el("div", { dataset: { repickSlot: card.frame } })));
+  }
+
   function renderMaterial() {
     const noOutline = !job.outline;
     const open = job.mode === "ai" && viewStep === 2 && !(job.outline && job.outline.approved) &&
@@ -890,7 +1020,7 @@
     if (job.state === "done") return 5;
     if (job.state === "waiting_preview") return 4;
     if (job.state === "waiting_outline") return 3;
-    if (job.state === "waiting_material" || job.state === "waiting_research") return 2;
+    if (job.state === "waiting_material" || job.state === "waiting_research" || job.state === "waiting_friends") return 2;
     if (job.preview && job.preview.approved) return 5;
     if (job.outline && job.outline.approved) return 4;
     return job.outline ? 3 : 2;
@@ -929,6 +1059,7 @@
     if (job.state === "running") return "진행이 끝나면 넘어갈 수 있어요.";
     if (job.state === "waiting_material") return "자료를 입력하면 구성안 단계로 넘어가요.";
     if (job.state === "waiting_research") return "조사 자료를 확인하고 '이 자료로 구성안 만들기'를 누르면 구성안 단계로 넘어가요.";
+    if (job.state === "waiting_friends") return "친구를 2~4명 고르면 구성안 단계로 넘어가요.";
     if (viewStep === 3) return "구성안을 승인하면 다음 단계로 갈 수 있어요.";
     if (viewStep === 4) return "디자인을 최종 승인하면 PNG를 받을 수 있어요.";
     return "";
@@ -1310,6 +1441,7 @@
     if (step.key === "outline" && job.state === "waiting_outline") return "waiting";
     if (step.key === "outline" && job.state === "waiting_material") return "material";
     if (step.key === "research" && job.state === "waiting_research") return "review";
+    if (step.key === "outline" && job.state === "waiting_friends") return "friends";
     if (step.key === "layout" && job.state === "waiting_preview") return "waiting";
     return step.status;
   }
@@ -1321,6 +1453,8 @@
       ? { research: job.researchBase && !(job.researchStage || {}).done
           ? "AI가 저장된 자료를 바탕으로 부족한 내용을 추가 조사하고 있어요. 2~5분 걸릴 수 있어요. 기존 자료는 그대로 남아요."
           : "AI가 웹에서 자료를 찾고 구성안을 쓰고 있어요. 2~5분 걸릴 수 있어요.",
+        outline: job.friendPick && job.friendPick.chosen && !job.outline
+          ? `고른 친구(${job.friendPick.chosen.join(", ")})를 조사하고 구성안을 쓰고 있어요. 1~4분 걸릴 수 있어요.` : undefined,
         layout: isTemplateJob() ? "템플릿에 승인된 문구와 이미지를 넣고 있어요." : "AI가 카드 5장을 디자인하고 있어요. 1~3분 걸릴 수 있어요." }[activeKey] || "진행하고 있어요."
       : STATUS_TEXT[job.state] || "";
     const canRetry = job.mode === "ai" && ["failed", "interrupted"].includes(job.state);
@@ -1974,6 +2108,7 @@
               ? [el("div", { class: "card-links" }, ...sourcesOf(card).map(sourceLink))]
               : []),
             ...notes,
+            friendCardControls(card),
             slotControls(card.frame),
             el("div", { class: "outline-buttons is-row" },
               el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "내용 수정", disabled: !canEdit, dataset: { edit: card.frame },
@@ -1984,6 +2119,7 @@
       );
     }
     $("outline-version").textContent = `${job.outline.version}번째 구성안`;
+    if (repickOpen) renderFriendPick();
     const partial = job.research && (job.research.partial || (job.researchStage || {}).forced);
     gapBox($("outline-gap"), partial ? job.researchGap : null, "자료가 부족한 상태로 작성한 구성안이에요",
       partial ? "찾지 못한 정보는 비워 뒀어요. 필요하면 카드에서 직접 채우거나, 자료를 보완해 구성안을 다시 만들어 주세요." : "");
@@ -2445,9 +2581,11 @@
     if (job) {
       renderResearch();
       renderMaterial();
+      renderFriendPick();
     } else {
       $("research").hidden = true;
       $("material").hidden = true;
+      $("friend-pick").hidden = true;
     }
     renderDetail();
   }
