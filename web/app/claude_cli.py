@@ -12,9 +12,12 @@ import re
 import shutil
 import subprocess
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+
+from . import site_policy
 
 CLAUDE_BIN = os.environ.get("SEMOGWI_CLAUDE_BIN", "claude")
 WORK_DIR = Path(os.environ.get("SEMOGWI_DATA_DIR", Path(__file__).resolve().parent.parent / "data")) / "claude-workdir"
@@ -51,6 +54,8 @@ class CliRun:
     five_hour_utilization: float | None = None
     resets_at: int | None = None
     credential_expires_at: str | None = None
+    permission_mode: str = ""  # CLI가 시작하면서 알려 준 실제 권한 모드 (init 이벤트)
+    init_tools: list[str] | None = None  # CLI가 시작하면서 알려 준 실제 도구 목록. None이면 init 이벤트가 없음
 
 
 def _clean_env() -> dict:
@@ -59,8 +64,29 @@ def _clean_env() -> dict:
     return env
 
 
+_NPM_EXE = Path("node_modules") / "@anthropic-ai" / "claude-code" / "bin" / "claude.exe"
+
+
 def _executable() -> str | None:
-    return shutil.which(CLAUDE_BIN)
+    """실행할 Claude Code 파일. npm 설치본의 claude.cmd는 그 안의 claude.exe를 찾아 직접 씁니다.
+
+    .cmd·.bat은 Windows가 cmd.exe로 실행하는데, cmd.exe는 인자에 든 줄바꿈 뒤를 버리고 따옴표·%·& 등도 다시 해석합니다.
+    그러면 권한 설정(--allowedTools, --permission-mode)이 잘려 검색이 "권한을 아직 안 줬다"며 거절됩니다 (2026-11-20 확인).
+    """
+    found = shutil.which(CLAUDE_BIN)
+    if not found or Path(found).suffix.lower() not in (".cmd", ".bat"):
+        return found
+    return str(_exe_behind_cmd(Path(found)) or found)
+
+
+def _exe_behind_cmd(cmd: Path) -> Path | None:
+    try:
+        text = cmd.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = ""
+    candidates = [cmd.parent / m.replace("\\", "/") for m in re.findall(r'"%dp0%\\([^"]+?\.exe)"', text, re.IGNORECASE)]
+    candidates.append(cmd.parent / _NPM_EXE)
+    return next((c for c in candidates if c.is_file()), None)
 
 
 def status(force: bool = False) -> dict:
@@ -102,6 +128,8 @@ def parse_stream(stdout: str) -> CliRun:
         kind = event.get("type")
         if kind == "system" and event.get("subtype") == "init":
             run.model = event.get("model", "")
+            run.permission_mode = str(event.get("permissionMode") or "")
+            run.init_tools = [str(t) for t in event.get("tools") or []]
         elif kind == "assistant":
             for block in (event.get("message") or {}).get("content") or []:
                 if block.get("type") == "tool_use" and block.get("name") == "WebFetch":
@@ -137,6 +165,18 @@ def parse_stream(stdout: str) -> CliRun:
     return run
 
 
+ERROR_DETAIL_MAX = 300
+
+
+def error_detail(content, fallback=None) -> str:
+    """도구가 돌려준 오류 원문. 화면과 작업 기록에 그대로 남겨 실패 이유를 확인할 수 있게 합니다."""
+    if isinstance(content, list):
+        content = " ".join(str(b.get("text", "")) if isinstance(b, dict) else str(b) for b in content)
+    text = str(content or "").strip() or (fallback if isinstance(fallback, str) else "")
+    text = re.sub(r"</?tool_use_error>", "", text)
+    return " ".join(text.split())[:ERROR_DETAIL_MAX]
+
+
 def _read_failed_fetch(run: CliRun, event: dict, fetch_calls: dict[str, str]) -> None:
     """실패한 WebFetch는 정상 형식의 결과가 없으므로 오류 내용에서 상태 코드를 읽습니다."""
     content = (event.get("message") or {}).get("content")
@@ -147,9 +187,14 @@ def _read_failed_fetch(run: CliRun, event: dict, fetch_calls: dict[str, str]) ->
         if url:
             text = json.dumps(block.get("content"), ensure_ascii=False)
             found = re.search(r"\b([45]\d\d)\b", text)
-            entry = {"url": url, "code": int(found.group(1)) if found else 0}
+            entry = {"url": url, "code": int(found.group(1)) if found else 0,
+                     "detail": error_detail(block.get("content"), event.get("tool_use_result"))}
             if not found and re.search(r"denied|permission|not allowed", text, re.IGNORECASE):
-                entry["denied"] = True  # 차단 규칙으로 요청하지 않은 경우입니다
+                rule = site_policy.blocked_by_rule(url, text)
+                if rule:
+                    entry.update(denied=True, rule=rule)  # 우리 차단 규칙(금지 사이트·대기 중 사이트)으로 요청하지 않은 경우
+                else:
+                    entry["refused"] = True  # 도구가 거부했지만 우리 규칙은 아님: 읽기 실패로 보여 줍니다
             run.fetches.append(entry)
 
 
@@ -159,8 +204,9 @@ def _read_failed_search(run: CliRun, event: dict, search_calls: dict[str, str]) 
         if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("is_error"):
             query = search_calls.get(block.get("tool_use_id", ""))
             if query is not None:
-                text = json.dumps(block.get("content"), ensure_ascii=False)
-                run.search_failures.append({"query": query[:200], "reason": "검색 도구 오류" if "denied" not in text.lower() else "검색 도구 사용 거부"})
+                detail = error_detail(block.get("content"), event.get("tool_use_result"))
+                run.search_failures.append({"query": query[:200], "reason": "검색 도구 오류" if "denied" not in detail.lower() else "검색 도구 사용 거부",
+                                            "detail": detail})
 
 
 def _read_tool_result(run: CliRun, result) -> bool:
@@ -200,6 +246,40 @@ def _classify(run: CliRun, stderr: str, returncode: int) -> AIError:
     return AIError("error", f"AI 호출이 실패했어요 (종료 코드 {returncode}, {run.subtype or '결과 없음'}). 다시 시도해 주세요.")
 
 
+SETTINGS_LOST = ("Claude CLI에 실행 설정(도구 허용·권한 모드)이 전달되지 않아 결과를 쓰지 않았어요. "
+                 "Claude Code 설치 방식을 확인하거나 개발자에게 알려 주세요.")
+
+
+def build_args(exe: str, system_file: str, schema: dict, *, tools: tuple[str, ...], model: str, effort: str,
+               budget_usd: float, disallowed: tuple[str, ...], images: bool = False) -> list[str]:
+    args = [
+        exe, "-p", "--model", model, "--effort", effort,
+        "--output-format", "stream-json", "--verbose",
+        "--tools", ",".join(tools) if tools else "",
+        "--permission-mode", "dontAsk",
+        "--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands",
+        "--setting-sources", "",
+        "--max-budget-usd", str(budget_usd),
+        "--system-prompt-file", system_file,
+        "--json-schema", json.dumps(schema, ensure_ascii=False),
+    ]
+    if images:
+        args += ["--input-format", "stream-json"]  # 이미지는 명령줄이 아니라 표준 입력(stream-json)으로 보냅니다
+    if tools:
+        args += ["--allowedTools", ",".join(tools)]
+    if disallowed:
+        args += ["--disallowedTools", *disallowed]
+    if any("\n" in a or "\r" in a for a in args):
+        raise AIError("error", "AI 호출 인자에 줄바꿈이 있어 실행하지 않았어요.")  # 줄바꿈은 cmd.exe에서 뒤 인자를 잘라냅니다
+    return args
+
+
+def check_settings_applied(parsed: CliRun, tools: tuple[str, ...]) -> None:
+    """CLI가 실제로 받은 권한 모드와 도구가 요청과 같은지. 다르면 설정이 빠진 채 실행된 것이라 결과를 쓰지 않습니다."""
+    if parsed.init_tools is None or parsed.permission_mode != "dontAsk":
+        raise AIError("error", SETTINGS_LOST)
+    if set(parsed.init_tools) - {"StructuredOutput"} != set(tools):
+        raise AIError("error", SETTINGS_LOST)
 def image_message(prompt: str, images: list[tuple[str, str, bytes]]) -> str:
     """이미지와 글을 한 사용자 메시지로 묶은 stream-json 입력 한 줄. images: [(설명, MIME, 바이트)]
 
@@ -225,34 +305,26 @@ def run(prompt: str, system: str, schema: dict, *, tools: tuple[str, ...] = (), 
         raise AIError("unavailable", state["reason"])
     exe = _executable()
     WORK_DIR.mkdir(parents=True, exist_ok=True)
-    args = [
-        exe, "-p", "--model", model, "--effort", effort,
-        "--output-format", "stream-json", "--verbose",
-        "--json-schema", json.dumps(schema, ensure_ascii=False),
-        "--system-prompt", system,
-        "--tools", ",".join(tools) if tools else "",
-        "--permission-mode", "dontAsk",
-        "--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands",
-        "--setting-sources", "",
-        "--max-budget-usd", str(budget_usd),
-    ]
-    if images:
-        args += ["--input-format", "stream-json"]
-    if tools:
-        args += ["--allowedTools", ",".join(tools)]
-    if disallowed:
-        args += ["--disallowedTools", *disallowed]
+    # 여러 줄 지시문은 명령줄이 아니라 파일로 넘깁니다 (명령줄 인자에는 줄바꿈이 없어야 합니다)
+    system_file = WORK_DIR / f"system-{uuid.uuid4().hex}.txt"
+    system_file.write_text(system, encoding="utf-8")
     try:
-        done = subprocess.run(args, input=image_message(prompt, images) if images else prompt, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                              timeout=timeout, cwd=WORK_DIR, env=_clean_env())
-    except subprocess.TimeoutExpired:
-        raise AIError("timeout", f"AI 응답이 {timeout // 60}분 안에 끝나지 않아 중단했어요. 다시 시도해 주세요.") from None
-    except OSError:
-        raise AIError("unavailable", "Claude Code를 실행하지 못했어요.") from None
+        args = build_args(exe, str(system_file), schema, tools=tools, model=model, effort=effort, budget_usd=budget_usd,
+                          disallowed=disallowed, images=bool(images))
+        try:
+            done = subprocess.run(args, input=image_message(prompt, images) if images else prompt, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                  timeout=timeout, cwd=WORK_DIR, env=_clean_env())
+        except subprocess.TimeoutExpired:
+            raise AIError("timeout", f"AI 응답이 {timeout // 60}분 안에 끝나지 않아 중단했어요. 다시 시도해 주세요.") from None
+        except OSError:
+            raise AIError("unavailable", "Claude Code를 실행하지 못했어요.") from None
+    finally:
+        system_file.unlink(missing_ok=True)
 
     parsed = parse_stream(done.stdout)
     if done.returncode != 0 or parsed.is_error:
         raise _classify(parsed, done.stderr, done.returncode)
+    check_settings_applied(parsed, tools)
     if not isinstance(parsed.structured, dict):
         raise AIError("invalid", "AI가 요구한 JSON 형식으로 답하지 못했어요. 다시 시도해 주세요.")
     return parsed

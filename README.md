@@ -1,7 +1,7 @@
 # 세모귀 (세상의 모든 귀여운 것들)
 
 > Claude Code로 캐릭터 카드뉴스를 자동으로 만드는 프로젝트
-> **주제 / 사진 / 공식 상품 URL**을 넣으면 → 공식 자료 조사 → 구성안 → (사용자 승인) → 카드별 이미지 지정 → 문구 작성 → Figma 템플릿 적용 → **PNG 5장(1080 × 1350)**
+> **주제 / 사진**을 넣으면 → 공식 자료 조사 → 구성안 → (사용자 승인) → 카드별 이미지 지정 → 문구 작성 → Figma 템플릿 적용 → **PNG 5장(1080 × 1350)**
 
 MVP 기준일: 2026-11-03
 
@@ -29,7 +29,7 @@ MVP 기준일: 2026-11-03
 | 기능 | 구현 | 실제 통합 테스트 (Figma·PNG까지) | 근거 프로젝트 |
 | --- | --- | --- | --- |
 | 주제 입력 → 카드뉴스 | ✅ | ✅ (새 카드 구성 규칙 적용 전 결과) | `projects/2026-11-03_치이카와-캐릭터-소개/` ※ |
-| 공식 상품 URL 입력 | ✅ `scripts/fetch_product.py` | ✅ 분석 → PNG까지 진행 (상품 정보·이미지는 수동 수집본 사용) / ⚠️ 스크립트 최종본 재실행은 미검증 (429) | `projects/2026-11-03_코인실린더_테스트/` |
+| ~~공식 상품 URL 입력~~ | ❌ **삭제** (2026-11-20 팀 결정: 치이카와 마켓에서 정보를 가져오지 않음. `fetch_product.py` 삭제) | 이전 기록: 분석 → PNG까지 진행 | `projects/2026-11-03_코인실린더_테스트/` |
 | 사진 입력 (analyze-image) | ✅ | ⚠️ 분석·확인 단계까지만 (이후 단계 미실행) | `projects/2026-11-03_이미지분석_테스트/` |
 | 공식 자료 조사 (research-topic) | ✅ | ✅ | 코인 실린더 |
 | 구성안 생성 (plan-cardnews) | ✅ | ✅ | 코인 실린더 |
@@ -40,14 +40,13 @@ MVP 기준일: 2026-11-03
 | Figma 템플릿 적용 + PNG 5장 (fill-figma) | ✅ | ✅ (원본 Page 1 서명 유지) | 위 3개 프로젝트 |
 
 ※ 현재 규칙에서 **캐릭터 소개는 `[공식]`과 `[2차 출처]`(위키백과 등)**를 카드에 쓸 수 있고, 굿즈 소개·팝업스토어 일정·콜라보 내용은 `[공식]`만 씁니다. 캐릭터 소개는 **카드 한 장에 캐릭터 한 명, 본문 1~2줄**로 구성합니다.
-위 표의 테스트 결과물은 모두 이 새 카드 구성 규칙이 적용되기 전에 만들었습니다. 특히 캐릭터 소개 프로젝트는 치이카와 한 명을 5장에 걸쳐 소개하는 예전 구성입니다. **대표 시연은 굿즈 소개(`[공식]`만 사용)인 코인 실린더 프로젝트입니다.**
+위 표의 테스트 결과물은 모두 이 새 카드 구성 규칙이 적용되기 전에 만들었습니다. 특히 캐릭터 소개 프로젝트는 치이카와 한 명을 5장에 걸쳐 소개하는 예전 구성입니다. 굿즈 소개(`[공식]`만 사용)인 코인 실린더 프로젝트는 지금은 없앤 URL 입력 방식으로 만들었습니다. 대표 시연으로 계속 쓸지는 팀에서 정합니다.
 
 ## 2. 자동화 흐름
 
 ```
 입력 ─┬─ 주제 ───────────────────────────────┐
-      ├─ 사진 ─────────── analyze-image ─────┤ [① 분석 확인]
-      └─ 공식 상품 URL ── fetch_product.py ──┘
+      └─ 사진 ─────────── analyze-image ─────┘ [① 분석 확인]
                 ↓
    research-topic (공식 자료 → brief.md)
                 ↓
@@ -69,13 +68,14 @@ MVP 기준일: 2026-11-03
 
 | 시연 | 프로젝트 폴더 | PNG 5장 | Figma 페이지 |
 | --- | --- | --- | --- |
-| **① URL 입력 전체 흐름 (대표)** | `projects/2026-11-03_코인실린더_테스트/` | `png/card-01.png ~ card-05.png` | `세모귀_2026-11-03_코인실린더_테스트` |
+| ① URL 입력 전체 흐름 (이전 방식, 사용 여부 팀 결정 필요) | `projects/2026-11-03_코인실린더_테스트/` | `png/card-01.png ~ card-05.png` | `세모귀_2026-11-03_코인실린더_테스트` |
 | ② 카드별 이미지 지정 | `projects/2026-11-03_카드이미지통합_테스트/` | `png/card-01.png ~ card-05.png` | `세모귀_2026-11-03_카드이미지통합_테스트` |
 | ③ 주제 입력 + 표지 누끼 (참고) | `projects/2026-11-03_치이카와-캐릭터-소개/` | `png/card-01.png ~ card-05.png` | `세모귀_2026-11-03_치이카와-캐릭터-소개` |
 
 - Figma 파일: https://www.figma.com/design/b7ersPQ6u13fVoCPjuwUs9/
 - ⚠️ ①·②의 PNG는 폴더 이름이 `_테스트`로 끝나서 `.gitignore`로 **GitHub에 올라가지 않습니다.** 발표 PC의 로컬 폴더나 Figma 페이지에서 보여 주세요.
 - ②의 이미지는 세모귀 팀이 테스트용으로 직접 그린 도형 이미지입니다 (권리가 확실한 자료만 사용).
+- ①은 지금은 없앤 방식(치이카와 마켓에서 상품 정보 가져오기)으로 만든 결과물입니다. 시연이나 공개에 쓸지는 팀에서 정합니다 (`web/docs/site-access-policy.md` 4절).
 
 각 프로젝트 폴더에서 단계별 산출물을 순서대로 보여 줄 수 있습니다.
 
@@ -92,8 +92,8 @@ MVP 기준일: 2026-11-03
 
 Claude Code를 프로젝트 루트(`semogwi`)에서 연 상태에서 진행합니다.
 
-1. **입력**: `/cardnews https://chiikawamarket.jp/ko/products/<상품>` (또는 주제·사진 경로)
-2. **① 분석 확인**: `image-analysis.md` 확인 → "확인"
+1. **입력**: `/cardnews <주제> <캐릭터> <유형> <참고 자료>` 또는 `/cardnews <사진 경로>`
+2. **① 분석 확인** (사진 입력일 때): `image-analysis.md` 확인 → "확인"
 3. **② 구성안 승인**: `outline.md`의 5장 구성 확인 → "승인"
 4. **③ 이미지 지정**: `projects/<폴더>/input/cards/`에 이미지를 넣고 `card-images.json` 작성 (규격: `templates/card-images.md`). 이미지를 안 쓰면 모든 카드 `null`
 5. 나머지(문구 → Figma → PNG)는 자동으로 진행 → `projects/<폴더>/png/`
@@ -101,7 +101,6 @@ Claude Code를 프로젝트 루트(`semogwi`)에서 연 상태에서 진행합�
 단계별로 직접 실행할 때 쓰는 스크립트:
 
 ```
-py scripts/fetch_product.py <공식 상품 URL> projects/<폴더>     # 상품 정보·이미지 가져오기
 py scripts/assign_images.py projects/<폴더>                     # 카드별 이미지 처리
 py scripts/fill_figma.py validate projects/<폴더>/slides.json    # 문구·이미지 규격 검사
 py scripts/fill_figma.py verify-png projects/<폴더>/png          # PNG 5장 1080×1350 검사
@@ -114,8 +113,8 @@ py scripts/cutout.py <원본> <출력.png> --max-size 1024           # 누끼 (�
 
 - **시연 버튼(UI)은 없습니다.** 지금은 Claude Code에서 `/cardnews`를 실행하고 승인 지점마다 대화로 답합니다. 연결 설계는 `templates/cardnews-pipeline.md` 6장.
 - **공식 출처 확보**: 원작자 X 계정은 로그인 없이 열리지 않아 공식 게시물을 붙여 넣어야 합니다. 굿즈·팝업·콜라보는 `[공식]` 항목만으로(캐릭터 소개는 `[2차 출처]`까지 포함해) 5장을 못 채우면 파이프라인이 멈춥니다.
-- **치이카와 마켓 요청 제한(HTTP 429)**: 같은 상품을 짧은 시간에 여러 번 가져오면 막힙니다. 시연 전에 미리 가져온 결과를 쓰는 것이 안전합니다.
-- **이미지 권리**: 공식 쇼핑몰 이미지는 이용규약상 사적 이용을 넘는 복제·공표가 금지되어 분석용으로만 씁니다. 카드 이미지는 사용 권한이 확인된 사용자 지정 이미지만 들어갑니다.
+- **치이카와 마켓은 읽지 않습니다** (2026-11-20 팀 결정): 웹앱과 터미널 모두 이 사이트의 정보와 이미지를 자동으로 가져오지 않습니다. 터미널 쪽은 `.claude/settings.json`이 `WebFetch`를 막습니다. `curl`이나 스크립트는 막지 못하니, 이 사이트에 접속하는 스크립트를 만들지 않습니다. 기준은 `web/docs/site-access-policy.md`에 있습니다.
+- **이미지 권리**: 카드 이미지는 사용 권한이 확인된 사용자 지정 이미지만 들어갑니다.
 - **사용자 이미지는 Git에 올라가지 않습니다** (`projects/*/input/`, `user-*`). 다른 컴퓨터에서는 같은 프로젝트를 다시 실행할 수 없습니다.
 - 콘텐츠 유형은 캐릭터 소개 / 굿즈 소개 / 팝업스토어 일정 / 콜라보 내용 4가지, 템플릿은 1종(Page 1), 카드는 5장 고정입니다.
 - HEIC 사진은 지원하지 않습니다 (PNG·JPG·WebP만).
@@ -136,7 +135,8 @@ py scripts/cutout.py <원본> <출력.png> --max-size 1024           # 누끼 (�
 ```
 .claude/commands/cardnews.md     전체 파이프라인 (/cardnews)
 .claude/skills/                  analyze-image, research-topic, plan-cardnews, cutout-image, write-copy, fill-figma
-scripts/                         fetch_product.py, assign_images.py, cutout.py, fill_figma.py, figma/*.js
+.claude/settings.json            터미널 Claude Code의 사이트 차단 규칙 (웹앱 site_policy.json과 같음)
+scripts/                         assign_images.py, cutout.py, fill_figma.py, figma/*.js
 templates/                       layers.md(규격), figma-config.md(Figma 연결·테스트 기록), card-images.md, backgrounds.md(선택: card-02~05 배경), cardnews-pipeline.md
 assets/characters/<캐릭터>/      공식 출처(official.md), 원본·누끼 이미지
 sources.md                       공용 이미지 출처 기록

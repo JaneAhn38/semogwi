@@ -148,6 +148,10 @@ def _check_template(tpl: dict, name: str) -> None:
         fields[key] = {"key": key, "type": "text"}
     slots = {image["key"] for image in tpl["images"]}
     for image in tpl["images"]:
+        target = fields.get(image.get("identify")) if image.get("identify") else None
+        if image.get("identify") and not (target and target["type"] == "items" and target.get("linkedName")
+                                          and target.get("slotPrefix") and image["key"].startswith(target["slotPrefix"])):
+            raise TemplateError(f"{name}: {image['key']}가 잇는 {image['identify']}에 linkedName과 그 자리 이름의 slotPrefix가 없어요")
         if image.get("if") and not _condition_ok(image["if"], fields):
             raise TemplateError(f"{name}: 이미지 자리 {image['key']}의 조건 필드가 없어요 ({image['if']})")
     for el in tpl["elements"]:
@@ -688,6 +692,14 @@ def repeated_values(cards: list[dict]) -> dict[str, list[str]]:
 # ---------- 이미지 자리 ----------
 def slots_of(job: dict, frame: str) -> list[dict]:
     return template_for(job, frame)["images"]
+
+
+def identify_slots(tpl: dict) -> list[dict]:
+    """사진 속 캐릭터 이름을 확인해 항목(friends, family)과 잇는 이미지 자리.
+
+    항목과 사진은 자리 번호로 잇습니다: 항목의 slotPrefix + 번호(friend_image_1 …)가 그 번호째 항목의 사진입니다.
+    """
+    return [image for image in tpl["images"] if image.get("identify")]
 
 
 def _get_path(fields: dict, path: str):

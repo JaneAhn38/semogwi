@@ -132,7 +132,7 @@ def test_failed_fetch_error_format_is_recorded():
             {"type": "tool_result", "tool_use_id": "t2", "content": "body 500 words"}]}},
     ]
     run = claude_cli.parse_stream("\n".join(json.dumps(x) for x in lines))
-    assert run.fetches == [{"url": SHOP, "code": 429}, {"url": "https://ok.example", "code": 200}]
+    assert run.fetches == [{"url": SHOP, "code": 429, "detail": "Request failed with status code 429"}, {"url": "https://ok.example", "code": 200}]
 
 
 def test_429_does_not_end_job_and_keeps_record(client):

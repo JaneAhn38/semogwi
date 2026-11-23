@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from . import claude_cli, cutout, detail_images, research as research_items, research_library, research_merge, site_policy, templates
+from . import claude_cli, cutout, detail_images, friends, research as research_items, research_library, research_merge, site_policy, templates
 from .ai_provider import card_source_state, get_ai_provider, material_text, policy_stop_research, separates_research
 from .claude_cli import AIError
 from .layout import ImageElement, LayoutError, TextElement, validate_layout
@@ -49,6 +49,7 @@ STEPS = [
 _tasks: dict[str, asyncio.Task] = {}
 _cutout_tasks: dict[str, asyncio.Task] = {}
 _ai_tasks: dict[str, asyncio.Task] = {}
+_identify_tasks: dict[str, asyncio.Task] = {}
 
 
 class JobConflict(Exception):
@@ -98,6 +99,7 @@ def _normalize(job: dict) -> dict:
     job.setdefault("userMaterial", None)
     job.setdefault("format", 1)
     job.setdefault("slotImages", None)
+    job.setdefault("slotIdentities", {})  # 친구 칸 사진의 캐릭터 이름 확인 기록 (app/friends.py)
     job.setdefault("templateSet", None)  # 없으면 예전 형식 3(표지 + 본문 반복) 또는 기존 방식
     job.setdefault("typeSource", "user")
     job.setdefault("notes", "")
@@ -171,11 +173,13 @@ def _open_old_versions(job: dict) -> None:
 
 
 def _base_issues(job: dict, cards: list[dict]) -> dict:
-    """형식별 글자 수·필드 규칙. 출처 검증은 _issues가 더합니다."""
+    """형식별 글자 수·필드 규칙과 친구 칸 확인. 출처 검증은 _issues가 더합니다."""
     if not templates.is_template_job(job):
         return issues_of(cards)
-    _sync_templates(job, cards)
-    return templates.issues_of(job, cards)
+    _sync_templates(job, cards)  # 카드별 템플릿을 먼저 맞춘 뒤 친구 칸을 확인합니다
+    issues = templates.issues_of(job, cards)
+    friends.add_issues(job, cards, issues)
+    return issues
 
 
 def _sync_templates(job: dict, cards: list[dict]) -> None:
@@ -231,6 +235,11 @@ def load(job_id: str) -> dict | None:
         if info and info["status"] == "processing" and _cutout_key(job_id, asset["id"]) not in _cutout_tasks:
             info.update(status="failed", error="서버가 다시 시작되어 처리가 중단됐어요. 다시 시도해 주세요.")
             changed = True
+    for frame, records in (job.get("slotIdentities") or {}).items():
+        for slot, record in records.items():
+            if record["status"] == "processing" and _identity_key(job_id, frame, slot) not in _identify_tasks:
+                record.update(status="failed", error="서버가 다시 시작되어 이름 확인이 중단됐어요. 이름을 직접 입력해 주세요.")
+                changed = True
     if changed:
         save(job)
     return job
@@ -800,9 +809,10 @@ def _usable(job: dict, image: dict) -> bool:
 def _drop_unusable_images(job: dict) -> None:
     """쓸 수 없게 됐거나 뺀 이미지를 카드에서 내립니다. 그 카드가 바뀌므로 디자인 승인을 해제합니다."""
     if templates.is_template_job(job):
-        if _drop_slot_images(job) and job.get("preview"):
-            _refresh_template_preview(job)
-            _revoke_preview(job)
+        before = json.loads(json.dumps(job.get("slotImages") or {}))
+        if _drop_slot_images(job):
+            dropped = {f: [k for k, image in slots.items() if image != before[f].get(k)] for f, slots in job["slotImages"].items()}
+            _on_slots_changed(job, dropped)  # 이미지를 내리기만 하므로 새로 확인할 사진은 없습니다
         return
     images = job.get("cardImages") or {}
     changed = [frame for frame, image in images.items() if image and not _usable(job, image)]
@@ -1010,8 +1020,11 @@ def _make_outline(job: dict) -> None:
     else:
         made = get_provider().create_outline(job)
     cards = [{**c, "edited": False, "regenCount": 0} for c in made]
-    job["outline"] = {"version": version, "cards": cards, "approved": False, "issues": _base_issues(job, cards)}
+    job["outline"] = {"version": version, "cards": cards, "approved": False, "issues": {},
+                      "otherNames": (job.get("outline") or {}).get("otherNames", [])}
     _ensure_slot_images(job)
+    friends.sync(job)
+    job["outline"]["issues"] = _base_issues(job, cards)
 
 
 def _record_calls(job: dict, calls: list[dict]) -> None:
@@ -1117,9 +1130,11 @@ def _apply_outline_result(job: dict, result: dict) -> None:
     _store_research(job)
     version = job["outline"]["version"] + 1 if job.get("outline") else 1
     cards = [{**c, "edited": False, "regenCount": 0} for c in result["cards"]]
-    job["outline"] = {"version": version, "cards": cards, "approved": False, "issues": {}}
-    job["outline"]["issues"] = _issues(job)
+    job["outline"] = {"version": version, "cards": cards, "approved": False, "issues": {},
+                      "otherNames": (job.get("outline") or {}).get("otherNames", [])}
     _ensure_slot_images(job)
+    friends.sync(job)
+    job["outline"]["issues"] = _issues(job)
     _set_step(job, "outline", "done")
     job["state"] = "waiting_outline"
 
@@ -1382,6 +1397,7 @@ def _start_outline_rewrite(job: dict, frames: list[str], new_version: bool) -> d
                 card.update(templates.keep_user_fields(card, result["cards"][card["frame"]]), edited=False, regenCount=card["regenCount"] + 1)
         if new_version:
             current["outline"]["version"] += 1
+        friends.sync(current)
         if set(frames) == set(FRAMES):
             current["outline"].pop("researchUpdated", None)  # 통합된 자료로 구성안을 다시 썼으므로 안내를 거둡니다
         _revoke_outline(current)
@@ -1406,6 +1422,7 @@ def change_content_type(job_id: str, content_type: str) -> dict:
     def switch(target: dict) -> None:
         _apply_type(target, content_type, "user")
         target["slotImages"] = None
+        target["slotIdentities"] = {}
         target["preview"] = None
 
     if job["state"] == "waiting_material" or not job.get("outline"):
@@ -1465,6 +1482,7 @@ def edit_outline_card(job_id: str, frame: str, values: dict) -> dict:
         # 친구를 지우거나 순서를 바꾸면 친구별 이미지가 그 친구를 따라갑니다
         job["slotImages"][frame] = templates.remap_item_slots(templates.template_for(job, frame), job["slotImages"][frame], item_order)
     card.update(values, edited=True)
+    friends.sync(job)  # 사진으로 확정한 친구 이름은 친구 칸에서만 바꿉니다
     job["outline"]["issues"] = _issues(job)
     _revoke_outline(job)
     save(job)
@@ -1522,6 +1540,7 @@ def regenerate_outline_card(job_id: str, frame: str) -> dict:
     else:
         new = get_provider().create_outline_card(job, frame, job["outline"]["version"] + count)
     card.update(new, edited=False, regenCount=count)
+    friends.sync(job)
     job["outline"]["issues"] = _base_issues(job, job["outline"]["cards"])
     _revoke_outline(job)
     save(job)
@@ -2049,11 +2068,171 @@ def _put_slot(job: dict, frame: str, slot: str, image: dict | None) -> dict:
     if job["slotImages"][frame].get(slot) == image:
         return job
     job["slotImages"][frame][slot] = image
+    return _save_after_slots(job, *_on_slots_changed(job, {frame: [slot]}))
+
+
+def _on_slots_changed(job: dict, changed: dict[str, list[str]]) -> tuple[list, list]:
+    """이미지 자리가 바뀐 뒤 처리합니다. 친구 칸이면 이름 확인을 새로 하고, 친구 항목을 맞추고, 구성안 승인을 해제합니다.
+
+    돌려주는 값: (AI로 이름을 확인할 (frame, slot, assetId) 목록, 친구 문구를 다시 쓸 카드 목록)
+    """
+    pending, touched = [], []
+    for frame, keys in changed.items():
+        identify = [k for k in keys if friends.is_identify_slot(job, frame, k)]
+        if identify:
+            touched.append(frame)
+            pending += _reset_identities(job, frame, identify)
+    rewrite = []
+    if touched and job.get("outline"):
+        if friends.sync(job):
+            rewrite = [f for f in touched if _is_ai(job) and friends.ready(job, f)]
+        if job["outline"]["approved"]:
+            _revoke_outline(job)
+        job["outline"]["issues"] = _issues(job)
     if job.get("preview"):
         _refresh_template_preview(job)
         _revoke_preview(job)
+    return pending, rewrite
+
+
+def _save_after_slots(job: dict, pending: list, rewrite: list) -> dict:
+    if rewrite:
+        _start_friends_rewrite(job, rewrite[0])  # 저장까지 합니다
+    else:
+        save(job)
+    _start_identify(job["id"], pending)
+    return job
+
+
+# ---------- 친구 칸 사진의 캐릭터 이름 ----------
+def _identity_key(job_id: str, frame: str, slot: str) -> str:
+    return f"{job_id}:{frame}:{slot}"
+
+
+def _new_identity(asset_id: str, ai: bool) -> dict:
+    return {"assetId": asset_id, "status": "processing" if ai else "manual", "name": "", "suggested": "",
+            "confidence": "", "candidates": [], "evidence": "", "error": None}
+
+
+def _reset_identities(job: dict, frame: str, keys: list[str]) -> list:
+    """사진이 바뀐 자리의 식별 기록을 새로 만듭니다. 같은 사진(원본/누끼, 크기 조정)이면 그대로 둡니다."""
+    job.setdefault("slotIdentities", {}).setdefault(frame, {})
+    friends.rekey(job, frame)  # 순서를 바꿔 옮겨진 사진의 기록을 먼저 그 자리로 옮깁니다
+    records = job["slotIdentities"][frame]
+    pending = []
+    for key in keys:
+        image = job["slotImages"][frame].get(key)
+        record = records.get(key)
+        if not image:
+            records.pop(key, None)
+        elif not record or record["assetId"] != image["assetId"]:
+            records[key] = _new_identity(image["assetId"], _is_ai(job))
+            if _is_ai(job):
+                pending.append((frame, key, image["assetId"]))
+    return pending
+
+
+def _start_identify(job_id: str, pending: list) -> None:
+    for frame, slot, asset_id in pending:
+        key = _identity_key(job_id, frame, slot)
+        task = asyncio.create_task(_run_identify(job_id, frame, slot, asset_id))
+        _identify_tasks[key] = task
+
+        def forget(done: asyncio.Task, key: str = key) -> None:
+            # 같은 자리에 새 사진을 넣어 새 확인이 시작됐으면 그 기록은 지우지 않습니다
+            if _identify_tasks.get(key) is done:
+                _identify_tasks.pop(key)
+
+        task.add_done_callback(forget)
+
+
+async def _run_identify(job_id: str, frame: str, slot: str, asset_id: str) -> None:
+    """구성안 화면을 막지 않고 사진 한 장의 캐릭터 이름 후보를 확인합니다. 결과는 제안일 뿐, 사용자가 확정해야 씁니다."""
+    job = _read(job_id)
+    asset = next(a for a in job["assets"] if a["id"] == asset_id)
+    path = uploads_dir(job_id) / f"{asset_id}{asset['ext']}"  # 누끼가 아니라 원본으로 확인합니다
+    result, error = None, None
+    try:
+        result = await asyncio.to_thread(get_ai_provider().identify_character, path, job["topic"])
+    except AIError as e:
+        error = f"{e.message} 이름을 직접 입력해 주세요."
+    except Exception:
+        error = "이름 확인 중 오류가 났어요. 이름을 직접 입력해 주세요."
+    job = _read(job_id)
+    # 확인하는 동안 친구 순서를 바꿨을 수 있어 자리 이름이 아니라 사진으로 기록을 찾습니다
+    records = ((job.get("slotIdentities") or {}).get(frame) or {}).values()
+    record = next((r for r in records if r.get("assetId") == asset_id), None)
+    if not record or record["status"] != "processing":
+        return  # 그사이 사진을 바꿨거나 사용자가 먼저 이름을 확정했습니다
+    if error:
+        record.update(status="failed", error=error)
+    else:
+        _record_calls(job, result.pop("calls"))
+        record.update(status="suggested", error=None, **result)
+    if job.get("outline"):
+        job["outline"]["issues"] = _issues(job)
+    save(job)
+
+
+def confirm_identity(job_id: str, frame: str, slot: str, name: str) -> dict:
+    """친구 칸 사진의 캐릭터 이름을 확정합니다. 친구 항목의 이름과 순서는 이 값으로 정해집니다."""
+    job = _require(job_id, "waiting_outline", "waiting_preview", "done")
+    _check_slot(job, frame, slot)
+    if not friends.is_identify_slot(job, frame, slot):
+        raise JobConflict("이 자리는 캐릭터 이름을 확인하는 친구 칸이 아니에요")
+    _ensure_slot_images(job)
+    image = job["slotImages"][frame].get(slot)
+    if not image:
+        raise JobConflict("먼저 이 칸에 사진을 넣어 주세요")
+    job.setdefault("slotIdentities", {}).setdefault(frame, {})
+    friends.rekey(job, frame)
+    name = " ".join(name.split())
+    limit = friends.name_max(job, frame)
+    if not name:
+        raise JobConflict("캐릭터 이름을 입력해 주세요")
+    if len(name) > limit:
+        raise JobConflict(f"이름은 {limit}자 이내로 입력해 주세요 (현재 {len(name)}자)")
+    if name in [n for key, n in friends.confirmed(job, frame) if key != slot]:
+        raise JobConflict("다른 친구 칸에서 이미 확정한 이름이에요")
+    record = friends.identity(job, frame, slot) or _new_identity(image["assetId"], False)
+    if record["status"] == "confirmed" and record["name"] == name:
+        return job
+    was_ready = friends.ready(job, frame)
+    job["slotIdentities"][frame][slot] = {**record, "status": "confirmed", "name": name, "error": None}
+    changed = friends.sync(job)
+    _revoke_outline(job)
+    # 확정 전에도 AI가 제안한 이름이 항목에 들어가 있어 목록이 안 바뀔 수 있습니다. 마지막 칸을 확정한 순간에도 다시 씁니다
+    if (changed or not was_ready) and _is_ai(job) and friends.ready(job, frame):
+        return _start_friends_rewrite(job, frame)
+    job["outline"]["issues"] = _issues(job)
+    if job.get("preview"):
+        _refresh_template_preview(job)
     save(job)
     return job
+
+
+def _start_friends_rewrite(job: dict, frame: str) -> dict:
+    """확정한 친구로 그 카드의 관계·TMI를 다시 씁니다. 실패해도 확정한 이름은 그대로 둡니다."""
+    job["outline"]["issues"] = _issues(job)
+
+    def work(snapshot):
+        return get_ai_provider().write_friends(snapshot, frame)
+
+    def apply(current, result):
+        card = _outline_card(current, frame)
+        card.update(result["card"], edited=False, regenCount=card["regenCount"] + 1)
+        if result["research"]:
+            current["research"] = result["research"]
+        friends.sync(current)
+        _revoke_outline(current)
+        current["outline"]["issues"] = _issues(current)
+        if current.get("preview"):
+            _refresh_template_preview(current)
+
+    def on_fail(current):
+        current["outline"]["issues"] = _issues(current)
+
+    return _start_ai_task(job, "friends", frame, work, apply, on_fail)
 
 
 def check_slot_upload(job_id: str, frame: str, slot: str) -> None:
@@ -2109,13 +2288,11 @@ def apply_slot_suggestions(job_id: str, frame: str | None = None, slot: str | No
               if (frame is None or f == frame) and (slot is None or s == slot)]
     if not picked:
         raise JobConflict("적용할 추천이 없어요")
+    changed: dict[str, list[str]] = {}
     for f, s, image in picked:
         job["slotImages"][f][s] = _slot_image(image["assetId"], image["variant"])
-    if job.get("preview"):
-        _refresh_template_preview(job)
-        _revoke_preview(job)
-    save(job)
-    return job
+        changed.setdefault(f, []).append(s)
+    return _save_after_slots(job, *_on_slots_changed(job, changed))
 
 
 def cutout_path(job_id: str, asset: dict) -> Path | None:

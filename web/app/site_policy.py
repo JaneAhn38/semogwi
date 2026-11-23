@@ -152,6 +152,24 @@ def cooldown_seconds(url: str) -> int:
     return max(0, cooldown_until(url) - int(time.time()))
 
 
+def blocked_by_rule(url: str, error_text: str = "") -> str:
+    """우리 규칙으로 AI 호출에서 막는 사이트인지. "restricted"(금지 사이트), "cooldown"(대기 중),
+    "auxiliary"(보조 출처의 미러, 또는 유형에 따라 막는 보조 출처), 아니면 "".
+
+    보조 출처는 유형에 따라 허용될 때도 있어(캐릭터 조사의 나무위키 등), 도구가 차단 규칙 형식
+    ("denied access to domain:")으로 거절했을 때만 우리 규칙으로 봅니다.
+    """
+    if restricted_site(url):
+        return "restricted"
+    host = host_of(url)
+    if any(_matches(host, h) for h in cooling_hosts()):
+        return "cooldown"
+    auxiliary = [d for site in auxiliary_sites() for d in [site["domain"], *site.get("mirrors", [])]]
+    if "denied access to domain:" in error_text.lower() and any(_matches(host, d) for d in auxiliary):
+        return "auxiliary"
+    return ""
+
+
 def deny_rules(content_type: str | None = None) -> list[str]:
     """AI 호출에서 차단할 WebFetch 규칙. 금지 사이트, 대기 중인 사이트, 보조 출처의 미러 사이트,
     그리고 content_type이 주어지면 그 유형에서 쓰지 않는 보조 출처(예: 굿즈 조사의 나무위키)입니다.

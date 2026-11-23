@@ -367,7 +367,10 @@ def test_stream_json_input_sends_images_without_tools(monkeypatch):
     class Done:
         returncode = 0
         stderr = ""
-        stdout = json.dumps({"type": "result", "structured_output": {"items": [], "notes": []}, "num_turns": 1})
+        # main의 설정 전달 확인(check_settings_applied)을 통과하도록 CLI 시작 이벤트도 흉내 냅니다
+        stdout = "\n".join(json.dumps(e) for e in [
+            {"type": "system", "subtype": "init", "permissionMode": "dontAsk", "tools": ["StructuredOutput"]},
+            {"type": "result", "structured_output": {"items": [], "notes": []}, "num_turns": 1}])
 
     def fake_run(args, **kwargs):
         captured["args"], captured["input"] = args, kwargs["input"]

@@ -14,6 +14,7 @@
   ];
   const AI_TASK_TEXT = {
     outline: "AI가 문구를 다시 쓰고 있어요. 저장된 조사 결과만 쓰고 검색은 다시 하지 않아요.",
+    friends: "AI가 확정한 친구에 맞춰 친구 카드를 다시 쓰고 있어요. 자료에 없는 친구만 짧게 찾아봐요.",
     compose: "AI가 입력한 자료로 구성안을 쓰고 있어요. 사이트에는 접속하지 않아요.",
     design: "AI가 카드 5장을 다시 디자인하고 있어요. 1~3분 걸릴 수 있어요.",
     redesign: "AI가 이 카드만 다시 디자인하고 있어요. 1분 안팎 걸려요. 다른 카드는 그대로예요.",
@@ -98,6 +99,7 @@
 
   const visibleAssets = () => (job ? job.assets.filter((a) => !a.removed) : []);
   const isProcessing = (asset) => asset.cutout && asset.cutout.status === "processing";
+  const identifying = () => Object.values((job && job.slotIdentities) || {}).some((slots) => Object.values(slots).some((r) => r.status === "processing"));
   const hasCutout = (asset) => Boolean(asset.cutout && asset.cutout.file);
 
   function assetUrl(assetId, variant = "original") {
@@ -565,9 +567,9 @@
   function renderProblems(research) {
     const problems = [
       ...(research.policyStops || []).map((s) => `${s.name}: 이용규약상 자동 수집이 금지된 사이트라 읽지 않았어요`),
-      ...(research.searchFailures || []).map((f) => `검색 "${f.query}": ${f.reason}`),
+      ...(research.searchFailures || []).map((f) => `검색 "${f.query}": ${f.reason}${f.detail ? ` (오류 내용: ${f.detail})` : ""}`),
       ...(research.fetchFailures || []).map(failureText),
-      ...(research.fetched || []).filter((f) => f.denied).map((f) => `${f.url}: 접근 제한 규칙으로 요청하지 않았어요`),
+      ...(research.fetched || []).filter((f) => f.denied).map(deniedText),
     ];
     $("research-problems-wrap").hidden = !problems.length;
     $("research-problems").replaceChildren(...problems.map((text) => el("li", { textContent: text })));
@@ -576,7 +578,16 @@
   function failureText(failure) {
     const reason = failure.label || "접속하지 못했어요";
     const code = failure.code ? ` (HTTP ${failure.code})` : "";
-    return `${failure.host}: ${reason}${code}, ${failure.attempts}번 시도`;
+    return `${failure.host}: ${reason}${code}${failure.detail ? ` (오류 내용: ${failure.detail})` : ""}, ${failure.attempts}번 시도`;
+  }
+
+  // 우리 차단 규칙(금지 사이트·대기 중 사이트)일 때만 "접근 제한 규칙"이라고 씁니다.
+  // rule이 없는 예전 기록은 금지 사이트 목록으로 판단하고, 아니면 읽기 실패로 보여 줍니다
+  function deniedText(fetch) {
+    const host = (() => { try { return new URL(fetch.url).hostname.replace(/^www\./, ""); } catch { return ""; } })();
+    const restricted = (options.restrictedSites || []).some((s) => host === s.domain || host.endsWith(`.${s.domain}`));
+    if (fetch.rule || restricted) return `${fetch.url}: 접근 제한 규칙으로 요청하지 않았어요`;
+    return `${fetch.url}: 읽기 실패 (오류 내용: ${fetch.detail || "기록되지 않았어요"})`;
   }
 
   function renderMaterial() {
@@ -1154,7 +1165,7 @@
     if (job.state !== "draft" && (first || limit > lastMaxStep || viewStep > limit)) goToStep(limit, !first);
     lastMaxStep = limit;
     await renderJob();
-    if (job.state === "running" || job.aiTask || visibleAssets().some(isProcessing)) pollTimer = setTimeout(poll, POLL_MS);
+    if (job.state === "running" || job.aiTask || visibleAssets().some(isProcessing) || identifying()) pollTimer = setTimeout(poll, POLL_MS);
   }
 
   async function poll() {
@@ -1284,6 +1295,13 @@
       images: itemImages(tpl, card.frame, draft),
     };
   }
+
+  // 그 자리에 있는 사진의 이름 확인 기록. 서버 friends.identity와 같이 자리 이름이 아니라 사진으로 찾습니다 (순서를 바꿔도 따라감)
+  const identityOf = (frame, key) => {
+    const image = currentSlot(frame, key);
+    if (!image) return null;
+    return Object.values(((job.slotIdentities || {})[frame]) || {}).find((record) => record.assetId === image.assetId) || null;
+  };
 
   function imageVersions(spec) {
     return Object.values(spec.images || {}).filter(Boolean).map((image) => {
@@ -1457,12 +1475,38 @@
       file, source, button, error);
   }
 
+  // 친구 칸: 사진 속 캐릭터 이름을 보여 주고 사용자가 고쳐서 확정합니다. 친구 문구는 확정한 이름으로만 써요
+  function identityPanel(frame, slot) {
+    const record = identityOf(frame, slot.key);
+    const status = record ? record.status : "manual";
+    const field = templateFor(frame).fields.find((f) => f.key === slot.identify);
+    const nameMax = field.fields.find((s) => s.key === field.linkedName).max;
+    let note;
+    if (status === "processing") note = el("small", { class: "cutout-status" }, el("span", { class: "spinner", "aria-hidden": "true" }), "사진 속 캐릭터 이름을 확인하고 있어요. 기다리지 않고 직접 입력해도 돼요.");
+    else if (status === "suggested" && record.suggested) note = el("small", { class: "hint", textContent: `AI 인식: ${record.suggested} (확신도 ${record.confidence})${record.evidence ? ` · 근거: ${record.evidence}` : ""}. 맞으면 확정하고, 다르면 고쳐서 확정해 주세요.` });
+    else if (status === "suggested") note = el("small", { class: "hint", textContent: `AI가 이름을 확신하지 못했어요${record.candidates.length ? ` (후보: ${record.candidates.join(", ")})` : ""}. 이름을 직접 입력해 주세요.` });
+    else if (status === "failed") note = el("small", { class: "cutout-error", textContent: record.error });
+    else if (status === "confirmed") note = el("small", { class: "hint", textContent: `확정: ${record.name}. 이 칸의 문구는 이 이름으로만 써요.` });
+    else note = el("small", { class: "hint", textContent: "사진 속 캐릭터 이름을 입력해 확정해 주세요." });
+    const input = el("input", {
+      type: "text", maxLength: nameMax, placeholder: "캐릭터 이름", "aria-label": `${frame} ${slot.label} 캐릭터 이름`,
+      value: status === "confirmed" ? record.name : (record && record.suggested) || "", dataset: { identityName: `${frame}:${slot.key}` },
+    });
+    const button = el("button", {
+      class: "btn btn-primary btn-small", type: "button", textContent: status === "confirmed" ? "이름 바꾸기" : "이 이름으로 확정",
+      dataset: { identityConfirm: `${frame}:${slot.key}` },
+      onclick: () => slotAction(`cards/${frame}/slots/${slot.key}/identity`, jsonInit("PUT", { name: input.value })),
+    });
+    return el("div", { class: "slot-identity", dataset: { identity: `${frame}:${slot.key}` } },
+      el("label", { class: "tile-image" }, el("span", { textContent: `캐릭터 이름 (${nameMax}자 이내)` }), input), button, note);
+  }
+
   function slotPanel(frame, slot, context) {
     const current = slotImageFor(frame, slot.key);
     const asset = current && job.assets.find((a) => a.id === current.assetId);
     const suggestion = !current && suggestionOf(frame, slot.key);
     const key = JSON.stringify([current && currentSlot(frame, slot.key), suggestion, asset, permittedAssets().map((a) => [a.id, a.name, a.useVariant, hasCutout(a)]),
-      options.cutout.available, job.state]);
+      options.cutout.available, job.state, slot.identify ? identityOf(frame, slot.key) : null]);
     const cacheKey = `${context}:${frame}:${slot.key}`;
     const cached = slotPanels.get(cacheKey);
     if (cached && cached.key === key) return cached.node;
@@ -1476,6 +1520,7 @@
         el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "적용", dataset: { applySuggestion: `${frame}:${slot.key}` },
           onclick: () => slotAction("slot-suggestions/apply", jsonInit("POST", { frame, slot: slot.key })) })));
     }
+    if (current && slot.identify) node.append(identityPanel(frame, slot));
     if (current && asset) node.append(slotCompare(asset), slotBackground(frame, slot, current, asset), slotAdjust(frame, slot, current));
     node.append(slotUpload(frame, slot, current));
     slotPanels.set(cacheKey, { key, node });
@@ -1539,7 +1584,7 @@
     return tile;
   }
 
-  function templateControl(field, value) {
+  function templateControl(field, value, frame) {
     if (field.type === "choice") {
       // 예: 친구/가족. 바꾸면 그 카테고리 목록이 보이고, 다른 목록은 지우지 않고 보관합니다 (templateEditor가 처리)
       const select = el("select", { name: `field-${field.key}`, dataset: { choice: field.key }, "aria-label": field.label });
@@ -1557,7 +1602,7 @@
         : el("textarea", { value: value || "", rows: 2, name: `field-${field.key}` });
       return editField(`${field.label}${field.required ? " (필수)" : ""}`, input, field.max);
     }
-    if (field.type === "items" && (field.minItems || field.editor === "list")) return itemsEditor(field, value);
+    if (field.type === "items" && (field.minItems || field.editor === "list")) return itemsEditor(field, value, frame);
     const group = el("fieldset", { class: "edit-group", dataset: { group: field.key } }, el("legend", { textContent: `${field.label} · 최대 ${field.maxItems}개, 빈 칸은 카드에서 숨겨요` }));
     for (let i = 0; i < field.maxItems; i++) {
       if (field.type === "items") {
@@ -1585,7 +1630,7 @@
 
   // 개수를 늘리고 줄일 수 있는 항목 (예: 친구 캐릭터 2~4명, 프로필 항목 0~3개). 항목마다 저장 전 번호(orig)를 기억해 이미지가 그 항목을 따라가게 합니다
   // editor: "list"인 필드(프로필 항목)는 0개부터 쓸 수 있고 단위(unit)를 따로 정합니다. 친구·가족은 지금처럼 '명' 단위입니다
-  function itemsEditor(field, value) {
+  function itemsEditor(field, value, frame) {
     const minItems = field.minItems || 0;
     const unit = field.unit || "명";
     let rows = (value || []).map((item, i) => ({ item: { ...item }, orig: i }));
@@ -1612,11 +1657,15 @@
       list.replaceChildren(...rows.map((row, i) => {
         const box = el("div", { class: "item-row", dataset: { item: `${field.key}-${i}` } }, el("b", { textContent: `${i + 1}` }),
           el("input", { type: "hidden", name: `field-${field.key}-${i}-orig`, value: String(row.orig) }));
+        // 사진에서 이름을 확정한 항목은 이름을 사진 칸에서만 바꿉니다 (여기서 고쳐도 서버가 확정한 이름으로 되돌려요)
+        const record = frame && field.linkedName && field.slotPrefix && row.orig >= 0 ? identityOf(frame, `${field.slotPrefix}${row.orig + 1}`) : null;
+        const locked = record && record.status === "confirmed";
         for (const sub of field.fields) {
+          const lock = locked && sub.key === field.linkedName;
           const input = sub.type === "multiline"
             ? el("textarea", { value: row.item[sub.key] || "", rows: 3, name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.placeholder || sub.default || "" })
-            : el("input", { type: "text", value: row.item[sub.key] || "", name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.placeholder || sub.default || "" });
-          box.append(editField(`${sub.label}${sub.required ? " (필수)" : ""}`, input, sub.max));
+            : el("input", { type: "text", value: row.item[sub.key] || "", name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.placeholder || sub.default || "", readOnly: lock });
+          box.append(editField(lock ? `${sub.label} · 사진 칸에서 확정` : `${sub.label}${sub.required ? " (필수)" : ""}`, input, sub.max));
         }
         box.append(el("button", { class: "btn btn-ghost btn-small item-remove", type: "button", textContent: "삭제", disabled: rows.length <= minItems,
           dataset: { itemRemove: `${field.key}-${i}` }, "aria-label": `${field.label} ${i + 1} 삭제`,
@@ -1770,7 +1819,7 @@
         el("small", { class: "hint", textContent: "필수 정보가 없으면 자유 구성으로 확인된 정보만 담아요." })));
     }
     form.append(editField("역할", el("input", { type: "text", value: card.role, name: "role" }), 10));
-    for (const field of tpl.fields) form.append(templateControl(field, card.fields[field.key]));
+    for (const field of tpl.fields) form.append(templateControl(field, card.fields[field.key], card.frame));
     bindChoices(form, tpl);
     if (hasSource(tpl)) {
       form.append(editField("출처", el("input", { type: "text", value: card.source, name: "source", placeholder: "출처: 공식 사이트 (모르면 비워 두세요)" }), 30));

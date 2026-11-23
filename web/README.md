@@ -240,6 +240,8 @@ AI 호출이 실패하면 데모 결과로 대신하지 않고 이유를 표시�
 - 실행 전에 `claude auth status`로 구독 로그인인지 확인합니다. API 키 관련 환경 변수는 지우고 실행합니다.
 - 빈 작업 폴더에서 실행하고, 조사 단계에는 `WebSearch`와 `WebFetch`만, 디자인 단계에는 도구를 주지 않습니다. 프로젝트 파일과 커넥터를 읽지 않습니다.
 - 로그인이 만료되면 터미널에서 `claude auth login`을 실행합니다.
+- **도구 허용이 빠지지 않게:** 지시문은 명령줄이 아니라 임시 파일(`--system-prompt-file`)로 넘기고 실행 후 지웁니다. 명령줄 인자에는 줄바꿈을 넣지 않습니다. npm으로 설치한 `claude.cmd`는 그 안의 `claude.exe`를 찾아 직접 실행합니다. `cmd.exe`는 줄바꿈 뒤 인자를 버려서, 예전에는 검색이 "Claude requested permissions to use WebSearch, but you haven't granted it yet."으로 모두 거절됐습니다 (2026-11-20).
+- CLI가 시작하면서 알려 주는 권한 모드와 도구 목록이 요청(`dontAsk`, 요청한 도구만)과 다르면 결과를 쓰지 않고 "실행 설정이 전달되지 않았어요" 오류로 멈춥니다.
 - 모델은 환경 변수 `SEMOGWI_CONTENT_MODEL`, `SEMOGWI_DESIGN_MODEL`로 바꿀 수 있습니다 (기본 `sonnet`).
 
 **한도 절약:** 조사는 작업당 1회입니다. 구성안 재생성은 저장된 조사 결과를 재사용하고, 디자인은 5장을 한 번에 만들며, 재시도는 1회입니다. 구성안을 고쳐도 지금 레이아웃에 들어가면 AI를 부르지 않습니다. 다운로드에서는 AI를 호출하지 않습니다.
@@ -263,7 +265,7 @@ AI 호출이 실패하면 데모 결과로 대신하지 않고 이유를 표시�
 
 이용 조건이 자동 수집을 금지한다고 확인된 사이트는 자동으로 접근하지 않습니다. 현재는 치이카와 마켓이 해당합니다. 이 주소를 넣으면 AI 호출 없이 자료 입력 화면으로 이동하고, 원하면 그 사이트를 뺀 다른 출처만 자동 조사할 수 있습니다. 다른 사이트의 자동 조사는 유지됩니다.
 
-목록은 `app/site_policy.json`에서 관리합니다. 등록 기준, 오류별 대기 시간, `fetch_product.py`와 `/cardnews`의 제한 사항은 `docs/site-access-policy.md`에 있습니다.
+목록은 `app/site_policy.json`에서 관리합니다. 등록 기준과 오류별 대기 시간은 `docs/site-access-policy.md`에 있습니다. 2026-11-20 팀 결정으로 터미널(`/cardnews`)도 같은 사이트를 읽지 않습니다. `fetch_product.py`는 삭제했고, 저장소의 `.claude/settings.json`이 같은 차단 규칙을 갖고 있습니다 (같은 문서 4절).
 
 ## 공식 사이트에 접속하지 못할 때
 
@@ -278,7 +280,8 @@ AI 호출이 실패하면 데모 결과로 대신하지 않고 이유를 표시�
 | `job.userMaterial` | 사용자가 입력한 원문 |
 | `research.sources[].origin`, `verification` | `user` / `user_provided`. 입력한 URL도 확인된 출처로 표시하지 않음 |
 | `research.facts[].origin` | `ai`(조사) 또는 `user`(사용자 제공) |
-| `research.fetchFailures` | 접속 실패한 사이트, 상태 코드, 시도 횟수 |
+| `research.fetchFailures` | 접속 실패한 사이트, 상태 코드, 시도 횟수, 오류 원문(`detail`) |
+| `research.searchFailures` | 실패한 검색어, 이유(검색 도구 오류·사용 거부·결과 없음), 오류 원문(`detail`) |
 
 - 사용자 자료만 근거인 카드는 출처 문구를 `출처: 판매처 (사용자 제공)`으로 서버가 맞추므로 PNG에도 남습니다. 직접 수정하면 사용자가 쓴 대로 들어갑니다.
 - 굿즈·팝업·콜라보에서 자료에 없는 숫자(가격, 날짜, 수량)가 문구에 있으면 1회 다시 쓰게 하고, 그래도 남으면 승인을 막습니다.

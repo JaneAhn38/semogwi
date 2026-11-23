@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from app import claude_cli, research, templates
+from app import ai_provider, claude_cli, research, templates
 from app.claude_cli import CliRun
 from tests.test_templates import BASE, OFFICIAL, Fake, api, get, start, valid_cards, wait  # noqa: F401  (픽스처는 아래에서 다시 정의)
 
@@ -190,7 +190,25 @@ def test_search_failures_are_recorded():
         {"type": "user", "tool_use_result": "Error", "message": {"content": [{"type": "tool_result", "tool_use_id": "a", "is_error": True, "content": "Search failed"}]}},
     ]
     parsed = claude_cli.parse_stream("\n".join(json.dumps(x) for x in lines))
-    assert parsed.search_failures == [{"query": "치이카와 생일", "reason": "검색 도구 오류"}]
+    assert parsed.search_failures == [{"query": "치이카와 생일", "reason": "검색 도구 오류", "detail": "Search failed"}]
+
+
+def test_search_and_fetch_failures_keep_error_text():
+    lines = [
+        {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "a", "name": "WebSearch", "input": {"query": "피카츄"}},
+                                                      {"type": "tool_use", "id": "b", "name": "WebFetch", "input": {"url": "https://example.com/x"}}]}},
+        # 내용이 블록 목록이고 태그로 감싼 경우, 내용이 비어 도구 결과 문자열에만 있는 경우
+        {"type": "user", "tool_use_result": "Error", "message": {"content": [{"type": "tool_result", "tool_use_id": "a", "is_error": True,
+                                                                              "content": [{"type": "text", "text": "<tool_use_error>Web search error: too_many_requests\n  try later</tool_use_error>"}]}]}},
+        {"type": "user", "tool_use_result": "Error: Request failed with status code 503", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "b", "is_error": True, "content": ""}]}},
+    ]
+    parsed = claude_cli.parse_stream("\n".join(json.dumps(x) for x in lines))
+    assert parsed.search_failures[0]["detail"] == "Web search error: too_many_requests try later"
+    assert parsed.fetches[0]["code"] == 0 and parsed.fetches[0]["detail"] == "Error: Request failed with status code 503"
+    assert ai_provider.fetch_failures(parsed)[0]["detail"] == "Error: Request failed with status code 503"
+    long = claude_cli.error_detail("x" * 1000)
+    assert len(long) == claude_cli.ERROR_DETAIL_MAX
 
 
 def test_empty_search_results_are_reported(client, fake):

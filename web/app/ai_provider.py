@@ -6,14 +6,16 @@ Pro 한도를 아끼기 위해 조사는 한 번만 하고(재생성은 저장�
 import json
 import re
 import os
+import shutil
 import time
+import uuid
 from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from . import claude_cli, detail_images, research as research_items, research_merge, site_policy, templates
-from .ai_rules import (CLASSIFY_SYSTEM, COMPOSE_BASE, COMPOSE_SYSTEM, DESIGN_SYSTEM, EXTRACT_SYSTEM, PEOPLE_SYSTEM, RESEARCH_BASE, RESEARCH_SYSTEM, REWRITE_BASE,
-                       REWRITE_SYSTEM, TEMPLATE_RESEARCH_BASE, TEMPLATE_TYPE_RULES, TONE_RULES, TYPE_RULES)
+from . import claude_cli, detail_images, friends, research as research_items, research_merge, site_policy, templates
+from .ai_rules import (CLASSIFY_SYSTEM, COMPOSE_BASE, COMPOSE_SYSTEM, DESIGN_SYSTEM, EXTRACT_SYSTEM, FRIENDS_RESEARCH_BASE, IDENTIFY_SYSTEM, PEOPLE_SYSTEM,
+                       RESEARCH_BASE, RESEARCH_SYSTEM, REWRITE_BASE, REWRITE_SYSTEM, TEMPLATE_RESEARCH_BASE, TEMPLATE_TYPE_RULES, TONE_RULES, TYPE_RULES)
 from .claude_cli import AIError
 from .design import BODY_FONTS, DISPLAY_FONTS, clean_theme, finalize_card
 from .imageinfo import image_size
@@ -143,6 +145,11 @@ _THEME = {
 }
 CLASSIFY_SCHEMA = {"type": "object", "properties": {"contentType": {"type": "string", "enum": list(CONTENT_TYPES)}, "reason": {"type": "string"}},
                    "required": ["contentType", "reason"], "additionalProperties": False}
+CONFIDENCE = ["높음", "중간", "낮음"]
+IDENTIFY_SCHEMA = {"type": "object", "properties": {
+    "name": {"type": "string"}, "confidence": {"type": "string", "enum": CONFIDENCE},
+    "candidates": {"type": "array", "items": {"type": "string"}}, "evidence": {"type": "string"}},
+    "required": ["name", "confidence", "candidates", "evidence"], "additionalProperties": False}
 
 DESIGN_ALL_SCHEMA = {"type": "object", "properties": {"theme": _THEME, "cards": {"type": "array", "items": _DESIGN_CARD}},
                      "required": ["theme", "cards"], "additionalProperties": False}
@@ -203,9 +210,11 @@ def _plan(job: dict) -> dict:
         research_schema["properties"]["items"] = {"type": "array", "items": item}
         research_schema["required"] = research_schema["required"] + ["items"]
         research_only = research_only_schema(type_id)
+    friend_rules = friends.rules_text(job)
     return {"research": research_schema, "research_only": research_only, "compose": _with_cards(COMPOSE_SCHEMA, card),
             "rewrite": _with_cards(REWRITE_SCHEMA, card),
-            "rules": f"{TEMPLATE_TYPE_RULES[type_id if job.get('templateSet') else f'{type_id}-legacy']}\n\n{templates.ai_field_rules(type_id, ids)}",
+            "rules": f"{TEMPLATE_TYPE_RULES[type_id if job.get('templateSet') else f'{type_id}-legacy']}\n\n{templates.ai_field_rules(type_id, ids)}"
+                     + (f"\n\n{friend_rules}" if friend_rules else ""),
             "research_system": (TEMPLATE_RESEARCH_BASE if job.get("templateSet") else RESEARCH_BASE) + TONE_RULES,
             "compose_system": COMPOSE_BASE + TONE_RULES,
             "rewrite_system": REWRITE_BASE + TONE_RULES}
@@ -266,9 +275,12 @@ def fetch_failures(parsed: claude_cli.CliRun) -> list[dict]:
         if 200 <= code < 400 or fetch.get("denied"):
             continue
         host = site_policy.host_of(fetch["url"])
-        item = grouped.setdefault((host, code), {"host": host, "url": fetch["url"], "code": code, "attempts": 0,
-                                                 **site_policy.classify_failure(code, fetch.get("retryAfter"))})
+        refused = bool(fetch.get("refused"))
+        # 도구가 거부했지만 우리 규칙은 아닌 경우: 사이트 탓인지 모르므로 대기 시간을 두지 않습니다
+        info = {"label": "읽기 실패", "blocked": False, "cooldown": 0} if refused else site_policy.classify_failure(code, fetch.get("retryAfter"))
+        item = grouped.setdefault((host, code, refused), {"host": host, "url": fetch["url"], "code": code, "attempts": 0, "detail": "", **info})
         item["attempts"] += 1
+        item["detail"] = item["detail"] or fetch.get("detail", "")
     return list(grouped.values())
 
 
@@ -454,6 +466,8 @@ def _card_errors(cards: dict, material: str | None = None, job: dict | None = No
     """
     errors = {}
     template_job = bool(job) and templates.is_template_job(job)
+    # 중심 캐릭터 이름(표지)을 찾을 카드 목록: 새로 쓴 카드 + 나머지 기존 카드
+    context = list(cards.values()) + [c for c in ((job or {}).get("outline") or {}).get("cards", []) if c["frame"] not in cards]
     flexible = template_job and templates.is_flexible(job)
     repeated = templates.repeated_values([cards[f] for f in FRAMES if f in cards]) if flexible else {}
     for frame, card in cards.items():
@@ -461,6 +475,7 @@ def _card_errors(cards: dict, material: str | None = None, job: dict | None = No
             # 유연한 구성에서는 카드가 고른 템플릿으로 검사합니다
             tpl = templates.TEMPLATES[card["template"]] if card.get("template") in templates.TEMPLATES else templates.template_for(job, frame)
             problems = [e for e in templates.check_card(card, tpl)["errors"] if "꼭 필요한 항목" not in e]
+            problems += friends.violations(job, frame, card, context)
             if flexible and frame != FRAMES[0] and templates.is_empty_card(card):
                 problems.append("이 카드에 담은 정보가 없다. 다른 카드와 겹치지 않는 확인된 정보로 다시 구성한다 (없는 사실은 만들지 않는다)")
             if repeated.get(frame):
@@ -1185,6 +1200,93 @@ class AIProvider:
         data = parsed.structured or {}
         return {"hint": str(data.get("hint") or ""), "hintSourceIds": [str(i) for i in data.get("hintSourceIds") or []],
                 "reveal": str(data.get("reveal") or ""), "calls": [claude_cli.call_meta("teaser", parsed)]}
+
+    # ---------- 친구 칸 사진 ----------
+    def identify_character(self, image_path: Path, topic: str) -> dict:
+        """친구 칸 사진 한 장의 캐릭터 이름 후보. 빈 작업 폴더에 사본을 두고 Read만 허용합니다."""
+        folder = claude_cli.WORK_DIR / "identify" / uuid.uuid4().hex
+        folder.mkdir(parents=True)
+        copy = folder / f"image{image_path.suffix}"
+        try:
+            shutil.copyfile(image_path, copy)
+            prompt = (f"이미지 파일: {copy}\n주제(작품을 짐작하는 참고일 뿐, 이름을 맞추는 근거로 쓰지 않는다): <topic>{topic}</topic>\n"
+                      "이 이미지 속 캐릭터 이름을 JSON으로 답한다.")
+            parsed = claude_cli.run(prompt, IDENTIFY_SYSTEM, IDENTIFY_SCHEMA, tools=("Read",), model=CONTENT_MODEL, effort="low",
+                                    timeout=180, budget_usd=0.3)
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
+        data = parsed.structured
+
+        def clean(value) -> str:
+            return " ".join(str(value or "").split())[:friends.NAME_MAX]
+
+        confidence = data.get("confidence") if data.get("confidence") in CONFIDENCE else "낮음"
+        name = clean(data.get("name")) if confidence != "낮음" else ""  # 확신이 낮으면 이름을 제안하지 않습니다
+        candidates = list(dict.fromkeys(filter(None, [name] + [clean(c) for c in data.get("candidates", [])])))[:3]
+        return {"suggested": name, "confidence": confidence, "candidates": candidates,
+                "evidence": " ".join(str(data.get("evidence") or "").split())[:120], "calls": [claude_cli.call_meta("identify", parsed)]}
+
+    def write_friends(self, job: dict, frame: str) -> dict:
+        """사진으로 확정한 친구에 맞춰 카드 한 장을 다시 씁니다. 저장된 조사 자료에 없는 친구만 짧게 다시 조사합니다."""
+        research = {**_new_research(), **(job.get("research") or {})}
+        names = [n for _, n in friends.confirmed(job, frame)]
+        lacking = friends.unknown_names(job, names)
+        current = {c["frame"]: c for c in job["outline"]["cards"]}
+        calls = []
+        instruction = "사진으로 확정한 친구에 맞춰 이 카드를 새로 쓴다. 자료에 있는 사실만 쓴다."
+        if lacking:
+            plan = _plan(job)
+            material = {"sources": [{k: s[k] for k in ("id", "title", "kind")} for s in research["sources"]], "facts": research["facts"]}
+            prompt = "\n".join([
+                f"오늘 날짜: {date.today().isoformat()}", f"유형: {CONTENT_TYPES[job['contentType']]}", f"<topic>{job['topic']}</topic>", plan["rules"],
+                "자료: " + json.dumps(material, ensure_ascii=False),
+                "현재 카드: " + json.dumps([_card_view(job, current[f]) for f in FRAMES], ensure_ascii=False),
+                f"자료에 없는 친구: {', '.join(lacking)}. 이 캐릭터들의 관계와 확인된 사실만 찾는다. 다른 캐릭터는 조사하지 않는다.",
+                f"다시 쓸 카드: {frame}. 이 카드만 cards에 담아 답한다. sources와 facts에는 이번에 새로 찾은 것만 적는다. {instruction}"])
+            parsed = claude_cli.run(prompt, FRIENDS_RESEARCH_BASE + TONE_RULES, plan["research"], tools=("WebSearch", "WebFetch"), model=CONTENT_MODEL,
+                                    effort="medium", timeout=300, budget_usd=0.8, disallowed=tuple(site_policy.deny_rules()))
+            data = parsed.structured
+            # 새 출처 id가 기존 조사 기록과 겹치지 않게 바꿉니다
+            taken = {s["id"] for s in research["sources"]}
+            rename = {}
+            for source in data.get("sources", []):
+                n = len(taken) + len(rename) + 1
+                while f"p{n}" in taken:
+                    n += 1
+                rename[source.get("id")] = f"p{n}"
+            new_sources = verify_sources([{**s, "id": rename[s.get("id")]} for s in data.get("sources", [])], parsed)
+            new_facts = [{"text": str(f.get("text", ""))[:300], "sourceIds": [rename[i] for i in f.get("sourceIds", []) if i in rename], "origin": "ai"}
+                         for f in data.get("facts", [])][:20]
+            research = {**research, "sources": research["sources"] + new_sources, "facts": _dedupe_facts(research["facts"] + new_facts),
+                        "fetchFailures": research["fetchFailures"] + fetch_failures(parsed),
+                        "searchFailures": research.get("searchFailures", []) + parsed.search_failures}
+            raw = [{**c, "sourceIds": [rename.get(i, i) for i in c.get("sourceIds", [])]} for c in data.get("cards", [])]
+            cards = _clean_cards(raw, {s["id"] for s in research["sources"]}, job)
+            calls.append(claude_cli.call_meta("friends", parsed))
+        else:
+            cards, meta = self._rewrite(job, research, [frame], current, instruction=instruction)
+            calls.append(meta)
+        if frame not in cards:
+            raise AIError("invalid", f"AI가 {frame} 문구를 만들지 못했어요. 다시 시도해 주세요.")
+
+        # 이름과 순서(N번째 항목 = N번 사진)는 서버가 정하므로 먼저 맞춘 뒤 규칙을 검사하고, 어기면 한 번만 고쳐 달라고 합니다
+        trial = json.loads(json.dumps(job))
+        trial["research"] = research
+        target = next(c for c in trial["outline"]["cards"] if c["frame"] == frame)
+        field_key = friends.slots(job, frame)[0]["identify"]
+        before = json.loads(json.dumps((current[frame].get("fields") or {}).get(field_key) or []))
+        target.update(cards[frame])
+        friends.keep_people(trial, frame, before)  # 사람 수·순서·이름은 그대로, AI는 관계·TMI만
+        friends.sync(trial)
+        errors = _card_errors({frame: target}, _strict_material(trial, research), trial)
+        if errors:
+            fixed, meta = self._rewrite(trial, research, [frame], {c["frame"]: c for c in trial["outline"]["cards"]}, errors)
+            target.update(fixed.get(frame, {}))
+            friends.keep_people(trial, frame, before)
+            friends.sync(trial)
+            calls.append(meta)
+        card = {k: target[k] for k in ("role", "fields", "source", "sourceIds")}
+        return {"card": card, "research": research if lacking else None, "calls": calls}
 
     # ---------- 디자인 ----------
     def _image_refs(self, job: dict, uploads: Path) -> tuple[dict, list[dict]]:

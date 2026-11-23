@@ -193,7 +193,9 @@ def test_cli_passes_deny_rules(monkeypatch, tmp_path):
     class Done:
         returncode = 0
         stderr = ""
-        stdout = json.dumps({"type": "result", "subtype": "success", "structured_output": {"a": 1}})
+        stdout = "\n".join(json.dumps(e) for e in [
+            {"type": "system", "subtype": "init", "permissionMode": "dontAsk", "tools": ["StructuredOutput", "WebFetch"]},
+            {"type": "result", "subtype": "success", "structured_output": {"a": 1}}])
 
     def fake_run(args, **kwargs):
         seen["args"] = args
@@ -318,7 +320,40 @@ def test_denied_fetch_is_not_reported_as_site_failure():
             {"type": "tool_result", "tool_use_id": "t", "is_error": True, "content": "WebFetch denied access to domain:shop.chiikawamarket.jp."}]}},
     ]
     parsed = claude_cli.parse_stream("\n".join(json.dumps(x) for x in lines))
-    assert parsed.fetches[0].get("denied") is True and ai_provider.fetch_failures(parsed) == []
+    assert parsed.fetches[0].get("denied") is True and parsed.fetches[0]["rule"] == "restricted"
+    assert ai_provider.fetch_failures(parsed) == []
+
+
+def _refused_fetch(url, text):
+    lines = [
+        {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t", "name": "WebFetch", "input": {"url": url}}]}},
+        {"type": "user", "tool_use_result": f"Error: {text}", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t", "is_error": True, "content": text}]}},
+    ]
+    return claude_cli.parse_stream("\n".join(json.dumps(x) for x in lines))
+
+
+def test_refusal_outside_our_rules_is_a_read_failure_without_cooldown():
+    # 2026-11-18 나무위키: 우리 차단 목록에 없는데 "접근 제한 규칙"으로 표시됐던 경우
+    url = "https://namu.wiki/w/%ED%94%BC%EC%B9%B4%EC%B8%84"
+    parsed = _refused_fetch(url, "Permission to fetch namu.wiki was not allowed")
+    fetch = parsed.fetches[0]
+    assert not fetch.get("denied") and fetch["refused"] is True
+    failure = ai_provider.fetch_failures(parsed)[0]
+    assert failure["label"] == "읽기 실패" and failure["cooldown"] == 0 and not failure["blocked"]
+    assert failure["detail"] == "Permission to fetch namu.wiki was not allowed"
+    site_policy.record_failures([failure])
+    assert site_policy.cooldown_seconds(url) == 0  # 도구 쪽 실패로 그 사이트를 막지 않습니다
+
+
+def test_refusal_for_cooling_site_counts_as_our_rule():
+    site_policy.record_failures([{"host": "brand-official.example", "cooldown": 600, "code": 429}])
+    parsed = _refused_fetch(OTHER, "WebFetch denied access to domain:brand-official.example.")
+    assert parsed.fetches[0]["denied"] is True and parsed.fetches[0]["rule"] == "cooldown"
+    assert ai_provider.fetch_failures(parsed) == []
+    assert site_policy.blocked_by_rule("https://shop.chiikawamarket.jp/x") == "restricted"
+    assert site_policy.blocked_by_rule("https://namu.wiki/w/x") == ""
+    site_policy.COOLDOWN_FILE.unlink(missing_ok=True)
 
 
 def test_cooldown_is_shared_across_jobs(client, fake):
@@ -367,6 +402,20 @@ def test_broken_cooldown_file_is_ignored():
 def test_options_list_restricted_sites(client):
     sites = client.get("/api/options").json()["restrictedSites"]
     assert sites == [{"domain": "chiikawamarket.jp", "name": "치이카와 마켓"}]
+
+
+def test_terminal_settings_deny_every_restricted_site():
+    # 터미널(/cardnews 등)의 Claude Code도 웹앱과 같은 차단 규칙을 따르는지. 금지 사이트를 추가하면 .claude/settings.json에도 넣어야 합니다
+    from pathlib import Path
+    settings = Path(__file__).resolve().parents[2] / ".claude" / "settings.json"
+    deny = json.loads(settings.read_text(encoding="utf-8"))["permissions"]["deny"]
+    for site in site_policy.restricted_sites():
+        assert f"WebFetch(domain:{site['domain']})" in deny and f"WebFetch(domain:*.{site['domain']})" in deny
+
+
+def test_product_fetch_script_is_removed():
+    from pathlib import Path
+    assert not (Path(__file__).resolve().parents[2] / "scripts" / "fetch_product.py").exists()
 
 
 def test_team_files_are_documented():
