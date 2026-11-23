@@ -20,7 +20,7 @@ from .claude_cli import AIError
 from .design import BODY_FONTS, DISPLAY_FONTS, clean_theme, finalize_card
 from .imageinfo import image_size
 from .layout import LayoutError
-from .outline import SOURCE_MAX, check_card, unsupported_numbers
+from .outline import SOURCE_MAX, SOURCE_PREFIX, check_card, unsupported_numbers
 from .provider import CONTENT_TYPES, FRAMES
 
 CONTENT_MODEL = os.environ.get("SEMOGWI_CONTENT_MODEL", "sonnet")
@@ -32,6 +32,14 @@ DESIGN_MODEL = os.environ.get("SEMOGWI_DESIGN_MODEL", "sonnet")
 FRAME_ENUM = {"type": "string", "enum": FRAMES}
 USER_SOURCE_ID = "user1"
 USER_MATERIAL_LABELS = {"name": "이름", "price": "가격", "features": "특징", "seller": "판매처", "pasted": "붙여 넣은 공식 페이지 내용"}
+MATERIAL_SOURCES_MAX = 3  # 자료 직접 입력의 출처 묶음 (URL · 출처 종류 · 복사한 내용)
+MATERIAL_KIND_TITLES = {"official": "사용자가 입력한 자료 (공식 출처라고 입력 · 검증 안 됨)", "namuwiki": "나무위키에서 옮긴 자료 (사용자 제공)",
+                        "other": "사용자가 입력한 자료 (기타 출처)", "": "사용자가 입력한 자료"}
+# 사용자가 '현재 자료로 구성안 작성'을 고른 경우 (또는 자료를 직접 낸 경우)
+FORCE_COMPOSE_RULE = ("\n[현재 자료로 작성] 사용자가 자료가 부족해도 지금 자료로 구성안을 쓰기로 했다. status는 ok로 하고 card-01 ~ card-05를 모두 쓴다."
+                      "\n- 찾지 못한 정보(날짜·가격·장소·시간·상품 정보 등)는 만들지 않고 칸을 비운다. 추측하지 않는다."
+                      "\n- 기사·위키 등 2차 자료에서 확인한 값도 쓸 수 있다. 출처 표기 그대로 옮기고 그 출처 id를 sourceIds에 정확히 적는다.")
+FORCE_FAILED = "AI가 지금 자료로 카드를 만들지 못했어요. 자료를 조금 더 입력하거나 다시 시도해 주세요."
 
 _CARD_SCHEMA = {
     "type": "object",
@@ -55,8 +63,9 @@ RESEARCH_SCHEMA = {
         "sources": {"type": "array", "items": {
             "type": "object",
             "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "url": {"type": "string"},
-                           "kind": {"type": "string", "enum": ["official", "secondary"]}},
-            "required": ["id", "title", "url", "kind"], "additionalProperties": False}},
+                           "kind": {"type": "string", "enum": ["official", "secondary"]},
+                           "publishedAt": {"type": "string"}},  # 원문 게시일 (보이면 YYYY-MM-DD, 아니면 빈 문자열)
+            "required": ["id", "title", "url", "kind", "publishedAt"], "additionalProperties": False}},
         "facts": {"type": "array", "items": {
             "type": "object",
             "properties": {"text": {"type": "string"}, "sourceIds": {"type": "array", "items": {"type": "string"}}},
@@ -258,9 +267,11 @@ def verify_sources(sources: list[dict], parsed: claude_cli.CliRun, content_type:
             verification = "mirror"  # 원본이 아닌 미러 사이트: 근거로 인정하지 않습니다
         registered = bool(key) and site_policy.is_registered_official(url)
         kind = "official" if registered else "secondary" if aux else source.get("kind", "secondary")
+        published = str(source.get("publishedAt") or "").strip()
         entry = {"id": str(source.get("id", ""))[:40], "title": str(source.get("title", ""))[:200], "url": url if key else "",
                  "kind": kind, "verification": verification, "origin": "ai",
-                 "officialBasis": "registered" if registered else "ai" if kind == "official" else None}
+                 "officialBasis": "registered" if registered else "ai" if kind == "official" else None,
+                 "publishedAt": published if re.fullmatch(r"\d{4}-\d{2}-\d{2}", published) else ""}  # 원문 게시일. 조사일은 조사 기록에
         if aux:
             entry["auxiliary"] = aux
         result.append(entry)
@@ -376,16 +387,39 @@ def policy_stop_research(site: dict) -> dict:
     return research
 
 
+def _listed_item_texts(research: dict) -> list[str]:
+    """원문을 읽지 못한 검색 결과에서 온 값: 조사 항목의 값과 근거 문장(quote)이 서로 맞는 것만 (값의 숫자가 모두 근거 문장에 있음).
+    서버는 검색 결과 원문(요약문)을 받지 못해 근거 문장 자체를 확인할 수 없습니다. 이 값은 '검색 결과(원문 미확인)'로 표시됩니다."""
+    texts = []
+    for item in research.get("items") or []:
+        for entry in [item] + list(item.get("alternatives") or []):
+            if not entry.get("value") or not entry.get("quote"):
+                continue
+            ids = set(entry.get("sourceIds") or [])
+            listed = {s["id"] for s in research.get("sources", []) if s["id"] in ids and s.get("verification") == "search_result"}
+            if not listed:
+                continue
+            numbers = [n.replace(",", "") for n in re.findall(r"\d[\d,.]*", entry["value"])]
+            quote = entry["quote"].replace(",", "")
+            if all(n.rstrip(".") in quote for n in numbers):
+                texts.append(entry["value"])
+    return texts
+
+
 def _trusted_ids(research: dict) -> set[str]:
     """숫자를 대조할 때 믿을 수 있는 근거: 실제로 읽은 페이지와 사용자 제공 자료입니다. 보조 출처(나무위키)는 가격·일정 근거가 아니므로 뺍니다."""
-    return {s["id"] for s in research.get("sources", []) if s["verification"] in ("fetched", "user_provided", "image") and not s.get("auxiliary")}
+    # 공식 여부와 관계없이 읽은 페이지(공식·2차·나무위키)·사용자 자료·이미지 판독. 검색 결과는 _listed_item_texts로 따로 (근거 문장이 맞는 값만).
+    # 미러와 조회 기록에 없는 출처는 근거가 아닙니다
+    return {s["id"] for s in research.get("sources", []) if s["verification"] in ("fetched", "user_provided", "image")}
 
 
 def material_text(research: dict | None, material: dict | None) -> str:
     """문구의 숫자를 대조할 근거. 읽은 페이지의 사실과 사용자가 준 자료만 포함합니다."""
     trusted = _trusted_ids(research or {})
     parts = [f["text"] for f in (research or {}).get("facts", []) if set(f.get("sourceIds", [])) & trusted]
+    parts += _listed_item_texts(research or {})
     parts += [str(v) for k, v in (material or {}).items() if k in USER_MATERIAL_LABELS]
+    parts += [str((material or {}).get("extra") or "")] + [str(b.get("text") or "") for b in (material or {}).get("sources") or []]
     return "\n".join(parts)
 
 
@@ -499,18 +533,82 @@ def _strict_material(job: dict, research: dict) -> str | None:
     return None if job["contentType"] == "character" else material_text(research, job.get("userMaterial"))
 
 
-def _label_user_sources(cards: dict, research: dict, material: dict | None) -> None:
-    """사용자 자료만 근거인 카드는 출처 문구에도 사용자 제공임을 남깁니다. 직접 확인한 것처럼 보이지 않게 합니다."""
-    kinds = {s["id"]: s["verification"] for s in research["sources"]}
-    seller = ((material or {}).get("seller") or "").strip()
-    for card in cards.values():
-        if card.get("template", "").endswith("-cover"):
-            continue  # 표지에는 출처를 표시하지 않습니다
-        states = [kinds.get(i) for i in card["sourceIds"]]
-        if "user_provided" not in states or "fetched" in states or "사용자 제공" in card["source"]:
+def material_pasted(material: dict | None) -> str:
+    """AI에게 원문으로 함께 주는 사용자 자료 (예전 붙여 넣기 칸 + 출처 묶음의 복사한 내용)."""
+    material = material or {}
+    parts = [str(material.get("pasted") or "")] + [str(b.get("text") or "") for b in material.get("sources") or []]
+    return "\n\n".join(p for p in parts if p.strip())[:8000]
+
+
+def user_material_sources(material: dict | None, content_type: str) -> tuple[list[dict], list[dict]]:
+    """자료 직접 입력을 출처와 사실로 바꿉니다. 모두 사용자 제공(user_provided)이고, '공식'을 골라도 공식 확인으로 만들지 않습니다.
+
+    user1: 자유 입력('추가로 알려주고 싶은 정보') + 세부 항목 + 예전 붙여 넣기 칸. user2~user4: 출처 묶음 (URL · 출처 종류 · 복사한 내용)
+    """
+    material = material or {}
+    sources, facts = [], []
+
+    def add(source_id: str, kind: str, url: str, texts: list[str]) -> None:
+        source = {"id": source_id, "title": MATERIAL_KIND_TITLES.get(kind, MATERIAL_KIND_TITLES[""]), "url": url, "kind": "user",
+                  "verification": "user_provided", "origin": "user", "userKind": kind}
+        aux = site_policy.auxiliary_tag(url, content_type) if url else None
+        if kind == "namuwiki" or aux:
+            source["auxiliary"] = aux or site_policy.auxiliary_tag("https://namu.wiki/", content_type)  # 나무위키: 보조 출처 규칙
+            source["title"] = MATERIAL_KIND_TITLES["namuwiki"]
+            source["userKind"] = "namuwiki"
+        sources.append(source)
+        facts.extend({"text": t[:300], "sourceIds": [source_id], "origin": "user"} for t in texts if t.strip())
+
+    first = [f"{label}: {material[key]}" for key, label in USER_MATERIAL_LABELS.items() if material.get(key) and key != "pasted"]
+    if material.get("extra"):
+        first.insert(0, f"사용자가 알려 준 정보: {material['extra']}")
+    if first or material.get("pasted"):
+        add(USER_SOURCE_ID, str(material.get("sourceKind") or ""), str(material.get("sourceUrl") or ""), first)
+    for n, block in enumerate((material.get("sources") or [])[:MATERIAL_SOURCES_MAX], 2):
+        if not (block.get("url") or block.get("text")):
             continue
-        labelled = f"출처: {seller} (사용자 제공)"
-        card["source"] = labelled if seller and len(labelled) <= SOURCE_MAX else "출처: 사용자 제공 자료"
+        add(f"user{n}", str(block.get("kind") or ""), str(block.get("url") or ""),
+            [f"출처 {n - 1}에서 옮긴 내용: {block['text']}"] if block.get("text") else [])
+    return sources, facts
+
+
+def _label_user_sources(cards: dict, research: dict, material: dict | None = None, content_type: str = "goods") -> None:
+    """카드의 출처 문구는 AI가 쓰지 않고, 그 카드가 실제로 인용한 출처 이름만 서버가 적습니다 (실제 근거와 다르지 않게).
+    사용자 자료는 '사용자 제공'(사용자가 준 출처 주소가 있으면 그 사이트 주소를 함께), 상세 이미지는 '상세 이미지'.
+    30자를 넘으면 앞의 것만 적고 '외 N곳'을 붙이며, 이름 하나가 너무 길면 줄여서라도 적습니다 (빈칸으로 두지 않음)."""
+    by_id = {s["id"]: s for s in research.get("sources", [])}
+    for card in cards.values():
+        if card.get("template", "").endswith("-cover") or card.get("frame") == FRAMES[0]:
+            continue  # 표지에는 출처를 표시하지 않습니다
+        names = []
+        for source_id in card.get("sourceIds") or []:
+            src = by_id.get(source_id)
+            if not src or src.get("verification") in ("unverified", "mirror", "restricted"):
+                continue
+            if src.get("verification") == "user_provided":
+                host = site_policy.host_of(src.get("url", "")) if src.get("url") else ""
+                name = f"사용자 제공 · {host}" if host else "사용자 제공"  # 사용자가 준 출처 주소만 (판매처 칸 값은 출처가 아님)
+                if len(SOURCE_PREFIX + name) > SOURCE_MAX:
+                    name = "사용자 제공"  # 주소가 길면 주소를 자르지 않고 빼서 적습니다
+            elif src.get("verification") == "image":
+                name = "상세 이미지"
+            else:
+                title = " ".join(str(src.get("title") or "").split())
+                name = title if 0 < len(title) <= 14 else (site_policy.host_of(src.get("url", "")) or title[:14])
+            if name and name not in names:
+                names.append(name)
+        line = ""
+        for n in range(len(names), 0, -1):
+            rest = len(names) - n
+            candidate = SOURCE_PREFIX + " · ".join(names[:n]) + (f" 외 {rest}곳" if rest else "")
+            if len(candidate) <= SOURCE_MAX:
+                line = candidate
+                break
+        if names and not line:
+            # 출처 이름 하나가 너무 길어도 빈칸으로 두지 않고 글자 수에 맞춰 줄입니다
+            rest = f" 외 {len(names) - 1}곳" if len(names) > 1 else ""
+            line = SOURCE_PREFIX + names[0][:SOURCE_MAX - len(SOURCE_PREFIX) - len(rest)] + rest
+        card["source"] = line
 
 
 def merge_images(job: dict, research: dict, extraction: dict | None) -> None:
@@ -725,12 +823,18 @@ class AIProvider:
         summary = research_merge.tag_round(base, merged, round_no)
         return {"research": merged, "summary": summary, "calls": calls}
 
-    def compose_from_research(self, job: dict, research: dict, extraction: dict | None = None, core_only: bool = False) -> dict:
-        """2단계: 저장된 조사 결과(사실·출처·조사 항목)만으로 카드 5장을 씁니다. 웹 도구를 주지 않습니다."""
-        raw_cards, calls = self._compose_cards(job, research, "", core_only=core_only, keep_missing=True)
+    def compose_from_research(self, job: dict, research: dict, extraction: dict | None = None, core_only: bool = False,
+                              force: bool = False) -> dict:
+        """2단계: 저장된 조사 결과(사실·출처·조사 항목)만으로 카드 5장을 씁니다. 웹 도구를 주지 않습니다.
+
+        force: 사용자가 '현재 자료로 구성안 작성'을 골랐습니다. 부족 판단으로 다시 막지 않고, 확인된 사실과 참고값만으로 씁니다.
+        """
+        raw_cards, calls = self._compose_cards(job, research, "", core_only=core_only, keep_missing=True, force=force)
         if raw_cards is None:
+            if force:
+                raise AIError("invalid", FORCE_FAILED)
             return {"status": "need_material", "research": research, "calls": calls, "extraction": extraction}
-        if core_only:
+        if core_only or force:
             research["partial"] = True
         cards = _clean_cards(raw_cards, {s["id"] for s in research["sources"]}, job)
         lacking = [f for f in FRAMES if f not in cards]
@@ -743,6 +847,7 @@ class AIProvider:
             cards.update(fixed)
             calls.append(meta)
             _fill_people_cards(cards, research)
+        _label_user_sources(cards, research)
         return {"status": "ok", "research": research, "cards": [cards[f] for f in FRAMES], "calls": calls, "extraction": extraction}
 
     def _web_research(self, job: dict, extraction: dict | None, separate: bool, context: str = ""):
@@ -869,6 +974,7 @@ class AIProvider:
             cards.update(fixed)
             calls.append(meta)
             _fill_people_cards(cards, research)
+        _label_user_sources(cards, research)
         return {"status": "ok", "research": research, "cards": [cards[f] for f in FRAMES], "calls": calls, "extraction": extraction}
 
     def _research_people(self, job: dict, research: dict, known: list[dict] | None = None) -> list[dict]:
@@ -1026,7 +1132,7 @@ class AIProvider:
                                     "quote": " ".join(str(raw.get("quote", "")).split())[:160], "sourceIds": ids, "state": state})
 
     def _compose_cards(self, job: dict, research: dict, pasted: str, core_only: bool = False,
-                       keep_missing: bool = False) -> tuple[list | None, list[dict]]:
+                       keep_missing: bool = False, force: bool = False) -> tuple[list | None, list[dict]]:
         """research의 facts만으로 카드 5장을 씁니다. 웹 도구를 주지 않습니다. 쓸 수 없으면 (None, calls).
 
         keep_missing: 조사 단계에서 정리한 '못 찾은 정보' 목록을 지우지 않고 구성안 단계의 목록을 더합니다.
@@ -1040,6 +1146,8 @@ class AIProvider:
                  if i["state"] in research_items.EMPTY_STATES]
         if empty:
             core += f"\n확인되지 않은 항목(문구로 채우지 않고 칸을 비운다): {', '.join(empty)}"
+        if force:
+            core += FORCE_COMPOSE_RULE
         prompt = (f"유형: {CONTENT_TYPES[type_id]}\n<topic>{job['topic']}</topic>\n{plan['rules']}\n"
                   "이 작업에서는 origin이 user인 자료도 근거로 쓸 수 있다. 다만 사용자 제공이라고 출처에 밝힌다.\n"
                   "origin이 image인 자료는 상세 이미지에서 AI가 읽은 것이다. 근거 id(img…)를 sourceIds에 적는다.\n"
@@ -1053,6 +1161,9 @@ class AIProvider:
         found = [str(m)[:200] for m in data.get("missing", [])]
         # 핵심 항목만으로 쓰는 경우에는 조사 단계에서 못 찾은 선택 정보 목록도 남깁니다
         research["missing"] = (list(dict.fromkeys(research.get("missing", []) + found)) if core_only or keep_missing else found)[:10]
+        if data.get("status") == "insufficient" and force:
+            # 사용자가 지금 자료로 진행을 골랐으면 부족 판단으로 다시 막지 않습니다. 카드가 없을 때만 실패로 알립니다
+            return (data.get("cards") or None), calls
         if data.get("status") == "insufficient":
             if not core_only and research_items.core_status(type_id, research.get("items"))["ready"]:
                 # 핵심 항목이 확인됐는데 AI가 부족하다고 답하면 한 번만 확인된 정보로 쓰게 합니다
@@ -1071,24 +1182,21 @@ class AIProvider:
         keep = verified | {s["id"] for s in base["sources"] if s["id"] == research_items.USER_NOTES_ID}  # 입력 화면의 참고 자료도 유지
         sources = [s for s in base["sources"] if s["id"] in keep]
         facts = [f for f in base["facts"] if set(f.get("sourceIds", [])) & keep]
-        if any(material.get(k) for k in USER_MATERIAL_LABELS):
-            source = {"id": USER_SOURCE_ID, "title": material.get("seller") or "사용자 제공 자료", "url": material.get("sourceUrl", ""),
-                      "kind": "user", "verification": "user_provided", "origin": "user"}
-            aux = site_policy.auxiliary_tag(source["url"], job["contentType"]) if source["url"] else None
-            if aux:
-                source["auxiliary"] = aux  # 나무위키에서 옮긴 자료: 참고 자료 입력과 같은 보조 출처 규칙
-            sources.append(source)
-            facts += [{"text": f"{label}: {str(material[key])[:300]}", "sourceIds": [USER_SOURCE_ID], "origin": "user"}
-                      for key, label in USER_MATERIAL_LABELS.items() if material.get(key) and key != "pasted"]
+        new_sources, new_facts = user_material_sources(material, job["contentType"])
+        sources += new_sources
+        facts += new_facts
         research = {**base, "sources": sources, "facts": facts}
         if base.get("items"):
             research["items"] = base["items"]
         merge_images(job, research, extraction)
 
-        raw_cards, more = self._compose_cards(job, research, str(material.get("pasted", "")))
+        # 자료를 직접 냈으면 같은 부족 판단으로 다시 막지 않습니다 (force). 찾지 못한 값은 여전히 비웁니다
+        raw_cards, more = self._compose_cards(job, research, material_pasted(material), keep_missing=True, force=True)
         calls += more
         if raw_cards is None:
-            return {"status": "need_material", "research": research, "calls": calls, "extraction": extraction}
+            raise AIError("invalid", FORCE_FAILED)
+        if not research_items.core_status(job["contentType"], research.get("items"))["ready"]:
+            research["partial"] = True
         cards = _clean_cards(raw_cards, {s["id"] for s in research["sources"]}, job)
         lacking = [f for f in FRAMES if f not in cards]
         if lacking:
@@ -1101,7 +1209,7 @@ class AIProvider:
             cards.update(fixed)
             calls.append(meta)
             _fill_people_cards(cards, research)
-        _label_user_sources(cards, research, material)
+        _label_user_sources(cards, research, material, job["contentType"])
         return {"status": "ok", "research": research, "cards": [cards[f] for f in FRAMES], "calls": calls, "extraction": extraction}
 
     def classify_type(self, job: dict) -> dict:
@@ -1130,7 +1238,7 @@ class AIProvider:
             fixed, meta2 = self._rewrite(job, research, list(errors), cards, errors)
             cards.update(fixed)
             calls.append(meta2)
-        _label_user_sources(cards, research, job.get("userMaterial"))
+        _label_user_sources(cards, research, job.get("userMaterial"), job["contentType"])
         return {"cards": [cards[f] for f in FRAMES], "calls": calls}
 
     def _rewrite(self, job: dict, research: dict, frames: list[str], current: dict, errors: dict | None = None,
@@ -1167,7 +1275,7 @@ class AIProvider:
             fixed, meta2 = self._rewrite(job, research, list(errors), {**current, **cards}, errors)
             cards.update(fixed)
             calls.append(meta2)
-        _label_user_sources(cards, research, job.get("userMaterial"))
+        _label_user_sources(cards, research, job.get("userMaterial"), job["contentType"])
         return {"cards": cards, "calls": calls}
 
     def write_next_teaser(self, job: dict, frame: str) -> dict:
@@ -1285,6 +1393,7 @@ class AIProvider:
             friends.keep_people(trial, frame, before)
             friends.sync(trial)
             calls.append(meta)
+        _label_user_sources({frame: target}, research)
         card = {k: target[k] for k in ("role", "fields", "source", "sourceIds")}
         return {"card": card, "research": research if lacking else None, "calls": calls}
 

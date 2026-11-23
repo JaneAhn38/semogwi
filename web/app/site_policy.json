@@ -14,9 +14,14 @@
       "domain": "namu.wiki",
       "name": "나무위키",
       "label": "나무위키(보조 출처)",
-      "items": {"character": ["personality", "friends", "family", "relations", "tmi"]},
-      "mirrors": ["namu.moe"],
-      "checked": "2026-11-20 robots.txt는 문서(/w/) 허용. 이용약관 원문은 403으로 확인 못 함. 문서 요청은 Cloudflare 403"
+      "mirrors": [
+        "namu.moe"
+      ],
+      "checked": "2026-11-20 robots.txt는 문서(/w/) 허용. 이용약관 원문은 403으로 확인 못 함. 문서 요청은 Cloudflare 403",
+      "autoFetch": [
+        "character"
+      ],
+      "note": "모든 콘텐츠 유형에서 참고 자료(2차 자료)로 인정. 자동 읽기(WebFetch)는 캐릭터 소개만 — 다른 유형은 사용자가 직접 준 자료만"
     }
   ]
 }

@@ -886,7 +886,7 @@ def ai_flexible_rules(content_type: str) -> str:
              "디자인은 템플릿이 정한다. 카드마다 template에 템플릿 id를 적고 그 템플릿의 fields만 채운다. 글자 수는 공백 포함이며 직접 세어 확인한다.",
              f"card-01 (표지, template은 {cover['id']}로 고정) fields, source는 빈 문자열:"]
     lines += [_describe(f) for f in cover["fields"]]
-    lines.append("card-02 ~ card-05: 아래 템플릿 중 확인된 자료에 가장 맞는 것을 고른다. source는 30자 이내, 반드시 '출처: '로 시작.")
+    lines.append("card-02 ~ card-05: 아래 템플릿 중 확인된 자료에 가장 맞는 것을 고른다. source는 30자 이내, 반드시 '출처: '로 시작 (서버가 sourceIds의 실제 출처 이름으로 다시 적으니 꾸며 쓰지 않는다).")
     for tid in body_choices(content_type):
         tpl = TEMPLATES[tid]
         required = [f["label"] for f in tpl["fields"] if f.get("required")]
@@ -918,7 +918,7 @@ def ai_field_rules(content_type: str, ids: list[str] | None = None) -> str:
         return ai_flexible_rules(content_type)
     lines = ["[카드 형식: 고정 템플릿]", "디자인은 정해져 있다. 각 카드의 fields만 채운다. 글자 수는 공백 포함이며 직접 세어 확인한다."]
     for frame, tpl in zip(FRAMES, _set_templates(content_type, ids)):
-        source = "source는 빈 문자열" if not has_source(tpl) else "source는 30자 이내, 반드시 '출처: '로 시작"
+        source = "source는 빈 문자열" if not has_source(tpl) else "source는 30자 이내, 반드시 '출처: '로 시작 (서버가 sourceIds의 실제 출처 이름으로 다시 적음)"
         lines.append(f"{frame} ({tpl['label']}) fields, {source}:")
         lines += [_describe(f) for f in tpl["fields"] if not f.get("userOnly")] or ["  - 채울 필드 없음 (사용자가 구성안에서 입력하는 카드)"]
     lines += ["- 대괄호 자리표시([이름] 등), MM·DD·YYYY 같은 틀 문자는 쓰지 않는다. 모르는 값은 빈 문자열이나 빈 배열로 둔다.",

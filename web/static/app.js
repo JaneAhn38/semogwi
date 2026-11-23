@@ -40,6 +40,36 @@
     character: { name: "캐릭터 이름", price: "관련 가격", seller: "공식 채널", features: "특징" },
   };
 
+  // 자료 직접 입력: 유형별 안내와 자유 입력 예시
+  const MATERIAL_GUIDES = {
+    popup: { guide: "공식 공지에서 확인한 행사 이름, 기간, 장소, 운영 시간, 입장·예약 방법을 알려 주세요. 모르는 내용은 비워 두세요.",
+      example: "예: 치이카와 클리닉 팝업 / 2026.11.27 ~ 12.31 / 더현대 서울 5층 / 사전 예약제(네이버 예약)" },
+    goods: { guide: "상품명, 가격(표기 그대로), 구성·종류, 판매처, 판매 기간처럼 공식 페이지에서 확인한 내용을 알려 주세요.",
+      example: "예: 치이카와 코인 실린더 / ¥440(세금 포함) / 전 8종 랜덤 / 치이카와 마켓 / 11월 20일 발매" },
+    collab: { guide: "콜라보 상대, 기간, 장소·판매처, 메뉴·상품, 특전과 받는 조건을 알려 주세요.",
+      example: "예: 치이카와 × ○○카페 / 12.1 ~ 12.31 / 전국 매장 / 음료 1잔당 코스터 1장 랜덤 증정" },
+    character: { guide: "캐릭터 이름, 등장 작품, 성격·특징, 친구·가족, 공식 프로필처럼 확인한 내용을 알려 주세요.",
+      example: "예: 하치와레는 치이카와의 친구예요. 밝고 긍정적이고 노래를 좋아해요." },
+  };
+  const NOTE_KINDS = [["", "출처 종류 선택 안 함"], ["official", "공식 출처"], ["namuwiki", "나무위키"], ["other", "기타"]];
+  const SOURCE_MAX = 3;
+  const warnedDownloads = new Set();  // 미확인 정보 확인창은 작업마다 처음 저장할 때 한 번만
+
+  // 자료 부족 안내: 무엇이 왜 부족한지 (진행을 막지 않음). 못 찾은 정보와 근거가 약한 정보(출처 충돌 등)를 나눠 보여 줍니다
+  // 공식 확인 여부로는 부족하다고 보지 않습니다 (2차 자료·값이 적힌 검색 결과도 자료)
+  function gapBox(node, gap, title, note) {
+    const rows = (gap && gap.rows) || [];
+    node.hidden = !rows.length && !note;
+    if (node.hidden) return;
+    const missing = rows.filter((r) => r.kind === "not_found");
+    const pending = rows.filter((r) => r.kind === "needs_official");
+    const line = (r) => el("li", {}, el("span", { class: `gap-kind${r.kind === "not_found" ? " is-missing" : ""}`, textContent: r.kind === "not_found" ? "찾지 못함" : "근거 약함" }),
+      `${r.label}${r.importance === "core" ? " (핵심)" : ""} · ${r.reason}${r.value ? ` · 현재 값: ${r.value}` : ""}`);
+    node.replaceChildren(el("h3", { textContent: title }),
+      ...(rows.length ? [el("ul", {}, ...pending.map(line), ...missing.map(line))] : []),
+      el("small", { textContent: note || "찾지 못한 정보는 카드에 만들어 넣지 않고 비워 둬요. 기사·위키 같은 2차 자료도 자료로 써요. 출처끼리 다른 값은 구성안에서 경고로 알려 드려요." }));
+  }
+
   let options = null;
   let job = null;
   let viewStep = 1;
@@ -277,7 +307,12 @@
   // 정보별 근거: 어느 페이지에서 언제 확인했는지, 페이지를 실제로 읽었는지, 근거 문장을 검증했는지(아직 안 함)를 따로 보여 줍니다
   function evidenceLine(record) {
     const link = /^https?:\/\//.test(record.url) ? el("a", { href: record.url, target: "_blank", rel: "noopener noreferrer", textContent: record.title || record.url }) : el("span", { textContent: record.title || record.sourceId });
-    return el("span", { class: "evidence" }, link, record.at ? ` · ${record.at.replace("T", " ")}` : "");
+    // 출처 종류 · 원문 게시일 · 조사일 · 원문을 읽었는지(검색 결과만인지)를 구분해 보여 줍니다
+    const kind = record.verification === "user_provided" ? "사용자 제공" : record.verification === "image" ? "상세 이미지"
+      : record.kind === "official" ? "공식" : "2차 자료";
+    const parts = [kind, record.publishedAt ? `원문 게시일 ${record.publishedAt}` : "", record.at ? `조사일 ${record.at.slice(0, 10)}` : "",
+      record.verification === "search_result" ? "검색 결과만 · 원문 미확인 (서버가 검색 결과 원문을 확인할 수 없어요)" : ""].filter(Boolean);
+    return el("span", { class: "evidence" }, link, ` · ${parts.join(" · ")}`);
   }
 
   function renderChecklist(research) {
@@ -408,7 +443,7 @@
   }
 
   // ---------- 조사 결과 화면의 '추가 조사' (초안 → 통합 / 버리기) ----------
-  const MORE_STATES = ["waiting_research", "waiting_outline"];
+  const MORE_STATES = ["waiting_research", "waiting_outline", "waiting_material"];
   const MORE_MAX = 300;
   let moreText = "";  // 다시 그려도 입력 중인 내용을 잃지 않게 둡니다
   const moreAvailable = () => Boolean(options && (options.features || []).includes("moreResearch"));
@@ -431,10 +466,9 @@
     const aux = (item.sourceIds || []).map((id) => sources.find((s) => s.id === id)).filter((s) => s && s.auxiliary);
     if (!aux.length) return "";
     const label = aux[0].auxiliary.label;
-    if (!aux.some((s) => (s.auxiliary.items || []).includes(item.key))) return `${label}는 이 항목의 근거로 쓰지 않아요 · 공식 확인 필요`;
     if (item.state === "verified") return `공식 확인 · ${label}도 참고`;
-    if (item.state === "conflict") return `${label}와 다른 출처의 값이 달라요 · 확인 필요`;
-    return `${label} 근거 · 공식 확인 안 됨`;
+    if (item.state === "conflict") return `${label}와 다른 출처의 값이 달라요`;
+    return `${label} 근거 (2차 자료)`;
   }
 
   function roundTag(round) {
@@ -608,20 +642,43 @@
           ? "공식 사이트가 요청을 막아 내용을 읽지 못했어요. Claude 사용 한도 문제가 아니에요. 자료를 입력하면 이어서 진행할 수 있어요."
           : "자동 조사만으로는 자료가 부족해요. 자료를 입력하면 이어서 진행할 수 있어요.";
     }
+    const stage = job.researchStage || {};
+    const waiting = job.state === "waiting_material";
+    if (waiting && stage.done && !stop && !blocked) reason = "자동 조사는 끝났지만 확인된 자료가 부족해요. 지금 자료로 구성안을 쓰거나, 자료를 보완해 주세요.";
     $("material-reason").textContent = reason;
     const missing = (research && research.missing) || [];
+    const gapRows = ((job.researchGap || {}).rows) || [];
+    gapBox($("material-gap"), waiting ? job.researchGap : null, "부족한 정보", waiting && !gapRows.length && missing.length ? "AI가 적은 부족한 내용을 아래에서 확인해 주세요." : "");
     $("material-failures").replaceChildren(
       ...failures.map((f) => el("li", { textContent: failureText(f) })),
-      ...(job.state === "waiting_outline" ? [] : missing.map((m) => el("li", { textContent: `부족한 자료: ${m}` }))),
+      ...(job.state === "waiting_outline" ? [] : missing.map((m) => el("li", { textContent: `AI가 적은 부족한 내용: ${m}` }))),
     );
+    // 두 가지 선택: 현재 자료로 구성안 작성 / 자료 보완하기 (조사를 다시 하지 않음)
+    const usable = research && ((research.facts || []).length || (research.items || []).some((i) => i.value));
+    // 조사 자료가 있으면 예전에 멈춘 작업도 고를 수 있어요 (조사 완료 기록이 없던 작업 포함). 금지 사이트라 조사하지 않은 작업은 자료 입력으로
+    $("material-choice").hidden = !(waiting && (stage.done || usable) && !stop);
+    const legacy = !(isTemplateJob() && job.templateSet);  // 예전 형식 작업(유형별 5장 템플릿 이전)은 조사와 구성안이 나뉘지 않아 이 기능을 쓸 수 없어요
+    $("material-compose").disabled = legacy || !usable || Boolean(job.researchDraft);
+    $("material-compose").dataset.locked = $("material-compose").disabled ? "true" : "";
+    $("material-compose-note").textContent = legacy ? "예전 형식으로 만든 작업이라 '현재 자료로 구성안 작성'을 쓸 수 없어요. 아래에 자료를 입력하거나 새 카드뉴스로 만들어 주세요."
+      : !usable ? "조사된 자료가 없어 지금은 구성안을 쓸 수 없어요. 자료를 입력하거나 추가 조사를 해 주세요."
+      : job.researchDraft ? "추가 조사 결과를 먼저 '통합' 또는 '버리기' 해 주세요."
+      : "다시 검색하지 않고 지금 자료로 구성안을 써요 (AI 1회). 찾지 못한 정보는 비워 두고, 지어내지 않아요.";
     const labels = MATERIAL_LABELS[job.contentType] || { name: "이름", price: "가격", seller: "판매처·출처", features: "특징·내용" };
     for (const [key, text] of Object.entries(labels)) $(`material-${key}-label`).textContent = text;
+    const guide = MATERIAL_GUIDES[job.contentType] || MATERIAL_GUIDES.goods;
+    $("material-guide").textContent = guide.guide;
     const form = $("material-form");
+    form.elements.extra.placeholder = guide.example;
     const saved = job.userMaterial || {};
     if (form.dataset.job !== job.id) {
       form.dataset.job = job.id;
-      for (const key of ["name", "price", "seller", "sourceUrl", "features", "pasted"]) form.elements[key].value = saved[key] || "";
-      if (!saved.sourceUrl && (blocked || stop)) form.elements.sourceUrl.value = job.url || "";
+      for (const key of ["name", "price", "seller", "features", "extra"]) form.elements[key].value = saved[key] || "";
+      // 예전 화면의 URL·붙여 넣기 칸은 첫 출처 묶음으로 옮깁니다
+      const blocks = [...(saved.sourceUrl || saved.pasted ? [{ url: saved.sourceUrl || "", kind: saved.sourceKind || "", text: saved.pasted || "" }] : []), ...(saved.sources || [])];
+      if (!blocks.length && (blocked || stop) && job.url) blocks.push({ url: job.url, kind: "official", text: "" });
+      setMaterialSources(blocks.slice(0, SOURCE_MAX));
+      form.querySelector(".material-details").open = ["name", "price", "seller", "features"].some((k) => saved[k]);
     }
     const until = research ? research.retryAfter || 0 : 0;
     const wait = Math.max(0, until - Date.now() / 1000);
@@ -635,15 +692,41 @@
       : stop && job.state === "waiting_material" ? `${stop.name}에는 접속하지 않고 다른 사이트만 조사해요. Pro 사용 한도가 차감돼요.` : "";
   }
 
+  // 출처 묶음 (URL · 출처 종류 · 복사한 내용), 최대 3개
+  function materialSourceRow(block) {
+    const kind = el("select", { name: "src-kind", "aria-label": "출처 종류" }, ...NOTE_KINDS.map(([v, t]) => el("option", { value: v, textContent: t, selected: (block.kind || "") === v })));
+    const row = el("div", { class: "material-source" },
+      el("input", { type: "url", name: "src-url", inputmode: "url", placeholder: "https:// (공식 페이지 주소)", value: block.url || "", "aria-label": "출처 주소" }),
+      kind,
+      el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "삭제", onclick: () => { row.remove(); syncSourceAdd(); } }),
+      el("textarea", { name: "src-text", rows: 3, maxlength: 4000, placeholder: "이 페이지에서 복사한 내용 (선택)", value: block.text || "", "aria-label": "복사한 내용" }));
+    return row;
+  }
+
+  function syncSourceAdd() {
+    $("material-source-add").disabled = $("material-sources").children.length >= SOURCE_MAX;
+  }
+
+  function setMaterialSources(blocks) {
+    $("material-sources").replaceChildren(...blocks.map(materialSourceRow));
+    syncSourceAdd();
+  }
+
+  function collectSources() {
+    return [...$("material-sources").children].map((row) => ({
+      url: row.querySelector("[name=src-url]").value.trim(), kind: row.querySelector("[name=src-kind]").value, text: row.querySelector("[name=src-text]").value.trim(),
+    })).filter((b) => b.url || b.text);
+  }
+
   async function submitMaterial(event) {
     event.preventDefault();
     const form = $("material-form");
-    const body = {};
-    for (const key of ["name", "price", "seller", "sourceUrl", "features", "pasted"]) body[key] = form.elements[key].value.trim();
+    const body = { sources: collectSources() };
+    for (const key of ["extra", "name", "price", "seller", "features"]) body[key] = form.elements[key].value.trim();
     show("material-error", "");
-    const imagesOnly = (job.detailImages || []).length > 0 && !Object.values(body).some(Boolean);
-    if (!imagesOnly && body.pasted.length < 20 && !(body.name && body.features)) {
-      show("material-error", "이름과 특징을 함께 적거나, 공식 페이지 내용을 붙여 넣거나, 아래에서 상세페이지 이미지를 올려 주세요.");
+    const filled = body.sources.length || ["extra", "name", "price", "seller", "features"].some((k) => body[k]);
+    if (!filled && !(job.detailImages || []).length) {
+      show("material-error", "알려 주고 싶은 정보를 적거나, 출처 내용을 붙여 넣거나, 아래에서 상세페이지 이미지를 올려 주세요.");
       return;
     }
     if (job.state === "waiting_outline" && !confirm("지금 구성안을 새로 만들어요. 직접 수정한 내용도 바뀌어요. 진행할까요?")) return;
@@ -1553,6 +1636,18 @@
     return value;
   }
 
+  // 칸의 출처 종류: 가격·일정·장소처럼 공식 우선이거나 중요한 정보, 또는 확인이 필요한 칸에 글로 보여 줍니다 (배지·차단 없음)
+  const FIELD_SOURCE = { verified: "공식 확인", secondary: "2차 자료", listed: "검색 결과(원문 미확인)", user: "사용자 제공", user_written: "사용자 작성",
+    image: "상세 이미지", conflict: "출처 충돌", unverified: "근거 확인 못 함", absent: "조사에서 찾지 못함" };
+  function fieldSourceText(card, field) {
+    if (!job.research || !field.item) return "";
+    const state = ((job.outline.fieldStates || {})[card.frame] || {})[field.key];
+    if (!state || state === "missing" || !FIELD_SOURCE[state]) return "";
+    const item = (job.research.items || []).find((i) => i.key === field.item);
+    const important = item && (item.strict || item.volatile || ["core", "high"].includes(item.importance));
+    return important || ["conflict", "unverified", "absent", "user_written"].includes(state) ? FIELD_SOURCE[state] : "";
+  }
+
   function fieldSummary(card) {
     const tpl = templateFor(card.frame);
     const list = el("dl", { class: "field-list" });
@@ -1566,6 +1661,8 @@
       if (states[field.key]) dd.dataset.state = states[field.key]; // 근거 상태는 화면에 배지로 표시하지 않고 속성으로만 둡니다
       if (!active) dd.append("보관 중 · 카테고리를 바꾸면 카드에 보여요: ");
       dd.append(empty ? (field.required ? "비어 있음 · 입력이 필요해요" : field.emptyNote ? `비어 있음 · ${field.emptyNote}` : field.placeholder ? `비어 있음 · 기본 문구 '${field.placeholder}'로 보여요` : "비어 있음 · 카드에서 숨겨요") : fieldText(field, value === undefined && field.type === "choice" ? field.default : value));
+      const source = empty ? "" : fieldSourceText(card, field);
+      if (source) dd.append(el("small", { class: "field-source", textContent: ` · 출처: ${source}` }));
       list.append(el("dt", { textContent: field.label }), dd);
     }
     if (hasSource(tpl)) list.append(el("dt", { textContent: "출처" }), el("dd", { class: card.source ? "" : "is-empty", textContent: card.source || "출처 없음" }));
@@ -1819,7 +1916,11 @@
         el("small", { class: "hint", textContent: "필수 정보가 없으면 자유 구성으로 확인된 정보만 담아요." })));
     }
     form.append(editField("역할", el("input", { type: "text", value: card.role, name: "role" }), 10));
-    for (const field of tpl.fields) form.append(templateControl(field, card.fields[field.key], card.frame));
+    for (const field of tpl.fields) {
+      form.append(templateControl(field, card.fields[field.key], card.frame));
+      const source = fieldSourceText(card, field);
+      if (source) form.append(el("small", { class: "hint field-source", textContent: `${field.label} 출처: ${source} (저장된 내용 기준)` }));
+    }
     bindChoices(form, tpl);
     if (hasSource(tpl)) {
       form.append(editField("출처", el("input", { type: "text", value: card.source, name: "source", placeholder: "출처: 공식 사이트 (모르면 비워 두세요)" }), 30));
@@ -1890,6 +1991,9 @@
       );
     }
     $("outline-version").textContent = `${job.outline.version}번째 구성안`;
+    const partial = job.research && (job.research.partial || (job.researchStage || {}).forced);
+    gapBox($("outline-gap"), partial ? job.researchGap : null, "자료가 부족한 상태로 작성한 구성안이에요",
+      partial ? "찾지 못한 정보는 비워 뒀어요. 필요하면 카드에서 직접 채우거나, 자료를 보완해 구성안을 다시 만들어 주세요." : "");
     renderTypeSwitch();
     renderSlotSuggestions();
     drawOutlinePreviews();
@@ -2250,7 +2354,29 @@
     setTimeout(() => URL.revokeObjectURL(link.href), 2000);
   }
 
+  function publishWarnings() {
+    return ((job.outline || {}).publishWarnings) || [];
+  }
+
+  function warningBox(node, title) {
+    const list = publishWarnings();
+    node.hidden = !list.length || job.mode !== "ai";
+    if (node.hidden) return;
+    node.replaceChildren(el("h3", { textContent: title }),
+      el("ul", {}, ...list.map((w) => el("li", { textContent: w.frame ? `${w.frame} · ${w.text}` : w.text }))),
+      el("small", { textContent: "저장은 막지 않아요. 게시 전에 한 번 더 확인해 주세요." }));
+  }
+
+  // 처음 저장할 때 한 번만 확인합니다 (저장 자체는 막지 않음)
+  function confirmDownload() {
+    if (job.mode !== "ai" || !publishWarnings().length || warnedDownloads.has(job.id)) return true;
+    const ok = confirm(`확인되지 않은 중요 정보가 ${publishWarnings().length}건 있어요. 목록을 확인했나요? 그래도 PNG로 저장할까요?`);
+    if (ok) warnedDownloads.add(job.id);
+    return ok;
+  }
+
   async function downloadPng(frame) {
+    if (!confirmDownload()) return;
     try {
       saveBlob(await canvasBlob(frame), fileName(frame));
     } catch (error) {
@@ -2259,6 +2385,7 @@
   }
 
   async function downloadZip() {
+    if (!confirmDownload()) return;
     $("download-zip").disabled = true;
     try {
       await renderChain;
@@ -2283,6 +2410,7 @@
   }
 
   function renderDownloads() {
+    warningBox($("download-warnings"), "확인되지 않은 중요 정보");
     const key = job.preview.approvalHash || "";
     if (key === downloadsKey && $("download-list").children.length) return;
     downloadsKey = key;
@@ -2343,6 +2471,7 @@
     if (job.aiError) show("action-error", job.aiError);
     if (job.preview) renderThemeNote();
     if (job.preview) await renderPreview();
+    warningBox($("preview-warnings"), "승인 전에 확인할 정보");
     if (job.state === "done" && job.preview) renderDownloads();
     else downloadsKey = "";
     setBusy(Boolean(job.aiTask));
@@ -2630,6 +2759,15 @@
     $("detail-extract").addEventListener("click", () => detailAction("detail-images/extract", { method: "POST" }));
     $("url").addEventListener("input", () => { if (viewStep === 1) renderDetail(); });
     $("material-form").addEventListener("submit", submitMaterial);
+    $("material-source-add").addEventListener("click", () => {
+      if ($("material-sources").children.length < SOURCE_MAX) $("material-sources").append(materialSourceRow({}));
+      syncSourceAdd();
+    });
+    $("material-fill").addEventListener("click", () => { $("material-form").elements.extra.focus(); $("material-form").scrollIntoView({ block: "start", behavior: "smooth" }); });
+    $("material-compose").addEventListener("click", async () => {
+      if (!confirm("지금 자료로 구성안을 써요. 찾지 못한 정보는 비워 두고 지어내지 않아요. 진행할까요?")) return;
+      await action("research/compose-current");
+    });
     for (const radio of $("job-form").elements.mode) radio.addEventListener("change", applyMode);
     for (const radio of $("job-form").elements.mode) radio.addEventListener("change", scheduleLibrary);
     for (const radio of $("job-form").elements.researchMode) radio.addEventListener("change", renderLibrary);

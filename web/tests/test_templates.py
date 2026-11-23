@@ -611,24 +611,31 @@ def test_ai_goods_price_must_come_from_material(client, fake):
     job_id = start(client, mode="ai", contentType="goods", topic="세모귀 키링")
     job = wait(client, job_id, "waiting_outline")
     assert len(fake.calls) == 3 and job["outline"]["cards"][2]["fields"]["featured_price"] == "나 확인된 내용"  # 조사·구성안·다시 쓰기
-    # 그래도 남으면 승인을 막습니다
+    # 다시 써도 남으면: 비울 수 있는 칸(가격)은 비우고 알립니다
     fake.calls.clear()
     fake.rewrite_overrides = {"card-03": {"featured_price": "9,900원"}}
+    job_id = start(client, mode="ai", contentType="goods", topic="세모귀 키링")
+    job = wait(client, job_id, "waiting_outline")
+    card = job["outline"]["cards"][2]
+    assert card["fields"]["featured_price"] == "" and card["cleared"][0]["value"] == "9,900원"
+    assert not any("9,900" in e for e in job["outline"]["issues"]["card-03"]["errors"])
+    # 비울 수 없는 꼭 필요한 칸에 남은 지어낸 숫자는 계속 승인을 막습니다
+    fake.overrides = {"card-03": {"featured_name": "키링 9,900원"}}
+    fake.rewrite_overrides = {"card-03": {"featured_name": "키링 9,900원"}}
     job_id = start(client, mode="ai", contentType="goods", topic="세모귀 키링")
     job = wait(client, job_id, "waiting_outline")
     assert any("9,900" in e for e in job["outline"]["issues"]["card-03"]["errors"])
     assert api(client, job_id, "POST", "/outline/approve").status_code == 409
 
 
-def test_ai_listing_only_source_blocks_goods_and_warns_character(client, fake):
+def test_ai_listing_only_source_warns_without_blocking(client, fake):
+    # 검색 결과만 있는 출처: 참고 자료로 쓰고, 원문을 읽지 못했다는 사실을 경고로 알립니다 (굿즈·캐릭터 모두)
     fake.fetched = False
-    job_id = start(client, mode="ai", contentType="goods", topic="세모귀 키링")
-    job = wait(client, job_id, "waiting_outline")
-    assert any("검색 목록에 주소만" in e for e in job["outline"]["issues"]["card-02"]["errors"])
-    job_id = start(client, mode="ai")
-    job = wait(client, job_id, "waiting_outline")
-    issue = job["outline"]["issues"]["card-02"]
-    assert not issue["errors"] and any("검색 목록에 주소만" in w for w in issue["warnings"])
+    for extra in ({"contentType": "goods", "topic": "세모귀 키링"}, {}):
+        job_id = start(client, mode="ai", **extra)
+        job = wait(client, job_id, "waiting_outline")
+        issue = job["outline"]["issues"]["card-02"]
+        assert not issue["errors"] and any("원문 페이지는 읽지 못했어요" in w for w in issue["warnings"])
 
 
 def test_ai_material_marks_user_source_on_body_cards_only(client, fake):
@@ -637,7 +644,8 @@ def test_ai_material_marks_user_source_on_body_cards_only(client, fake):
     assert api(client, job_id, "POST", "/material", json=material).status_code == 200
     job = wait(client, job_id, "waiting_outline")
     cards = job["outline"]["cards"]
-    assert cards[0]["source"] == "" and cards[1]["source"] == "출처: 공식 계정 (사용자 제공)"
+    # 팝업의 seller 칸은 '장소'라 출처 이름으로 쓰지 않습니다 (굿즈의 판매처만 출처 이름으로)
+    assert cards[0]["source"] == "" and cards[1]["source"] == "출처: 사용자 제공"  # 표지는 출처 없음
     assert fake.calls[0]["tools"] == () and type_of_schema(fake.calls[0]["schema"]) == "popup"
 
 

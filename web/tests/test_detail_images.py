@@ -253,15 +253,11 @@ def test_page_and_image_conflict_needs_user_confirmation(client, fake):
     assert len(img1) == 1 and img1[0]["verification"] == "image"  # 모델이 적은 img1 출처는 버리고 서버가 만든 것만
     assert item(job, "product_names")["state"] == "verified"  # 같은 값은 합쳐 확인으로
 
+    # 출처끼리 다른 값은 자동으로 고르지 않고 경고로 알립니다 (제작은 막지 않음)
     card, field = frame_with_item(job, "price")
-    assert any("출처마다 값이 달라요" in e for e in job["outline"]["issues"][card["frame"]]["errors"])
-    assert api(client, job_id, "POST", "/outline/approve").status_code == 409  # 자동으로 하나를 고르지 않습니다
-    # 사용자가 확인해 직접 고치면 승인할 수 있습니다
-    fields = {**card["fields"], field["key"]: "¥440"}  # 공식 자료를 확인해 값을 고침
-    body = {"role": card["role"], "fields": fields, "source": card["source"]}
-    assert api(client, job_id, "PUT", f"/outline/cards/{card['frame']}", json=body).status_code == 200
-    job = get(client, job_id)
-    assert not job["outline"]["issues"][card["frame"]]["errors"]
+    issue = job["outline"]["issues"][card["frame"]]
+    assert any("출처마다 값이 달라요" in w for w in issue["warnings"]) and not issue["errors"]
+    assert api(client, job_id, "POST", "/outline/approve").status_code == 200
 
 
 # ---------- 4. 핵심 정보만 있어도 구성안 ----------
@@ -295,7 +291,12 @@ def test_core_status_rules():
 
     assert research.core_status("goods", items(product_names="image", price="image"))["ready"]
     assert not research.core_status("goods", items(product_names="conflict", price="verified"))["ready"]
-    assert not research.core_status("goods", items(product_names="secondary", price="verified"))["ready"]  # 공식만 허용하는 항목
+    assert research.core_status("goods", items(product_names="secondary", price="verified"))["ready"]  # 2차 자료도 자료가 있는 것
+    assert not research.core_status("goods", items(product_names="unverified", price="verified"))["ready"]  # 근거를 확인 못 한 값은 아님
+    listed = [{"key": "product_names", "state": "listed", "strict": True, "value": "키링", "quote": ""}, {"key": "price", "state": "verified", "strict": True}]
+    assert not research.core_status("goods", listed)["ready"]  # 검색 결과에 값이 적혀 있지 않으면(근거 문장 없음) 찾은 것이 아님
+    listed[0]["quote"] = "키링 ¥440"
+    assert research.core_status("goods", listed)["ready"]
     assert research.core_status("goods", items(product_names="verified"))["lacking"] == ["가격 또는 상품별 특징 또는 구성품"]
 
 

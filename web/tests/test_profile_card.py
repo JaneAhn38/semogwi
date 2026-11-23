@@ -27,13 +27,13 @@ def test_profile_candidates_use_only_confirmed_values():
     sources = official_sources()
     items = items_with([
         {"key": "profile_extra", "value": "도감 번호: 0025, 타입: 전기, 분류: 쥐포켓몬", "quote": "q", "sourceIds": ["s1"]},
-        {"key": "birthday", "value": "5월 5일", "quote": "q", "sourceIds": ["n1"]},  # 나무위키만 근거 → 프로필에 쓰지 않음
+        {"key": "birthday", "value": "5월 5일", "quote": "q", "sourceIds": ["n1"]},  # 나무위키(2차 자료)도 참고 근거로 씀
         {"key": "favorite", "value": "케첩", "quote": "q", "sourceIds": ["s1"]},
         {"key": "creator", "value": "아주 긴 제작사 이름이 들어가서 칸을 넘는 값", "quote": "q", "sourceIds": ["s1"]},  # 16자 초과 → 자르지 않고 뺌
     ], sources)
     rows = research.profile_candidates(items)
-    assert [(r["label"], r["value"]) for r in rows] == [("도감 번호", "0025"), ("타입", "전기"), ("분류", "쥐포켓몬"), ("좋아하는 것", "케첩")]
-    assert all(r["sourceIds"] == ["s1"] for r in rows)
+    assert [(r["label"], r["value"]) for r in rows] == [("도감 번호", "0025"), ("타입", "전기"), ("분류", "쥐포켓몬"), ("생일", "5월 5일"), ("좋아하는 것", "케첩")]
+    assert {tuple(r["sourceIds"]) for r in rows} == {("s1",), ("n1",)}
     assert research.profile_candidates([]) == []
 
 

@@ -157,13 +157,28 @@ class DesignRequestBody(Strict):
     text: str = Field(min_length=1, max_length=DESIGN_REQUEST_MAX)
 
 
+class MaterialSource(Strict):
+    """자료 직접 입력의 출처 묶음 하나. kind는 사용자가 고른 표시일 뿐 공식 확인이 아닙니다."""
+    url: str = Field(default="", max_length=URL_MAX)
+    kind: str = Field(default="", pattern=r"^(|official|namuwiki|other)$")
+    text: str = Field(default="", max_length=4000)
+
+
 class MaterialBody(Strict):
+    extra: str = Field(default="", max_length=3000)  # '추가로 알려주고 싶은 정보' (기본 자유 입력)
+    sources: list[MaterialSource] = Field(default_factory=list, max_length=3)
+    # 아래는 선택 입력 (세부 항목). 예전 화면과도 호환됩니다
     name: str = Field(default="", max_length=100)
     price: str = Field(default="", max_length=50)
     features: str = Field(default="", max_length=1000)
     seller: str = Field(default="", max_length=100)
     sourceUrl: str = Field(default="", max_length=URL_MAX)
+    sourceKind: str = Field(default="", pattern=r"^(|official|namuwiki|other)$")
     pasted: str = Field(default="", max_length=8000)
+
+    def has_content(self) -> bool:
+        texts = [self.extra, self.name, self.price, self.features, self.seller, self.pasted] + [b.text for b in self.sources]
+        return any(t.strip() for t in texts) or any(b.url for b in self.sources)
 
 
 class RedesignBody(Strict):
@@ -181,6 +196,8 @@ class TemplateCardEdit(Strict):
     source: str = Field(default="", max_length=200)
     # 항목을 지우거나 순서를 바꿨을 때 항목별 이미지가 따라가도록 저장 전 번호를 보냅니다 (예: {"friends": [0, 2]})
     itemOrder: dict[str, list[int]] | None = None
+    # 예전 화면이 보내던 '확인 필요' 표시. 이제 쓰지 않습니다 (공식 확인을 제작 조건으로 두지 않음). 받기만 하고 버립니다
+    checkMarks: list[str] = Field(default_factory=list, max_length=40)
 
 
 def _detect_image(head: bytes) -> tuple[str, str] | None:
@@ -394,13 +411,19 @@ async def submit_material(job_id: str, body: MaterialBody):
     job = jobs.load(job_id)
     if job is None:
         raise HTTPException(404, "작업을 찾을 수 없어요")
-    empty = not any(v.strip() for v in body.model_dump().values())
-    if empty and job["detailImages"]:
-        return _call(jobs.submit_material, job_id, None)
-    if len(body.pasted) < 20 and not (body.name and body.features):
-        raise HTTPException(400, "이름과 특징을 함께 적거나, 공식 페이지 내용을 붙여 넣거나, 상세페이지 이미지를 올려 주세요")
-    material = {**body.model_dump(), "sourceUrl": _clean_url(body.sourceUrl)}
+    if not body.has_content():
+        if job["detailImages"]:
+            return _call(jobs.submit_material, job_id, None)
+        raise HTTPException(400, "알려 주고 싶은 정보를 적거나, 출처 내용을 붙여 넣거나, 상세페이지 이미지를 올려 주세요")
+    material = {**body.model_dump(), "sourceUrl": _clean_url(body.sourceUrl),
+                "sources": [{**b.model_dump(), "url": _clean_url(b.url)} for b in body.sources]}
     return _call(jobs.submit_material, job_id, material)
+
+
+@app.post("/api/jobs/{job_id}/research/compose-current")
+async def compose_with_current(job_id: str):
+    # 자료가 부족하다고 판단됐어도 지금 자료로 구성안을 씁니다. 다시 검색하지 않습니다 (구성안 1회)
+    return _call(jobs.compose_with_current, job_id)
 
 
 # ---------- 상세페이지 이미지 (자료 조사용) ----------

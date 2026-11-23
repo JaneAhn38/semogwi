@@ -222,14 +222,17 @@ def test_conflict_inside_free_card_still_blocks(client, fake):
     job_id = client.post("/api/jobs/draft").json()["id"]
     api(client, job_id, "POST", "/start", json=TOPIC)
     job = wait(client, job_id, "waiting_outline")
-    assert any("출처마다 값이 달라요" in e for e in job["outline"]["issues"]["card-03"]["errors"])
-    assert api(client, job_id, "POST", "/outline/approve").status_code == 409  # 자동으로 하나를 고르지 않습니다
-    # 사용자가 확인해 직접 고치면 경고로 바뀌어 승인할 수 있습니다
+    # 자유 구성 카드 안의 충돌 값은 경고로 알립니다 (자동으로 하나를 고르지 않음)
+    assert any("출처마다 값이 달라요" in w for w in job["outline"]["issues"]["card-03"]["warnings"])
+    assert not any("출처마다" in e for e in errors_of(job).get("card-03", []))
+    # 다만 9,900원은 조회 기록에 없는 출처(공식 SNS)에만 있는 숫자라 계속 막습니다 (지어낸 숫자 방지)
+    assert errors_of(job)["card-03"] == ["자료에 없는 숫자예요: 9,900"]
+    assert api(client, job_id, "POST", "/outline/approve").status_code == 409
     c3 = job["outline"]["cards"][2]
     body = {"role": c3["role"], "fields": {**c3["fields"], "points": [{"label": "가격", "value": "9,000원"}]}, "source": c3["source"]}
     assert api(client, job_id, "PUT", "/outline/cards/card-03", json=body).status_code == 200
-    job = get(client, job_id)
-    assert not errors_of(job) and any("출처마다 값이 달라요" in w for w in job["outline"]["issues"]["card-03"]["warnings"])
+    assert not errors_of(get(client, job_id))
+    assert api(client, job_id, "POST", "/outline/approve").status_code == 200
 
 
 def test_unverified_value_in_free_card_is_flagged(client, fake):
@@ -239,8 +242,8 @@ def test_unverified_value_in_free_card_is_flagged(client, fake):
         "cards": [COVER] + [card(f, "goods-free", {"heading": "안내", "points": [{"label": "상품", "value": f"안경만두 컵 {f}"}]}) for f in FRAMES[1:4]]
         + [card("card-05", "goods-free", {"heading": "출시", "points": [{"label": "출시일", "value": "12월 1일"}]}, ids=("s1",))]}
     _, job = run(client, fake, research)
-    # 블로그 주소는 조회 기록이 없어 '근거 없음' → 자유 구성 카드 안의 같은 값도 공식 확인 전에는 승인을 막습니다
-    assert any("확인하지 못한 정보예요: 출시일" in e for e in errors_of(job)["card-05"])
+    # 블로그 주소는 조회 기록이 없어 '근거 없음'(출처가 없는 사실) → 자유 구성 카드 안의 같은 값도 직접 고치기 전에는 승인을 막습니다
+    assert any("근거를 확인하지 못한 정보예요: 출시일" in e for e in errors_of(job)["card-05"])
 
 
 # ---------- 5. 실제로 확인된 정보가 거의 없는 상품 ----------

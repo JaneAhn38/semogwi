@@ -146,7 +146,7 @@ def test_restricted_url_continues_with_user_material_without_web_tools(client, f
     assert len(fake.calls) == 1 and fake.calls[0]["tools"] == ()
     user = next(s for s in job["research"]["sources"] if s["origin"] == "user")
     assert user["verification"] == "user_provided" and user["url"] == MARKET
-    assert job["outline"]["cards"][1]["source"] == "출처: 치이카와 마켓 (사용자 제공)"
+    assert job["outline"]["cards"][1]["source"] == "출처: 사용자 제공 · chiikawamarket.jp"  # 사용자가 직접 옮긴 자료의 주소
     assert not any(i["errors"] for i in job["outline"]["issues"].values())
 
 
@@ -184,7 +184,8 @@ def test_other_sites_keep_automatic_research(client, fake):
     job = wait(client, job_id, "waiting_outline")
     assert set(fake.calls[0]["tools"]) == {"WebSearch", "WebFetch"} and "먼저 한 번만 읽는다" in fake.calls[0]["prompt"]
     assert not any(i["errors"] for i in job["outline"]["issues"].values())
-    assert any("AI의 판단" in w for w in job["outline"]["issues"]["card-02"]["warnings"])
+    # 공식 여부만으로는 경고·차단하지 않습니다 (출처 종류는 조사 결과에 기록)
+    assert not any("공식" in w for i in job["outline"]["issues"].values() for w in i["warnings"])
 
 
 def test_cli_passes_deny_rules(monkeypatch, tmp_path):
@@ -218,12 +219,15 @@ def test_search_listing_is_not_a_verified_source():
     assert card_source_state({"sourceIds": ["s"]}, {"sources": sources}) == "listed"
 
 
-def test_goods_card_with_only_search_listing_is_blocked(client, fake):
+def test_goods_card_with_only_search_listing_warns_but_is_not_blocked(client, fake):
+    # 검색 결과에 값이 적힌 정보도 참고 자료로 씁니다. 원문을 읽지 못했다는 사실은 따로 남기고 경고합니다
     fake.fetches = []
     job_id = start(client)
     job = wait(client, job_id, "waiting_outline")
-    assert any("검색 목록에 주소만" in e for e in job["outline"]["issues"]["card-02"]["errors"])
-    assert api(client, job_id, "POST", "/outline/approve").status_code == 409
+    issue = job["outline"]["issues"]["card-02"]
+    assert not issue["errors"] and any("원문 페이지는 읽지 못했어요" in w for w in issue["warnings"])
+    assert job["research"]["sources"][0]["verification"] == "search_result"
+    assert api(client, job_id, "POST", "/outline/approve").status_code == 200
 
 
 def test_character_card_with_only_search_listing_warns(client, fake):
@@ -231,14 +235,16 @@ def test_character_card_with_only_search_listing_warns(client, fake):
     job_id = start(client, contentType="character")
     job = wait(client, job_id, "waiting_outline")
     issue = job["outline"]["issues"]["card-02"]
-    assert not issue["errors"] and any("검색 목록에 주소만" in w for w in issue["warnings"])
+    assert not issue["errors"] and any("원문 페이지는 읽지 못했어요" in w for w in issue["warnings"])
 
 
-def test_goods_card_with_read_secondary_source_is_blocked(client, fake):
+def test_goods_card_with_read_secondary_source_is_allowed(client, fake):
+    # 기사·위키 같은 2차 자료를 읽어 확인한 내용은 공식 출처가 아니어도 그대로 씁니다
     fake.data = research_data(kind="secondary")
     job_id = start(client)
     job = wait(client, job_id, "waiting_outline")
-    assert any("공식 출처가 아니에요" in e for e in job["outline"]["issues"]["card-02"]["errors"])
+    assert not job["outline"]["issues"]["card-02"]["errors"] and job["research"]["sources"][0]["kind"] == "secondary"
+    assert api(client, job_id, "POST", "/outline/approve").status_code == 200
 
 
 def test_failed_page_is_not_read(client, fake):
@@ -256,19 +262,34 @@ def test_registered_official_is_marked_and_ai_claim_is_not(monkeypatch):
     assert (result[1]["kind"], result[1]["officialBasis"]) == ("official", "ai")
 
 
-def test_numbers_only_match_read_pages_and_user_material():
-    research = {"sources": [{"id": "read", "verification": "fetched"}, {"id": "listed", "verification": "search_result"}],
-                "facts": [{"text": "가격 440엔", "sourceIds": ["read"]}, {"text": "가격 999엔", "sourceIds": ["listed"]}]}
+def test_numbers_match_read_pages_user_material_and_quoted_search_items_only():
+    # 공식 여부와 관계없이 읽은 페이지·사용자 자료의 숫자는 근거입니다. 조회 기록에 없는 출처와 미러는 근거가 아닙니다.
+    # 원문을 읽지 못한 검색 결과는 조사 항목의 값과 근거 문장이 서로 맞을 때만 (사실 문장만으로는 인정하지 않음)
+    research = {"sources": [{"id": "read", "verification": "fetched", "kind": "secondary"}, {"id": "listed", "verification": "search_result"},
+                            {"id": "ghost", "verification": "unverified"}, {"id": "mirror", "verification": "mirror"}],
+                "facts": [{"text": "가격 440엔", "sourceIds": ["read"]}, {"text": "가격 999엔", "sourceIds": ["listed"]},
+                          {"text": "가격 777엔", "sourceIds": ["ghost"]}, {"text": "가격 333엔", "sourceIds": ["mirror"]}],
+                "items": [{"key": "price", "value": "1,200엔", "quote": "키링 1,200엔(세금 포함)", "sourceIds": ["listed"], "alternatives": [
+                              {"value": "1,800엔", "quote": "키링 가격 안내", "sourceIds": ["listed"]}]}]}
     text = material_text(research, {"price": "¥550", "submittedAt": "2026-11-06"})
-    assert "440" in text and "550" in text and "999" not in text and "2026" not in text
+    assert "440" in text and "550" in text and "1,200엔" in text
+    assert "999" not in text  # 검색 결과 출처를 단 사실 문장만으로는 숫자 근거가 아님
+    assert "1,800" not in text  # 근거 문장에 그 숫자가 없음
+    assert "777" not in text and "333" not in text and "2026" not in text
 
 
-def test_price_from_unread_page_is_blocked(client, fake):
+def test_price_only_in_unread_search_fact_is_not_trusted(client, fake):
+    # 원문을 읽지 못한 검색 결과의 숫자: 근거 문장이 맞는 조사 항목이 없으면 숫자 근거로 인정하지 않습니다 (AI가 쓴 사실 문장만으로는 부족)
     fake.fetches = []
     fake.data = research_data(body="가격은 999엔이에요.", fact="가격 999엔")
     job_id = start(client)
     job = wait(client, job_id, "waiting_outline")
     assert any("999" in e for e in job["outline"]["issues"]["card-02"]["errors"])
+    # 자료 어디에도 없는 가격은 지어낸 숫자라 계속 막습니다
+    fake.data = research_data(body="가격은 777엔이에요.", fact="가격 999엔")
+    job_id = start(client)
+    job = wait(client, job_id, "waiting_outline")
+    assert any("자료에 없는 숫자예요: 777" in e for e in job["outline"]["issues"]["card-02"]["errors"])
 
 
 def test_compose_keeps_only_facts_from_read_pages(client, fake):

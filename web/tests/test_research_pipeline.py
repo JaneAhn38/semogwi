@@ -40,7 +40,7 @@ def test_specs_define_every_item_with_importance_and_hints():
     assert goods["price"]["volatile"] and goods["sale_period"]["volatile"] and not goods.get("material", {}).get("volatile")
     assert goods["product_names"]["many"] and research.SPECS["character"][7]["key"] == "friends" and research.SPECS["character"][7]["many"]
     text = research.checklist_text("goods", report=True)
-    assert "(핵심, 공식 출처만, 여러 개 나열)" in text and "outcome" in text and "coverage" in text and "카드를 쓰지 않는다" in text
+    assert "(핵심, 공식 출처 우선, 여러 개 나열)" in text and "outcome" in text and "coverage" in text and "카드를 쓰지 않는다" in text
 
 
 # ---------- 빈 항목의 이유 ----------
@@ -120,9 +120,10 @@ def test_evidence_separates_page_read_from_quote_check():
                                                                  found("release_date", "unknown", value="12월 1일", ids=("list",))], SOURCES, LOG)}
     evidence = items["seller"]["evidence"][0]
     assert evidence == {"sourceId": "off", "url": OFFICIAL, "title": "공식", "kind": "official", "verification": "fetched",
-                        "pageRead": True, "quote": "공식 스토어", "quoteCheck": "not_checked", "at": "2026-11-18T10:00:00"}
+                        "pageRead": True, "publishedAt": "", "quote": "공식 스토어", "quoteCheck": "not_checked", "at": "2026-11-18T10:00:00"}
     listed = items["release_date"]["evidence"][0]
-    assert listed["pageRead"] is False and items["release_date"]["state"] == "listed"  # 검색 목록만으로는 확인이 아님 (규칙 유지)
+    # 검색 결과의 값도 참고 자료로 쓰지만, 원문 페이지를 읽지 못했다는 사실은 따로 남습니다
+    assert listed["pageRead"] is False and items["release_date"]["state"] == "listed"
     assert items["seller"]["attempts"] == {"outcome": "found", "checked": [{"url": OFFICIAL, "result": "read"}]}
 
 

@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Black+Han+Sans&family=Gaegu:wght@700&family=Sunflower:wght@500&family=Gowun+Batang&family=Noto+Sans+KR:wght@400;700&display=swap">
   <!-- 카드 글꼴(Jua, Gowun Dodum)은 로컬 파일이라 인터넷 없이도 그려집니다. 나머지는 예전 AI 디자인 작업용 -->
   <link rel="stylesheet" href="/fonts/fonts.css?v=11">
-  <link rel="stylesheet" href="/styles.css?v=13">
+  <link rel="stylesheet" href="/styles.css?v=15">
 </head>
 <body>
   <header class="site-header">
@@ -89,7 +89,7 @@
             <input id="notes-url" name="notesUrl" type="url" inputmode="url" maxlength="500" placeholder="자료를 옮겨 온 주소 (선택)" aria-label="참고 자료를 옮겨 온 주소">
           </div>
           <small id="notes-hint" class="hint">AI가 조사할 때 함께 읽고, 카드에는 <b>사용자 제공</b> 자료로 표시돼요. 자동 접근이 금지된 사이트의 내용도 여기에 붙여 넣으면 돼요.
-            '공식 출처'를 골라도 AI가 확인한 공식 자료로 표시하지 않아요. 나무위키 자료는 캐릭터 소개의 성격·친구·가족·TMI에만 <b>보조 출처</b>로 써요.</small>
+            '공식 출처'를 골라도 AI가 확인한 공식 자료로 표시하지 않아요. 나무위키 자료도 <b>2차 자료</b>로 참고해요.</small>
         </div>
 
         <div class="field">
@@ -156,15 +156,32 @@
           <span class="tag tag-demo">사용자 제공 자료로 표시돼요</span>
         </div>
         <p id="material-reason" class="notice"></p>
+        <div id="material-gap" class="gap-box" hidden></div>
         <ul id="material-failures" class="material-failures"></ul>
+        <div id="material-choice" class="gap-choice" hidden>
+          <button id="material-compose" class="btn btn-primary" type="button">현재 자료로 구성안 작성</button>
+          <button id="material-fill" class="btn btn-ghost" type="button">자료 보완하기</button>
+          <small id="material-compose-note" class="hint"></small>
+        </div>
         <p class="panel-note">입력한 내용은 AI가 공식 페이지에서 확인한 것으로 표시되지 않고, 카드 출처에도 <b>사용자 제공</b>으로 남아요. 모르는 항목은 비워 두세요. AI가 지어내지 않아요.</p>
         <form id="material-form" class="material-form" novalidate>
-          <label class="edit-field"><span id="material-name-label">상품명</span><input name="name" type="text" maxlength="100"></label>
-          <label class="edit-field"><span id="material-price-label">가격</span><input name="price" type="text" maxlength="50" placeholder="표기 그대로 (예: ¥440 세금 포함)"></label>
-          <label class="edit-field"><span id="material-seller-label">판매처</span><input name="seller" type="text" maxlength="100"></label>
-          <label class="edit-field"><span>공식 출처 URL</span><input name="sourceUrl" type="url" inputmode="url" placeholder="https://"></label>
-          <label class="edit-field is-wide"><span id="material-features-label">특징</span><textarea name="features" rows="3" maxlength="1000"></textarea></label>
-          <label class="edit-field is-wide"><span>공식 페이지 내용 붙여 넣기</span><textarea name="pasted" rows="5" maxlength="8000" placeholder="공식 페이지의 글을 복사해 붙여 넣어 주세요"></textarea></label>
+          <p id="material-guide" class="hint is-wide"></p>
+          <label class="edit-field is-wide"><span>추가로 알려주고 싶은 정보</span><textarea name="extra" rows="4" maxlength="3000"></textarea></label>
+          <fieldset class="edit-group material-sources is-wide">
+            <legend>공식 출처·참고 자료 <span class="opt">선택 · 최대 3개</span></legend>
+            <div id="material-sources"></div>
+            <button id="material-source-add" class="btn btn-ghost btn-small" type="button">+ 출처 추가</button>
+            <small class="hint">'공식 출처'를 골라도 AI가 공식 확인한 것으로 바뀌지 않고, 사용자 제공 자료로 표시돼요.</small>
+          </fieldset>
+          <details class="material-details is-wide">
+            <summary>세부 항목 직접 입력 <span class="opt">선택</span></summary>
+            <div class="material-detail-grid">
+              <label class="edit-field"><span id="material-name-label">상품명</span><input name="name" type="text" maxlength="100"></label>
+              <label class="edit-field"><span id="material-price-label">가격</span><input name="price" type="text" maxlength="50" placeholder="표기 그대로 (예: ¥440 세금 포함)"></label>
+              <label class="edit-field"><span id="material-seller-label">판매처</span><input name="seller" type="text" maxlength="100"></label>
+              <label class="edit-field is-wide"><span id="material-features-label">특징</span><textarea name="features" rows="3" maxlength="1000"></textarea></label>
+            </div>
+          </details>
           <p id="material-error" class="error is-wide" role="alert" hidden></p>
           <div class="actions is-wide">
             <button id="material-submit" class="btn btn-primary" type="submit">이 자료로 구성안 만들기</button>
@@ -243,6 +260,7 @@
         <p id="outline-note" class="panel-note"></p>
         <div id="type-switch" class="type-switch" hidden></div>
         <div id="slot-suggest" class="slot-suggest" role="status" hidden></div>
+        <div id="outline-gap" class="gap-box" hidden></div>
         <ol id="outline-list" class="outline-list"></ol>
         <div id="outline-actions" class="actions">
           <button id="outline-approve" class="btn btn-primary" type="button">이 구성안 승인</button>
@@ -262,6 +280,7 @@
         <p id="preview-note" class="panel-note"></p>
         <div id="theme-note" class="theme-note" hidden></div>
         <div id="card-grid" class="card-grid"></div>
+        <div id="preview-warnings" class="gap-box" hidden></div>
         <div id="preview-actions" class="actions">
           <button id="preview-approve" class="btn btn-primary" type="button">이 디자인으로 최종 승인</button>
           <button id="preview-regenerate" class="btn btn-ghost legacy-only" type="button"><span id="regen-all-label">전체 다시 배치</span> <span class="btn-tag demo-only">데모</span></button>
@@ -275,6 +294,7 @@
           <span class="tag tag-demo demo-only">샘플 PNG</span>
         </div>
         <p id="download-note" class="panel-note"></p>
+        <div id="download-warnings" class="gap-box" hidden></div>
         <ul id="download-list" class="download-list"></ul>
         <div class="actions">
           <button id="download-zip" class="btn btn-primary" type="button">5장 ZIP으로 받기</button>
@@ -324,8 +344,8 @@
   </footer>
 
   <!-- ?v=: 이미 옛 파일을 캐시한 브라우저도 새 파일을 받게 합니다. 파일을 바꾸면 함께 올립니다 -->
-  <script src="/renderer.js?v=16"></script>
+  <script src="/renderer.js?v=18"></script>
   <script src="/zip.js?v=11"></script>
-  <script src="/app.js?v=15"></script>
+  <script src="/app.js?v=18"></script>
 </body>
 </html>

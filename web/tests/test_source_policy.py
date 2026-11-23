@@ -41,25 +41,23 @@ def test_namuwiki_is_auxiliary_secondary_and_mirror_never_counts():
     assert sources["s1"]["kind"] == "official" and "auxiliary" not in sources["s1"]
     namu = sources["s2"]
     assert namu["kind"] == "secondary" and namu["officialBasis"] is None and namu["verification"] == "fetched"
-    assert namu["auxiliary"] == {"site": "namu.wiki", "name": "나무위키", "label": "나무위키(보조 출처)",
-                                 "items": ["personality", "friends", "family", "relations", "tmi"]}
+    # 출처 종류(나무위키 · 2차 자료)는 계속 기록합니다. autoFetch: 자동으로 읽어도 되는 유형인지 (캐릭터 소개만)
+    assert namu["auxiliary"] == {"site": "namu.wiki", "name": "나무위키", "label": "나무위키(보조 출처)", "autoFetch": True}
     mirror = verify_sources([{"id": "m", "url": MIRROR, "kind": "secondary"}], run_with_fetches(MIRROR), "character")[0]
     assert mirror["verification"] == "mirror" and mirror["auxiliary"]["site"] == "namu.wiki"
-    # 굿즈 등 다른 유형에서는 어느 항목의 근거도 아님
-    assert verify_sources([{"id": "g", "url": NAMU}], run_with_fetches(NAMU), "goods")[0]["auxiliary"]["items"] == []
+    assert verify_sources([{"id": "g", "url": NAMU}], run_with_fetches(NAMU), "goods")[0]["auxiliary"]["autoFetch"] is False
 
 
-def test_namuwiki_counts_only_for_personality_friends_family_tmi():
+def test_namuwiki_counts_as_secondary_source_for_every_item():
     sources = sources_for()
     items = items_by_key([
         {"key": "personality", "value": "장난꾸러기", "quote": "q", "sourceIds": ["s2"]},  # 나무위키만 → 2차 자료
-        {"key": "birthday", "value": "5월 5일", "quote": "q", "sourceIds": ["s2"]},  # 생일은 나무위키로 인정하지 않음
+        {"key": "birthday", "value": "5월 5일", "quote": "q", "sourceIds": ["s2"]},  # 생일도 나무위키(2차 자료)로 인정
         {"key": "series", "value": "짱구는 못말려", "quote": "q", "sourceIds": ["s1", "s2"]},  # 공식도 있으면 공식 확인
         {"key": "friends", "value": "철수(친구), 유리(친구)", "quote": "q", "sourceIds": ["s1", "s2"]},
     ], sources)
-    assert items["personality"]["state"] == "secondary"
-    assert items["birthday"]["state"] == "unverified"
-    assert items["series"]["state"] == "verified" and items["friends"]["state"] == "verified"
+    assert items["personality"]["state"] == "secondary" and items["birthday"]["state"] == "secondary"
+    assert items["series"]["state"] == "verified" and items["friends"]["state"] == "verified"  # 공식도 있으면 공식 확인
 
 
 def test_official_and_namuwiki_values_that_differ_go_to_review():
@@ -79,18 +77,21 @@ def test_official_and_namuwiki_values_that_differ_go_to_review():
     assert item["value"] == "마이페이스" and item["savedConflict"] and item["state"] == "conflict"
 
 
-def test_strict_types_block_namuwiki_and_number_check_ignores_it():
+def test_auto_fetch_scope_stays_but_namuwiki_numbers_count_as_material():
     assert "WebFetch(domain:namu.wiki)" in site_policy.deny_rules("goods")
     assert "WebFetch(domain:namu.wiki)" in site_policy.deny_rules("popup") and "WebFetch(domain:namu.wiki)" in site_policy.deny_rules("collab")
     character = site_policy.deny_rules("character")
     assert "WebFetch(domain:namu.wiki)" not in character and "WebFetch(domain:namu.moe)" in character  # 캐릭터는 지금처럼, 미러만 막음
     assert "나무위키 namu.wiki" in site_policy.ai_blocked_labels("goods") and "나무위키 namu.wiki" not in site_policy.ai_blocked_labels("character")
-    # 가격 숫자 대조: 나무위키 근거의 숫자는 믿을 수 있는 근거가 아님
+    # 자동 읽기 범위는 그대로지만, 읽은(또는 사용자가 준) 나무위키 자료는 모든 유형의 참고 자료입니다 (숫자 대조 근거 포함)
     sources = verify_sources([{"id": "s1", "url": NAMU}], run_with_fetches(NAMU), "goods")
     rec = {"sources": sources, "facts": [{"text": "가격 12,000원", "sourceIds": ["s1"]}]}
-    assert "12,000" not in ai_provider.material_text(rec, None)
+    assert "12,000" in ai_provider.material_text(rec, None)
     price = items_by_key([{"key": "price", "value": "12,000원", "quote": "q", "sourceIds": ["s1"]}], sources, "goods")["price"]
-    assert price["state"] == "unverified"
+    assert price["state"] == "secondary"
+    # 미러 사이트는 여전히 근거가 아님
+    mirror = verify_sources([{"id": "m", "url": MIRROR}], run_with_fetches(MIRROR), "goods")
+    assert "33,000" not in ai_provider.material_text({"sources": mirror, "facts": [{"text": "가격 33,000원", "sourceIds": ["m"]}]}, None)
 
 
 # ---------- 참고 자료 직접 입력의 출처 종류 ----------
@@ -103,9 +104,9 @@ def test_user_notes_kind_never_becomes_official():
     assert namu["auxiliary"]["site"] == "namu.wiki" and namu["userKind"] == "namuwiki"
     items = items_by_key([{"key": "personality", "value": "장난꾸러기", "quote": "q", "sourceIds": ["u1"]},
                           {"key": "birthday", "value": "5월 5일", "quote": "q", "sourceIds": ["u1"]}], [namu])
-    assert items["personality"]["state"] == "secondary" and items["birthday"]["state"] == "unverified"
-    goods = research.user_notes_source("namuwiki", NAMU, "goods")  # 굿즈 가격은 나무위키 자료로 인정하지 않음
-    assert items_by_key([{"key": "price", "value": "1,500원", "quote": "q", "sourceIds": ["u1"]}], [goods], "goods")["price"]["state"] == "unverified"
+    assert items["personality"]["state"] == "secondary" and items["birthday"]["state"] == "secondary"
+    goods = research.user_notes_source("namuwiki", NAMU, "goods")  # 사용자가 준 나무위키 자료는 굿즈에서도 2차 자료 (공식으로 승격하지 않음)
+    assert items_by_key([{"key": "price", "value": "1,500원", "quote": "q", "sourceIds": ["u1"]}], [goods], "goods")["price"]["state"] == "secondary"
     # 종류를 고르지 않아도 주소가 나무위키면 보조 출처
     assert research.user_notes_source("", NAMU, "character")["userKind"] == "namuwiki"
 
@@ -141,7 +142,7 @@ def test_notes_source_is_validated_saved_and_passed_to_research(client, capture)
     u1 = next(s for s in job["research"]["sources"] if s["id"] == "u1")
     assert u1["auxiliary"]["label"] == "나무위키(보조 출처)" and u1["verification"] == "user_provided" and u1["url"] == NAMU
     research_call = next(c for c in capture if "<user_notes>" in c["prompt"])
-    assert "나무위키에서 옮긴 보조 자료" in research_call["prompt"] and "나무위키(namu.wiki)는 공식 출처가 아닌 보조 출처" in research_call["prompt"]
+    assert "나무위키에서 옮긴 보조 자료" in research_call["prompt"] and "나무위키(namu.wiki)는 공식 출처가 아닌 2차 자료" in research_call["prompt"]
     assert "WebFetch(domain:namu.moe)" in research_call["disallowed"] and "WebFetch(domain:namu.wiki)" not in research_call["disallowed"]
 
 
@@ -153,24 +154,29 @@ def test_goods_research_blocks_namuwiki_fetch(client, capture):
     assert "WebFetch(domain:namu.wiki)" in call["disallowed"] and "나무위키 namu.wiki" in call["prompt"]
 
 
-def test_card_with_namuwiki_source_gets_a_warning(client, capture, monkeypatch):
+def test_card_with_namuwiki_source_keeps_source_type_without_blocking(client, capture, monkeypatch):
     monkeypatch.setattr(tt, "OFFICIAL", NAMU)  # 가짜 AI가 읽은 페이지가 나무위키인 경우
     job_id, _ = start_ai(client)
     job = wait(client, job_id, "waiting_outline")
     source = next(s for s in job["research"]["sources"] if s["url"] == NAMU)
     assert source["kind"] == "secondary" and source["auxiliary"]
-    warnings = [w for issue in job["outline"]["issues"].values() for w in issue["warnings"]]
-    assert any("나무위키(보조 출처) 내용이 들어 있어요" in w for w in warnings)
+    # 공식이 아니라는 이유만으로 경고·차단하지 않습니다 (출처 종류는 조사 결과에 남음)
+    assert not any(issue["errors"] for issue in job["outline"]["issues"].values())
+    assert not any("나무위키" in w for issue in job["outline"]["issues"].values() for w in issue["warnings"])
 
 
-def test_material_from_namuwiki_is_refused_for_goods(client, fake):
+def test_material_from_namuwiki_is_accepted_for_goods_as_user_source(client, fake):
     job_id = client.post("/api/jobs/draft").json()["id"]
     job = jobs._read(job_id)
-    job.update(state="waiting_material", mode="ai", contentType="goods", topic="치이카와 키링")
+    job.update(state="waiting_material", mode="ai", topic="치이카와 키링")
+    jobs._apply_type(job, "goods", "user")
     jobs.save(job)
     body = {"name": "키링", "features": "귀여운 키링", "price": "1,500원", "sourceUrl": NAMU}
     r = api(client, job_id, "POST", "/material", json=body)
-    assert r.status_code == 409 and "근거로 쓸 수 없어요" in r.json()["detail"]
+    assert r.status_code == 200, r.text
+    job = wait(client, job_id, "waiting_outline", "waiting_material")
+    user1 = next(s for s in job["research"]["sources"] if s["id"] == "user1")
+    assert user1["verification"] == "user_provided" and user1["auxiliary"]["site"] == "namu.wiki"
 
 
 # ---------- 자료 보관함: 예전에 저장된 자료에도 같은 규칙 ----------
@@ -187,7 +193,7 @@ def test_saved_research_gets_the_same_rules_without_changing_the_file():
     before = research_library._path(summary["id"]).read_text(encoding="utf-8")
     found = research_library.research_for_job(research_library.get(summary["id"]), "짱구는 장난꾸러기", "official", "https://brand.example/a")
     states = {i["key"]: i["state"] for i in found["items"]}
-    assert states["birthday"] == "unverified" and states["personality"] == "secondary" and states["favorite"] == "unverified"
+    assert states["birthday"] == "secondary" and states["personality"] == "secondary" and states["favorite"] == "unverified"  # 미러만 근거가 아님
     by_id = {s["id"]: s for s in found["sources"]}
     assert by_id["s1"]["auxiliary"] and by_id["s2"]["verification"] == "mirror"
     assert by_id["u1"]["userKind"] == "official" and by_id["u1"]["verification"] == "user_provided"

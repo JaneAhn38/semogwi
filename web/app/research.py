@@ -5,7 +5,7 @@ AI는 항목(items)마다 값, 근거 문장(quote), 출처 id와 함께 조사 
 
 상태 (state) — 값이 있는 경우
 - verified      공식 출처 페이지를 읽어 확인
-- secondary     2차 출처 페이지를 읽어 확인 (공식만 허용하는 항목에는 부족)
+- secondary     2차 출처(기사·위키·나무위키 등) 페이지를 읽어 확인 (근거로 인정, 출처 종류만 구분)
 - image         상세 이미지를 AI가 읽어 확인 (출처 이미지와 연결)
 - user          사용자가 입력한 자료
 - listed        검색 목록에 주소만 있음 (확인 아님)
@@ -30,7 +30,8 @@ USER_NOTES_ID = "u1"  # 사용자가 입력 화면에 직접 쓴 참고 자료
 # ---------- 조사 항목 정의 (유형별 하나의 표) ----------
 # key        항목 이름 (템플릿 필드의 item과 연결)
 # label      화면 이름
-# official   공식 출처만 근거로 인정 (가격·일정처럼 틀리면 곤란한 정보)
+# official   공식 출처를 우선 찾는 항목 (가격·일정처럼 틀리면 곤란한 정보). 필수 조건은 아닙니다 — 2차 자료도 근거로 인정
+#            (세모귀는 개인 캡스톤 시연용 프로젝트라 공식 확인을 제작 조건으로 두지 않습니다. 출처 종류는 계속 기록·표시)
 # importance core(핵심, 없으면 구성안을 쓰지 않음) / high(카드에 자주 쓰임) / normal
 # core       핵심 그룹 이름. 같은 그룹 중 하나만 확인돼도 됩니다 (예: 성격·작품·데뷔 중 하나)
 # many       여러 개가 나열되는 항목 (라인업, 친구 목록 등). 일부만 조사됐는지 충분성을 따집니다
@@ -135,7 +136,7 @@ def _core_groups(content_type: str, specs: list[dict]) -> list[list[str]]:
 
 CORE = {t: _core_groups(t, specs) for t, specs in SPECS.items()}  # 핵심: 그룹마다 하나 이상 확인되면 선택 항목이 비어도 구성안을 만듭니다
 
-STATE_LABELS = {"verified": "공식 확인", "secondary": "2차 자료", "image": "상세 이미지", "user": "사용자 제공", "listed": "검색 목록만",
+STATE_LABELS = {"verified": "공식 확인", "secondary": "2차 자료", "image": "상세 이미지", "user": "사용자 제공", "listed": "검색 결과(원문 미확인)",
                 "unverified": "근거 없음", "conflict": "출처 충돌", "not_searched": "미조사", "not_found": "자료 없음",
                 "failed": "검색·읽기 실패", "blocked": "접근 제한", "missing": "정보 확인 필요"}
 EMPTY_STATES = {"not_searched", "not_found", "failed", "blocked", "missing"}  # 값이 없는 상태
@@ -247,11 +248,14 @@ def friend_names(items: list[dict] | None) -> list[str]:
     return [p["name"] for p in people_of(items)["friends"]]
 
 
-USABLE = {"verified", "image", "user"}  # 핵심 항목 근거로 쓸 수 있는 상태 (secondary는 공식만 허용하는 항목이 아닐 때만)
+USABLE = {"verified", "secondary", "image", "user"}  # 자료가 있는 상태 (listed는 근거 문장이 있을 때만, _usable)
 
 
 def _usable(item: dict) -> bool:
-    return item["state"] in USABLE or (item["state"] == "secondary" and not item["strict"])
+    """자료가 있는지. 공식 확인 여부와 관계없이, 읽은 2차 자료와 값이 적힌 검색 결과(근거 문장 있음)도 찾은 것으로 봅니다."""
+    if item["state"] == "listed":
+        return bool(item.get("value")) and bool(item.get("quote"))  # 검색 결과에 값이 그대로 적혀 있을 때만
+    return item["state"] in USABLE
 
 
 def core_status(content_type: str, items: list[dict] | None) -> dict:
@@ -261,6 +265,35 @@ def core_status(content_type: str, items: list[dict] | None) -> dict:
     lacking = [" 또는 ".join(labels[k] for k in group) for group in CORE.get(content_type, [])
                if not any(k in by_key and _usable(by_key[k]) for k in group)]
     return {"ready": bool(items) and not lacking, "lacking": lacking}
+
+
+WEAK_STATES = {"conflict", "unverified"}  # 값은 있지만 근거가 약한 상태: 출처끼리 다르거나, 인용한 출처가 조회 기록에 없음
+GAP_REASONS = {"not_searched": "조사하지 않음", "not_found": "자료를 찾지 못함", "failed": "검색·페이지 읽기 실패", "blocked": "사이트 접근 제한",
+               "missing": "자료를 찾지 못함", "listed": "검색 결과에 값이 없음", "unverified": "근거를 확인하지 못함", "conflict": "출처마다 값이 다름"}
+
+
+def gap_report(content_type: str, items: list[dict] | None, missing: list[str] | None = None) -> dict:
+    """자료 부족 안내. 진행을 막지 않고, 무엇이 왜 부족한지 보여 주는 데만 씁니다.
+
+    결과: {"ready": 핵심 항목 확인 여부, "rows": [{key, label, importance, state, kind, reason, value}], "notes": AI가 적은 부족 사유}
+    kind: not_found(찾지 못함 — 카드에 만들어 넣지 않음) / weak(값은 있지만 출처끼리 다르거나 근거를 확인하지 못함)
+    공식 확인 여부로는 부족하다고 보지 않습니다 (2차 자료·값이 적힌 검색 결과도 찾은 것). 출처 종류는 조사 항목에 따로 남습니다.
+    """
+    rows = []
+    for item in items or []:
+        if item.get("importance") not in ("core", "high"):
+            continue
+        state = item["state"]
+        if state in EMPTY_STATES or (state == "listed" and not _usable(item)):
+            kind = "not_found"
+        elif state in WEAK_STATES:
+            kind = "weak"
+        else:
+            continue
+        rows.append({"key": item["key"], "label": item["label"], "importance": item["importance"], "state": state, "kind": kind,
+                     "reason": GAP_REASONS.get(state, STATE_LABELS.get(state, state)), "value": item.get("value", "") if kind == "weak" else ""})
+    rows.sort(key=lambda r: (r["importance"] != "core", r["kind"] != "not_found"))
+    return {"ready": core_status(content_type, items)["ready"], "rows": rows, "notes": [str(m)[:200] for m in (missing or [])][:10]}
 
 
 def core_text(content_type: str) -> str:
@@ -290,7 +323,7 @@ def checklist_text(content_type: str, report: bool = False) -> str:
     """조사 항목 안내. report=True면 항목마다 조사 결과(outcome)·충분성(coverage)·확인한 주소(checkedUrls)도 적게 합니다."""
     lines = ["[조사 항목] 아래 항목을 하나씩 찾아 items에 적는다. key는 그대로 쓴다. 핵심·중요 항목부터 찾는다."]
     for spec in SPECS[content_type]:
-        tags = [t for t in (IMPORTANCE_LABELS.get(spec.get("importance")), "공식 출처만" if spec.get("official") else "",
+        tags = [t for t in (IMPORTANCE_LABELS.get(spec.get("importance")), "공식 출처 우선" if spec.get("official") else "",
                             "여러 개 나열" if spec.get("many") else "") if t]
         hint = f" — {spec['hint']}" if spec.get("hint") else ""
         lines.append(f"- {spec['key']}: {spec['label']}{' (' + ', '.join(tags) + ')' if tags else ''}{hint}")
@@ -421,6 +454,7 @@ def _evidence(entry: dict, by_id: dict, at: str) -> list[dict]:
         source = by_id[source_id]
         records.append({"sourceId": source_id, "url": source.get("url", ""), "title": source.get("title", ""), "kind": source.get("kind", ""),
                         "verification": source.get("verification", ""), "pageRead": source.get("verification") == "fetched",
+                        "publishedAt": source.get("publishedAt", ""),  # 원문 게시일 (보이는 경우만). at은 조사일
                         "quote": entry["quote"], "quoteCheck": "not_checked", "at": at})
     return records
 
@@ -496,9 +530,8 @@ def verify_items(content_type: str, raw_items: list, sources: list[dict], log: d
 
 
 def _counts_for(source: dict, key: str | None) -> bool:
-    """보조 출처(나무위키)는 정해진 항목의 근거로만 셉니다. key를 모르면(예전 호출) 그대로 셉니다."""
-    aux = source.get("auxiliary")
-    return not aux or key is None or key in aux.get("items", [])
+    """나무위키 같은 보조 출처도 모든 항목의 참고 근거로 셉니다 (출처 종류는 auxiliary로 남음). 미러 사이트만 근거가 아닙니다."""
+    return source.get("verification") != "mirror"
 
 
 def _state(main: dict, values: list[dict], by_id: dict, key: str | None = None) -> str:
@@ -622,11 +655,52 @@ def profile_row_state(row: dict, items: list[dict] | None, keys: list[str]) -> s
     return "unverified"
 
 
-def field_states(cards: list[dict], templates_of, items: list[dict] | None, card_state) -> dict:
+FIELD_STATE_LABELS = {"verified": "공식 확인", "secondary": "2차 자료", "listed": "검색 결과(원문 미확인)", "user": "사용자 제공",
+                      "user_written": "사용자 작성", "image": "상세 이미지", "conflict": "출처 충돌", "unverified": "근거 확인 못 함",
+                      "absent": "조사에서 찾지 못함"}
+
+
+def value_strings(value) -> list[str]:
+    """칸 값의 글자들 (글 칸, 글 목록, 항목 묶음, 정보 줄)."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [s for v in value for s in value_strings(v)]
+    if isinstance(value, dict):
+        return [s for v in value.values() for s in value_strings(v)]
+    return []
+
+
+_NUMBER_RE = re.compile(r"\d+")  # 숫자 묶음 (쉼표는 먼저 지움: 9,900 → 9900, 12.1 → 12 · 1)
+
+
+def supported(value, material_norm: str) -> bool:
+    """칸 값이 자료(조사 사실·조사 항목 값·근거 문장·사용자 자료)에 나오는지.
+
+    AI가 표기를 바꿔 쓰는 경우(¥440 ↔ 440엔, 12월 1일 ↔ 12.1)를 맞는 값으로 보려고, 값 전체 외에도
+    값의 숫자가 모두 자료에 있거나(숫자가 있는 값), 세 글자 이상인 낱말이 자료에 나오면 근거가 있다고 봅니다.
+    """
+    numbers_in_material = set(_NUMBER_RE.findall(material_norm.replace(",", "")))
+    for text in value_strings(value):
+        whole = _norm(text)
+        if len(whole) >= 2 and whole in material_norm:
+            return True
+        numbers = _NUMBER_RE.findall(text.replace(",", ""))
+        if numbers and all(n in numbers_in_material for n in numbers):
+            return True
+        if any(len(_norm(word)) >= 3 and _norm(word) in material_norm for word in re.split(r"\s+", text) if not _NUMBER_RE.search(word)):
+            return True
+    return False
+
+
+def field_states(cards: list[dict], templates_of, items: list[dict] | None, card_state, material: str | None = None) -> dict:
     """카드 필드마다 어떤 근거에서 왔는지 표시합니다. {frame: {field: state}}
 
     templates_of(frame) → 템플릿, card_state(card) → 카드 출처 상태(verified/user_provided/listed/...)
+    material: 대조할 자료 글. 조사 항목에 값이 없는 칸은 카드의 다른 출처 상태를 따라가지 않고, 자료에 그 값이 있는지 직접 봅니다.
+    없으면 'absent'(조사에서 찾지 못함). 사용자가 직접 고친 칸(card.userFields)은 'user_written'(사용자 작성)입니다.
     """
+    material_norm = _norm(material) if material is not None else None
     by_key = {i["key"]: i for i in items or []}
     fallback = {"verified": "verified", "user_provided": "user", "listed": "listed", "image": "image"}
     result = {}
@@ -647,13 +721,17 @@ def field_states(cards: list[dict], templates_of, items: list[dict] | None, card
             item_state = by_key[key]["state"] if key in by_key else "missing"
             if not value:
                 states[field["key"]] = "missing"
+            elif field["key"] in (card.get("userFields") or []):
+                states[field["key"]] = "user_written"  # 사용자가 직접 쓴 문구 (조사한 사실과 구분)
             elif item_state in ("verified", "secondary", "conflict", "image"):
                 states[field["key"]] = item_state  # 페이지에서 확인한 항목, 또는 출처끼리 다른 항목
             elif card_level == "user":
                 states[field["key"]] = "user"  # 사용자 자료로 쓴 카드
-            elif item_state != "missing":
-                states[field["key"]] = item_state
+            elif item_state not in EMPTY_STATES:
+                states[field["key"]] = item_state  # listed / unverified / user
+            elif material_norm is not None and not supported(value, material_norm):
+                states[field["key"]] = "absent"  # 조사 항목에도 자료에도 없는 값 (다른 칸의 출처 상태를 따르지 않음)
             else:
-                states[field["key"]] = card_level
+                states[field["key"]] = card_level  # 조사 항목은 비었지만 조사 사실·사용자 자료에 나오는 값
         result[card["frame"]] = states
     return result

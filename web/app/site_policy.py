@@ -72,11 +72,11 @@ def mirror_site(url: str) -> dict | None:
 
 
 def auxiliary_tag(url: str, content_type: str | None) -> dict | None:
-    """출처에 붙일 보조 출처 표시. items: 이 유형에서 근거로 쓸 수 있는 조사 항목 (없으면 어느 항목의 근거도 아님)."""
+    """출처에 붙일 보조 출처 표시 (출처 종류 구분용). 근거로는 모든 항목에 쓸 수 있습니다. autoFetch: 자동으로 읽어도 되는 유형."""
     site = auxiliary_site(url) or mirror_site(url)
     if site is None:
         return None
-    return {"site": site["domain"], "name": site["name"], "label": site["label"], "items": list(site.get("items", {}).get(content_type or "", []))}
+    return {"site": site["domain"], "name": site["name"], "label": site["label"], "autoFetch": content_type in site.get("autoFetch", [])}
 
 
 def _ai_blocked_domains(content_type: str | None) -> list[str]:
@@ -84,8 +84,8 @@ def _ai_blocked_domains(content_type: str | None) -> list[str]:
     domains = []
     for site in auxiliary_sites():
         domains += site.get("mirrors", [])
-        if content_type and not site.get("items", {}).get(content_type):
-            domains.append(site["domain"])
+        if content_type and content_type not in site.get("autoFetch", []):
+            domains.append(site["domain"])  # 자동 접근 범위는 넓히지 않습니다 (캐릭터 소개만)
     return domains
 
 
@@ -94,7 +94,7 @@ def ai_blocked_labels(content_type: str | None) -> list[str]:
     labels = []
     for site in auxiliary_sites():
         labels += [f"{site['name']} 미러 {m}" for m in site.get("mirrors", [])]
-        if content_type and not site.get("items", {}).get(content_type):
+        if content_type and content_type not in site.get("autoFetch", []):
             labels.append(f"{site['name']} {site['domain']}")
     return labels
 

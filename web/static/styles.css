@@ -483,3 +483,23 @@ body.format-template .legacy-only, body:not(.format-template) .template-only { d
 .notes-source { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .notes-source select { flex: 0 1 200px; }
 .notes-source input { flex: 1 1 240px; }
+
+/* 자료 부족 안내 · 확인할 정보 목록 (진행을 막지 않음) */
+.gap-box { margin: 0 0 12px; padding: 10px 14px; border: 1.5px solid var(--line, #e6dfe9); border-radius: 12px; background: #fff; font-size: .9rem; }
+.gap-box h3 { margin: 0 0 6px; font-family: var(--font-display); font-size: .98rem; }
+.gap-box ul { display: grid; gap: 3px; margin: 0; padding-left: 18px; }
+.gap-box .gap-kind { display: inline-block; margin-right: 6px; padding: 0 7px; border-radius: 8px; font-size: .78rem; background: var(--butter); }
+.gap-box .gap-kind.is-missing { background: #f1eef3; }
+.gap-box small { display: block; margin-top: 6px; color: var(--ink-soft); }
+.gap-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+.gap-choice .hint { flex-basis: 100%; margin: 0; }
+.material-sources { gap: 8px; }
+.material-source { display: grid; grid-template-columns: 1fr 150px auto; gap: 6px 8px; padding: 8px; border-radius: 10px; background: var(--paper, #fff8f0); }
+.material-source textarea { grid-column: 1 / -1; }
+.material-details summary { cursor: pointer; font-family: var(--font-display); font-size: .92rem; }
+.material-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-top: 8px; }
+.material-detail-grid .is-wide { grid-column: 1 / -1; }
+.material-sources > button { justify-self: start; }
+.material-source input, .material-source textarea { width: 100%; padding: 8px 12px; color: var(--ink); font: 400 .95rem/1.5 var(--font-body); background: var(--cream); border: 2px solid var(--line); border-radius: 12px; resize: vertical; }
+.field-source { color: var(--ink-soft); font-size: .8rem; }
+.hint.field-source { margin: -4px 0 8px; }

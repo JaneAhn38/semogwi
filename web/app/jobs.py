@@ -242,6 +242,8 @@ def load(job_id: str) -> dict | None:
                 changed = True
     if changed:
         save(job)
+    if job["state"] == "waiting_material" and "researchGap" not in job:
+        _refresh_gap(job)  # 예전에 자료 부족으로 멈춘 작업도 부족한 정보를 보여 줍니다 (읽을 때 계산만, 파일은 그대로)
     return job
 
 
@@ -527,7 +529,7 @@ def approve_research(job_id: str) -> dict:
 # ---------- 조사 결과 화면의 '추가 조사' ----------
 # 사용자가 적은 내용을 지금 자료를 참고해 더 조사합니다. 결과는 초안(researchDraft)으로만 두고,
 # 사용자가 '통합'을 누를 때만 조사 자료(research)가 바뀝니다. 구성안은 그대로 두고 경고만 다시 계산합니다.
-MORE_STATES = ("waiting_research", "waiting_outline")
+MORE_STATES = ("waiting_research", "waiting_outline", "waiting_material")  # 자료가 부족해 멈춘 작업도 부족한 항목만 더 조사할 수 있습니다
 DRAFT_PENDING = "확인하지 않은 추가 조사 결과가 있어요. 먼저 '통합' 또는 '버리기'를 골라 주세요"
 
 
@@ -643,6 +645,7 @@ def accept_more_research(job_id: str) -> dict:
         if job.get("outline"):
             job["outline"]["researchUpdated"] = {"round": draft["round"], "at": entry["acceptedAt"]}  # 구성안 다시 생성 안내
             job["outline"]["issues"] = _issues(job)
+    _refresh_gap(job)
     save(job)
     return job
 
@@ -908,6 +911,8 @@ def _issues(job: dict) -> dict:
         return issues
     if templates.is_template_job(job) and job.get("research"):
         _check_fields_against_research(job, cards, issues)
+        job["outline"]["publishWarnings"] = publish_warnings(job)
+        _refresh_gap(job)
     strict = job["contentType"] != "character"
     research = job.get("research")
     if strict:
@@ -922,35 +927,81 @@ def _issues(job: dict) -> dict:
         state = card_source_state(card, research)
         cited = [s for s in research["sources"] if s["id"] in card["sourceIds"]] if research else []
         if any(s["verification"] == "user_provided" for s in cited):
-            issues[card["frame"]]["warnings"].append("사용자가 제공한 자료가 들어 있어요. AI가 공식 페이지에서 확인한 내용이 아니니 게시 전에 확인해 주세요")
+            issues[card["frame"]]["warnings"].append("사용자가 제공한 자료가 들어 있어요. 게시 전에 내용을 한 번 더 확인해 주세요")
         if any(s["verification"] == "image" for s in cited):
             issues[card["frame"]]["warnings"].append("상세 이미지에서 AI가 읽은 정보가 들어 있어요. 조사 결과의 출처 이미지와 대조해 확인해 주세요")
-        aux = next((s["auxiliary"] for s in cited if s.get("auxiliary")), None)
-        if aux:
-            issues[card["frame"]]["warnings"].append(f"{aux['label']} 내용이 들어 있어요. 공식 자료가 아니니 공식 자료와 대조해 확인해 주세요")
-        if state in ("user_provided", "image"):
+        # 공식 여부로는 막지 않습니다 (2차 자료·나무위키·값이 적힌 검색 결과도 근거). 출처 종류는 조사 결과에 남습니다
+        if state in ("user_provided", "image", "verified"):
             continue
-        if state == "verified":
-            read = [s for s in cited if s["verification"] == "fetched"]
-            if strict and not any(s["kind"] == "official" for s in read):
-                message = "읽은 페이지가 공식 출처가 아니에요"
-                issues[card["frame"]]["warnings" if card["edited"] else "errors"].append(f"{message}. 공식 자료를 확인해 직접 수정해 주세요")
-            elif strict and not any(s.get("officialBasis") == "registered" for s in read):
-                issues[card["frame"]]["warnings"].append("공식 사이트인지는 AI의 판단이에요. 게시 전에 확인해 주세요")
+        if state == "listed":
+            issues[card["frame"]]["warnings"].append("검색 결과에서 확인한 정보예요. 원문 페이지는 읽지 못했어요")
             continue
-        message = "검색 목록에 주소만 있고 페이지를 읽지 않았어요" if state == "listed" else "이 카드의 근거 URL을 실제 조회 기록에서 확인하지 못했어요"
-        if strict and not card["edited"]:
-            issues[card["frame"]]["errors"].append(f"{message}. 공식 출처를 확인해 직접 수정해 주세요")
-        else:
-            issues[card["frame"]]["warnings"].append(message)
+        # 근거 URL이 조회 기록에 없음 = 출처가 없는 사실: 지어낸 내용을 막기 위해 직접 고치기 전까지 승인을 막습니다 (캐릭터 소개는 경고)
+        message = "이 카드의 근거 URL을 실제 조회 기록에서 확인하지 못했어요. 근거 없는 내용을 지우거나 고쳐 주세요"
+        issues[card["frame"]]["errors" if strict and not card["edited"] else "warnings"].append(message)
     return issues
 
 
+VOLATILE_DAYS = 30  # 원문 게시일이 조사일보다 이만큼 오래되면 최신 정보인지 확인을 권합니다
+
+
+def item_dates(item: dict | None) -> tuple[str, str]:
+    """(원문 게시일, 조사일). 게시일은 출처에 보이는 날짜만 (없으면 빈 문자열), 조사일은 근거 기록 시각의 날짜입니다."""
+    if not item:
+        return "", ""
+    evidence = item.get("evidence") or []
+    published = max((e.get("publishedAt") or "" for e in evidence), default="")
+    researched = max(((e.get("at") or "")[:10] for e in evidence), default="")
+    return published, researched
+
+
+def _stale(published: str, researched: str) -> bool:
+    try:
+        return (datetime.fromisoformat(researched) - datetime.fromisoformat(published)).days > VOLATILE_DAYS
+    except ValueError:
+        return False
+
+
+def publish_warnings(job: dict) -> list[dict]:
+    """PNG로 저장하기 전에 알려 줄 확인할 정보. 저장을 막지 않습니다. [{frame, text}]
+
+    공식 확인 여부가 아니라 근거가 약한 정보(출처 충돌·근거 확인 못 함·원문 미확인 검색 결과), 사용자 제공·이미지 판독,
+    변동 정보(가격·기간 등)의 원문 게시일과 조사일을 알립니다.
+    """
+    research = job.get("research") or {}
+    items = {i["key"]: i for i in research.get("items") or []}
+    states = (job.get("outline") or {}).get("fieldStates") or {}
+    warnings = []
+    if research.get("partial") or (job.get("researchStage") or {}).get("forced"):
+        warnings.append({"frame": "", "text": "자료가 부족한 상태에서 작성한 카드뉴스예요. 비어 있는 정보가 없는지 확인해 주세요"})
+    labels = research_items.FIELD_STATE_LABELS
+    for card in (job.get("outline") or {}).get("cards", []):
+        tpl = templates.template_for(job, card["frame"])
+        for field in tpl["fields"]:
+            state = (states.get(card["frame"]) or {}).get(field["key"])
+            item = items.get(field.get("item"))
+            if not state or state == "missing" or not item:
+                continue
+            # 가격·일정·장소처럼 공식 우선이거나 중요한 정보는 공식 확인이 아니면 출처 종류를 알립니다 (막지 않음)
+            important = item.get("strict") or item.get("volatile") or item.get("importance") in ("core", "high")
+            notes = [labels.get(state, state)] if state != "verified" and (important or state in ("conflict", "unverified", "absent")) else []
+            if state == "listed":
+                notes.append("서버가 검색 결과 원문을 확인하지 못함")
+            if item.get("volatile"):
+                published, researched = item_dates(item)
+                notes.append(f"원문 게시일 {published or '확인 안 됨'} · 조사일 {researched or '확인 안 됨'} 기준")
+            if notes:
+                warnings.append({"frame": card["frame"], "text": f"{field['label']}: {' · '.join(notes)}"})
+    return warnings
+
+
 def _check_fields_against_research(job: dict, cards: list[dict], issues: dict) -> None:
-    """필드마다 근거가 된 조사 항목의 상태를 기록하고, 출처 충돌·미확인 정보를 승인 전에 확인하게 합니다."""
+    """필드마다 근거가 된 조사 항목의 상태를 기록하고, 출처 충돌·근거가 약한 정보를 알립니다.
+
+    공식 확인 여부로는 막지 않습니다. 출처가 없는 사실(조회 기록에 없는 근거)만 굿즈·팝업·콜라보에서 직접 고치기 전까지 승인을 막습니다.
+    """
     research = job["research"]
-    states = research_items.field_states(cards, lambda frame: templates.template_for(job, frame), research.get("items"),
-                                         lambda card: card_source_state(card, research))
+    states = _field_states(job, cards)
     job["outline"]["fieldStates"] = states
     items = {i["key"]: i for i in research.get("items") or []}
     for card in cards:
@@ -962,21 +1013,86 @@ def _check_fields_against_research(job: dict, cards: list[dict], issues: dict) -
                 continue
             state = states[card["frame"]].get(field["key"])
             item = items.get(field.get("item"))
-            strict = bool(item and item["strict"]) or (item is None and job["contentType"] != "character")
-            if state == "conflict":
+            strict = job["contentType"] != "character"
+            target = notes["warnings"]
+            if state == "conflict" and item:
                 values = " / ".join([item["value"]] + [a["value"] for a in item["alternatives"]])
-                message = f"출처마다 값이 달라요: {field['label']} ({values}). 공식 자료를 확인해 직접 고쳐 주세요"
-            elif strict and state in ("secondary", "listed", "unverified"):
-                message = f"공식 출처에서 확인하지 못한 정보예요: {field['label']}. 확인해서 고치거나 지워 주세요"
-            elif state in ("listed", "unverified"):
-                message = f"근거를 확인하지 못한 정보예요: {field['label']}"
+                message = f"출처마다 값이 달라요: {field['label']} ({values}). 맞는 값을 확인해 고쳐 주세요"
+            elif state == "listed" and item and not item.get("quote"):
+                message = f"근거를 확인하지 못한 정보예요: {field['label']} (검색 결과에 값이 없음)"
+            elif state == "absent":
+                # 조사 항목에도 자료에도 없는 값: 수정을 안내하고 막지는 않습니다 (지어낸 숫자는 숫자 검사가 따로 막음)
+                message = f"조사에서 찾지 못한 정보예요: {field['label']}. 근거를 확인하고 고치거나 지워 주세요"
+            elif state == "unverified":
+                message = f"근거를 확인하지 못한 정보예요: {field['label']}. 지우거나 고쳐 주세요"
+                if strict and not card["edited"] and item and item["state"] == "unverified":
+                    # 조사 항목의 근거가 조회 기록에 없음 = 출처가 없는 사실: 지어낸 내용일 수 있어 직접 확인하기 전까지 막습니다
+                    target = notes["errors"]
+            elif item and item.get("volatile") and state not in (None, "missing"):
+                published, researched = item_dates(item)
+                if not (published and researched and _stale(published, researched)):
+                    continue
+                message = f"{field['label']}: 원문 게시일 {published} 자료예요 (조사일 {researched}). 최신 정보인지 확인해 주세요"
             else:
                 continue
-            target = notes["errors"] if strict and not card["edited"] else notes["warnings"]
             if message not in target:
                 target.append(message)
+        for cleared in card.get("cleared") or []:
+            message = f"조사에서 찾지 못한 정보라 비웠어요: {cleared['label']} ('{cleared['value']}'). 확인했다면 직접 입력해 주세요"
+            if message not in notes["warnings"]:
+                notes["warnings"].append(message)
         if tpl["id"].endswith(f"-{templates.FREE}"):
-            _check_free_card(card, items, notes)
+            _check_free_card(card, items, notes, job["contentType"] != "character")
+
+
+def support_text(job: dict) -> str:
+    """칸 값을 대조할 자료: 근거가 있는 조사 사실, 조사 항목의 값과 근거 문장(다른 값 포함), 사용자가 준 자료."""
+    research = job.get("research") or {}
+    ok = {s["id"] for s in research.get("sources", []) if s.get("verification") in ("fetched", "search_result", "user_provided", "image")}
+    parts = [f.get("text", "") for f in research.get("facts", []) if set(f.get("sourceIds", [])) & ok]
+    for item in research.get("items") or []:
+        if item.get("state") in research_items.EMPTY_STATES:
+            continue
+        for entry in [item] + list(item.get("alternatives") or []):
+            parts += [str(entry.get("value") or ""), str(entry.get("quote") or "")]
+    for person in (research.get("peopleResearch") or {}).get("people", []):
+        parts += [str(person.get(k) or "") for k in ("name", "relation", "tmi")]
+    parts.append(material_text(research, job.get("userMaterial")))
+    parts += [str(job.get("notes") or ""), str((job.get("userMaterial") or {}).get("pasted") or "")]
+    return "\n".join(parts)
+
+
+def _field_states(job: dict, cards: list[dict]) -> dict:
+    research = job["research"]
+    return research_items.field_states(cards, lambda frame: templates.template_for(job, frame), research.get("items"),
+                                       lambda card: card_source_state(card, research), support_text(job))
+
+
+def clear_unsupported(job: dict, frames: list[str] | None = None) -> None:
+    """AI가 쓴 카드에서 조사 항목에도 자료에도 없는 짧은 사실 칸(날짜·가격·장소·명칭 등)을 비웁니다.
+
+    공식 우선 항목이거나 바뀌기 쉬운 정보인 한 줄 칸만 비우고, 꼭 필요한 칸·여러 줄 글·목록은 남겨 경고로 안내합니다 (제작을 멈추지 않게).
+    사용자가 직접 고친 카드는 건드리지 않습니다. 비운 값은 card.cleared에 남겨 구성안에서 알려 줍니다.
+    """
+    if not job.get("research") or not templates.is_template_job(job) or not job.get("outline"):
+        return
+    cards = [c for c in job["outline"]["cards"] if (frames is None or c["frame"] in frames) and not c.get("edited")]
+    if not cards:
+        return
+    states = _field_states(job, cards)
+    items = {i["key"]: i for i in job["research"].get("items") or []}
+    for card in cards:
+        tpl = templates.template_for(job, card["frame"])
+        cleared = []
+        for field in tpl["fields"]:
+            item = items.get(field.get("item")) or {}
+            spec_fact = item.get("strict") or item.get("volatile")
+            if states[card["frame"]].get(field["key"]) != "absent" or field["type"] != "text" or field.get("required") or not spec_fact:
+                continue
+            cleared.append({"key": field["key"], "label": field["label"], "value": card["fields"][field["key"]]})
+            card["fields"][field["key"]] = ""
+        if cleared:
+            card["cleared"] = cleared
 
 
 def _check_profile_rows(card: dict, field: dict, states: dict, notes: dict) -> None:
@@ -985,7 +1101,7 @@ def _check_profile_rows(card: dict, field: dict, states: dict, notes: dict) -> N
         state = states.get(f"{field['key']}.{n}")
         label = row.get("label") or f"{field['label']} {n + 1}"
         if state == "conflict":
-            message = f"출처마다 값이 달라요: {label} ({row.get('value', '')}). 공식 자료를 확인해 직접 고쳐 주세요"
+            message = f"출처마다 값이 달라요: {label} ({row.get('value', '')}). 맞는 값을 확인해 고쳐 주세요"
         elif state in ("listed", "unverified"):
             message = f"근거를 확인하지 못한 정보예요: {label}"
         else:
@@ -994,20 +1110,23 @@ def _check_profile_rows(card: dict, field: dict, states: dict, notes: dict) -> N
             notes["warnings"].append(message)
 
 
-def _check_free_card(card: dict, items: dict, notes: dict) -> None:
-    """자유 구성 카드는 필드가 조사 항목과 연결되지 않으므로, 문구 안에 충돌·미확인 값이 들어 있는지 직접 찾습니다."""
+def _check_free_card(card: dict, items: dict, notes: dict, strict: bool = False) -> None:
+    """자유 구성 카드는 필드가 조사 항목과 연결되지 않으므로, 문구 안에 충돌·근거 없는 값이 들어 있는지 직접 찾습니다."""
     text = research_items._norm(templates.card_text(card))
     for item in items.values():
-        if item["state"] not in ("conflict", "listed", "unverified"):
+        weak = item["state"] in research_items.WEAK_STATES or (item["state"] == "listed" and not item.get("quote"))
+        if not weak:
             continue
         values = [v for v in [item["value"]] + [a["value"] for a in item.get("alternatives", [])] if v]
         if not any(len(research_items._norm(v)) >= 2 and research_items._norm(v) in text for v in values):
             continue
+        target = notes["warnings"]
         if item["state"] == "conflict":
-            message = f"출처마다 값이 달라요: {item['label']} ({' / '.join(values)}). 공식 자료를 확인해 직접 고쳐 주세요"
+            message = f"출처마다 값이 달라요: {item['label']} ({' / '.join(values)}). 맞는 값을 확인해 고쳐 주세요"
         else:
             message = f"근거를 확인하지 못한 정보예요: {item['label']}. 확인해서 고치거나 지워 주세요"
-        target = notes["errors"] if item["strict"] and not card["edited"] else notes["warnings"]
+            if strict and item["state"] == "unverified" and not card["edited"]:
+                target = notes["errors"]
         if message not in target:
             target.append(message)
 
@@ -1104,7 +1223,8 @@ async def _ai_research_then_compose(job_id: str, job: dict, provider, compose_on
         save(job)  # 조사 결과를 먼저 저장합니다 (화면에서 바로 볼 수 있고, 구성안 실패 시에도 남음)
     stage = job.get("researchStage") or {}
     try:
-        result = await asyncio.to_thread(provider.compose_from_research, job, job["research"], job.get("detailExtraction"), stage.get("coreOnly", False))
+        result = await asyncio.to_thread(provider.compose_from_research, job, job["research"], job.get("detailExtraction"), stage.get("coreOnly", False),
+                                         bool(stage.get("forced")))
     except AIError as e:
         _ai_fail(job_id, e.message)
         return
@@ -1125,18 +1245,33 @@ def _apply_outline_result(job: dict, result: dict) -> None:
         # 친구·가족을 카테고리별로 나눠 둡니다 (구성안 편집에서 카테고리를 바꿀 때 불러옴)
         job["research"]["people"] = research_items.people_from(job["research"])
     if result["status"] == "need_material":
+        # 조사는 끝났습니다. 다시 검색하지 않고 '현재 자료로 구성안 작성'이나 자료 보완을 고를 수 있게 기록만 남깁니다
+        stage = job.get("researchStage") or {}
+        job["researchStage"] = {**stage, "done": True, "coreOnly": False, "insufficient": True, "at": datetime.now().isoformat(timespec="seconds")}
+        _store_research(job)
+        _refresh_gap(job)
         job["state"] = "waiting_material"
         return
     _store_research(job)
+    _refresh_gap(job)
     version = job["outline"]["version"] + 1 if job.get("outline") else 1
     cards = [{**c, "edited": False, "regenCount": 0} for c in result["cards"]]
     job["outline"] = {"version": version, "cards": cards, "approved": False, "issues": {},
                       "otherNames": (job.get("outline") or {}).get("otherNames", [])}
     _ensure_slot_images(job)
     friends.sync(job)
+    clear_unsupported(job)  # AI가 조사에 없는 날짜·가격·장소 등을 써 넣었으면 비우고 알립니다
     job["outline"]["issues"] = _issues(job)
     _set_step(job, "outline", "done")
     job["state"] = "waiting_outline"
+
+
+def _refresh_gap(job: dict) -> None:
+    """자료 부족 안내(무엇이 왜 부족한지). 진행을 막는 데는 쓰지 않고, 공식 확인 여부와도 따로 둡니다."""
+    research = job.get("research") or {}
+    if not templates.is_template_job(job) or not _is_ai(job) or not research:
+        return
+    job["researchGap"] = research_items.gap_report(job["contentType"], research.get("items"), research.get("missing"))
 
 
 def _store_research(job: dict) -> None:
@@ -1151,6 +1286,33 @@ def _store_research(job: dict) -> None:
     job["researchVersion"] = {"id": summary["id"], "number": summary["number"], "researchedAt": summary["researchedAt"], "source": "new"}
 
 
+def compose_with_current(job_id: str) -> dict:
+    """자료가 부족하다고 판단됐어도 사용자가 지금 자료로 구성안을 쓰기로 고릅니다. 다시 검색하지 않습니다 (구성안 1회).
+
+    부족 판단은 안내로만 남기고(researchStage.forced), 출처 종류(공식·2차 자료 등)는 바꾸지 않습니다. 찾지 못한 칸은 비웁니다.
+    """
+    job = _require(job_id, "waiting_material")
+    if not _is_ai(job) or not separates_research(job):
+        raise JobConflict("이 작업은 자료를 입력해서 이어 가 주세요")
+    if job.get("researchDraft"):
+        raise JobConflict(DRAFT_PENDING)
+    research = job.get("research") or {}
+    has_material = bool(research.get("facts")) or any(i.get("value") for i in research.get("items") or [])
+    if not has_material:
+        raise JobConflict("조사된 자료가 없어 구성안을 쓸 수 없어요. 자료를 입력하거나 추가 조사를 해 주세요")
+    stage = job.get("researchStage") or {}
+    job["researchStage"] = {**stage, "done": True, "forced": True, "forcedAt": datetime.now().isoformat(timespec="seconds")}
+    for step in job["steps"]:
+        if step["status"] in ("failed", "active", "skipped"):
+            step["status"] = "pending"
+    _set_step(job, "research", "done")
+    _set_step(job, "outline", "active")
+    job.update(state="running", error=None)
+    save(job)
+    _start(job_id, _ai_research_then_compose(job_id, job, get_ai_provider(), compose_only=True))
+    return job
+
+
 def submit_material(job_id: str, material: dict) -> dict:
     """사용자가 준 자료로 구성안을 만듭니다. 웹에 접속하지 않아 막힌 사이트에 다시 요청하지 않습니다."""
     job = _require(job_id, "waiting_material", "waiting_outline", "failed", "interrupted")
@@ -1158,12 +1320,10 @@ def submit_material(job_id: str, material: dict) -> dict:
         raise JobConflict("실제 AI 모드에서만 쓸 수 있어요")
     if job.get("outline") and job["outline"]["approved"]:
         raise JobConflict("승인된 구성안이 있어요. 구성안 카드를 직접 수정해 주세요")
-    if material and material.get("sourceUrl"):
-        if site_policy.mirror_site(material["sourceUrl"]):
+    material = _clean_material(material or {})
+    for url, kind in [(material.get("sourceUrl", ""), material.get("sourceKind", ""))] + [(b.get("url", ""), b.get("kind", "")) for b in material.get("sources", [])]:
+        if url and site_policy.mirror_site(url):
             raise JobConflict("나무위키 미러 사이트 주소는 받지 않아요. 원본 문서나 공식 페이지 주소를 적어 주세요")
-        site = site_policy.auxiliary_site(material["sourceUrl"])
-        if site and job["contentType"] != "character":
-            raise JobConflict(f"{site['name']} 자료는 가격·일정·장소·콜라보 정보의 근거로 쓸 수 없어요. 공식 페이지에서 확인한 내용을 넣어 주세요")
     if material:
         job["userMaterial"] = {**material, "submittedAt": datetime.now().isoformat(timespec="seconds")}
     elif not job["detailImages"]:
@@ -1174,8 +1334,31 @@ def submit_material(job_id: str, material: dict) -> dict:
     if job["state"] in ("failed", "interrupted"):
         job["state"] = "waiting_material"
     job["error"] = None
+    # 자료를 직접 냈으면 이후 같은 부족 판단으로 다시 막지 않습니다 (공식 확인 여부는 그대로)
+    job["researchStage"] = {**(job.get("researchStage") or {}), "forced": True}
     uploads = uploads_dir(job_id)
     return _start_ai_task(job, "compose", None, lambda snapshot: get_ai_provider().compose_outline(snapshot, uploads), _apply_outline_result)
+
+
+MATERIAL_KINDS = ("", "official", "namuwiki", "other")
+
+
+def _clean_material(material: dict) -> dict:
+    """자료 직접 입력 정리. 빈 칸과 빈 출처 묶음은 버립니다. 출처 종류는 사용자가 고른 표시일 뿐 검증이 아닙니다."""
+    out = {k: " ".join(str(material.get(k) or "").split()) if k not in ("features", "pasted", "extra") else str(material.get(k) or "").strip()
+           for k in ("name", "price", "seller", "sourceUrl", "features", "pasted", "extra")}
+    out["sourceKind"] = material.get("sourceKind") if material.get("sourceKind") in MATERIAL_KINDS else ""
+    blocks = []
+    for block in (material.get("sources") or [])[:3]:
+        if not isinstance(block, dict):
+            continue
+        url, text = str(block.get("url") or "").strip(), str(block.get("text") or "").strip()
+        if url and not re.match(r"^https?://", url):
+            raise JobConflict("출처 주소는 http:// 또는 https://로 시작해야 해요")
+        if url or text:
+            blocks.append({"url": url, "kind": block.get("kind") if block.get("kind") in MATERIAL_KINDS else "", "text": text})
+    out["sources"] = blocks
+    return {k: v for k, v in out.items() if v}
 
 
 # ---------- 상세페이지 이미지 (자료 조사용) ----------
@@ -1395,11 +1578,14 @@ def _start_outline_rewrite(job: dict, frames: list[str], new_version: bool) -> d
             if card["frame"] in result["cards"]:
                 # 사용자만 입력하는 칸(다음 캐릭터 이름·힌트·공개 문구·회차)은 다시 써도 그대로 둡니다
                 card.update(templates.keep_user_fields(card, result["cards"][card["frame"]]), edited=False, regenCount=card["regenCount"] + 1)
+                for key in ("checkMarks", "userFields", "cleared"):
+                    card.pop(key, None)  # 새로 쓴 문구는 다시 확인합니다
         if new_version:
             current["outline"]["version"] += 1
         friends.sync(current)
         if set(frames) == set(FRAMES):
             current["outline"].pop("researchUpdated", None)  # 통합된 자료로 구성안을 다시 썼으므로 안내를 거둡니다
+        clear_unsupported(current, frames)
         _revoke_outline(current)
         current["outline"]["issues"] = _issues(current)
 
@@ -1442,6 +1628,7 @@ def change_content_type(job_id: str, content_type: str) -> dict:
         switch(current)
         cards = [{**c, "edited": False, "regenCount": 0} for c in result["cards"]]
         current["outline"].update(version=current["outline"]["version"] + 1, cards=cards)
+        clear_unsupported(current)
         _revoke_outline(current)
         current["outline"]["issues"] = _issues(current)
         _ensure_slot_images(current)
@@ -1481,7 +1668,14 @@ def edit_outline_card(job_id: str, frame: str, values: dict) -> dict:
     if item_order and values.get("template", card.get("template")) == card.get("template") and (job.get("slotImages") or {}).get(frame):
         # 친구를 지우거나 순서를 바꾸면 친구별 이미지가 그 친구를 따라갑니다
         job["slotImages"][frame] = templates.remap_item_slots(templates.template_for(job, frame), job["slotImages"][frame], item_order)
+    if values.get("template", card.get("template")) == card.get("template"):
+        changed = {k for k, v in values.get("fields", {}).items() if v != (card.get("fields") or {}).get(k)}
+        card["userFields"] = sorted(set(card.get("userFields") or []) | changed)  # 사용자가 직접 쓴 칸
+    else:
+        card.pop("userFields", None)
     card.update(values, edited=True)
+    card.pop("checkMarks", None)  # 예전 '확인 필요' 표시는 더 쓰지 않습니다
+    card.pop("cleared", None)
     friends.sync(job)  # 사진으로 확정한 친구 이름은 친구 칸에서만 바꿉니다
     job["outline"]["issues"] = _issues(job)
     _revoke_outline(job)
@@ -1520,6 +1714,8 @@ def change_card_template(job_id: str, frame: str, template_id: str) -> dict:
     if moved["missing"]:
         raise JobConflict(f"이 구성에는 {', '.join(moved['missing'])} 정보가 필요해요. 확인된 값이 없으면 자유 구성을 써 주세요")
     card.update(template=template_id, fields=moved["fields"], edited=True)
+    for key in ("checkMarks", "userFields", "cleared"):
+        card.pop(key, None)
     card.pop("convertedFrom", None)
     job["outline"]["issues"] = _issues(job)
     _revoke_outline(job)
@@ -1540,6 +1736,8 @@ def regenerate_outline_card(job_id: str, frame: str) -> dict:
     else:
         new = get_provider().create_outline_card(job, frame, job["outline"]["version"] + count)
     card.update(new, edited=False, regenCount=count)
+    for key in ("checkMarks", "userFields", "cleared"):
+        card.pop(key, None)
     friends.sync(job)
     job["outline"]["issues"] = _base_issues(job, job["outline"]["cards"])
     _revoke_outline(job)
@@ -2221,6 +2419,8 @@ def _start_friends_rewrite(job: dict, frame: str) -> dict:
     def apply(current, result):
         card = _outline_card(current, frame)
         card.update(result["card"], edited=False, regenCount=card["regenCount"] + 1)
+        for key in ("checkMarks", "userFields", "cleared"):
+            card.pop(key, None)
         if result["research"]:
             current["research"] = result["research"]
         friends.sync(current)
