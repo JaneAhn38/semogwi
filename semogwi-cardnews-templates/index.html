@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>세모귀 카드뉴스 템플릿 20장 미리보기</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+  body { margin: 0; padding: 40px; background: #F4EFE8; font-family: 'Gowun Dodum', sans-serif; color: #2E2A35; }
+  h1 { font-family: 'Jua', sans-serif; font-weight: 400; margin: 0 0 8px; }
+  p.note { margin: 0 0 32px; color: #5A5463; }
+  h2 { font-family: 'Jua', sans-serif; font-weight: 400; margin: 32px 0 12px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .card { display: flex; flex-direction: column; gap: 6px; }
+  .frame { width: 216px; height: 270px; overflow: hidden; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+  .frame iframe { width: 1080px; height: 1350px; border: 0; transform: scale(.2); transform-origin: 0 0; pointer-events: none; }
+  .card a { font-size: 14px; color: #2E2A35; }
+</style>
+</head>
+<body>
+<h1>세모귀 카드뉴스 템플릿</h1>
+<p class="note">썸네일을 누르면 원래 크기(1080×1350)로 열려요. 카드 오른쪽 아래 페이지 번호를 누르면 다음 장으로 넘어가요.</p>
+<div id="list"></div>
+<script>
+  const topics = [
+    ['팝업스토어', ['popup-01-cover','popup-02-info','popup-03-goods','popup-04-perks','popup-05-wrap']],
+    ['공식 굿즈', ['goods-01-cover','goods-02-lineup','goods-03-pick','goods-04-howto','goods-05-wrap']],
+    ['콜라보', ['collab-01-cover','collab-02-about','collab-03-menu','collab-04-perks','collab-05-wrap']],
+    ['캐릭터 소개', ['character-01-cover','character-02-profile','character-03-traits','character-04-friends','character-05-wrap']],
+  ];
+  const list = document.getElementById('list');
+  for (const [name, files] of topics) {
+    const h = document.createElement('h2'); h.textContent = name; list.appendChild(h);
+    const row = document.createElement('div'); row.className = 'row'; list.appendChild(row);
+    for (const f of files) {
+      const card = document.createElement('div'); card.className = 'card';
+      const frame = document.createElement('div'); frame.className = 'frame';
+      const ifr = document.createElement('iframe'); ifr.src = `templates/${f}.html`; ifr.title = f; ifr.tabIndex = -1;
+      frame.appendChild(ifr);
+      const a = document.createElement('a'); a.href = `templates/${f}.html`; a.textContent = f;
+      card.append(frame, a); row.appendChild(card);
+    }
+  }
+</script>
+</body>
+</html>

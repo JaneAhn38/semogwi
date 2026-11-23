@@ -149,37 +149,40 @@ def test_field_states_and_issues(client, fake):
     states = job["outline"]["fieldStates"]
     assert states["card-01"]["release_date"] == "verified" and states["card-01"]["seller"] == "listed"
     assert states["card-02"]["price_range"] == "conflict"
-    errors = job["outline"]["issues"]["card-01"]["errors"]
-    assert any("공식 출처에서 확인하지 못한 정보예요: 판매처" in e for e in errors)
-    assert any("출처마다 값이 달라요: 가격대 (1,500원 / 1,600원)" in e for e in job["outline"]["issues"]["card-02"]["errors"])
-    assert api(client, job_id, "POST", "/outline/approve").status_code == 409
-
-    # 사용자가 직접 확인해 고치면 경고로 바뀝니다
+    # 공식 여부로는 막지 않습니다: 검색 결과의 판매처는 참고 자료, 출처끼리 다른 가격은 경고로 알립니다
+    issue1, issue2 = job["outline"]["issues"]["card-01"], job["outline"]["issues"]["card-02"]
+    assert not issue1["errors"] and not issue2["errors"]
+    assert any("근거를 확인하지 못한 정보예요: 판매처 (검색 결과에 값이 없음)" in w for w in issue1["warnings"])  # 근거 문장 없는 검색 결과
+    assert any("출처마다 값이 달라요: 가격대 (1,500원 / 1,600원)" in w for w in issue2["warnings"])
+    assert api(client, job_id, "POST", "/outline/approve").status_code == 200
+    # 예전 화면이 보낸 '확인 필요' 표시는 받기만 하고 쓰지 않습니다
+    job = get(client, job_id)
     card = job["outline"]["cards"][0]
-    r = api(client, job_id, "PUT", "/outline/cards/card-01", json={"role": card["role"], "fields": {**card["fields"], "seller": "세모귀 공식몰"}, "source": ""})
-    issue = r.json()["outline"]["issues"]["card-01"]
-    assert not any("판매처" in e for e in issue["errors"]) and any("판매처" in w for w in issue["warnings"])
+    r = api(client, job_id, "PUT", "/outline/cards/card-01", json={"role": card["role"], "fields": {**card["fields"], "seller": "세모귀 공식몰"},
+                                                                    "source": "", "checkMarks": ["seller"]})
+    assert r.status_code == 200 and "checkMarks" not in r.json()["outline"]["cards"][0]
 
 
 def test_character_secondary_sources_are_allowed_but_listed_ones_warn(client, fake):
     fake.sources = [{"id": "w1", "title": "위키", "url": WIKI, "kind": "secondary"}, {"id": "b1", "title": "블로그", "url": BLOG, "kind": "secondary"}]
     fake.fetches = [{"url": WIKI, "code": 200}]
-    fake.items = [{"key": "birthday", "value": "확인된 내용", "quote": "", "sourceIds": ["w1"]},
-                  {"key": "favorite", "value": "확인된 내용", "quote": "", "sourceIds": ["b1"]}]
+    fake.items = [{"key": "birthday", "value": "5월 5일", "quote": "", "sourceIds": ["w1"]},
+                  {"key": "favorite", "value": "초코비", "quote": "", "sourceIds": ["b1"]}]
+    fake.overrides = {"card-02": {"profile_rows": [{"label": "생일", "value": "5월 5일"}, {"label": "좋아하는 것", "value": "초코비"}]}}
     job_id = start(client, mode="ai")
     job = wait(client, job_id, "waiting_outline")
     states = job["outline"]["fieldStates"]["card-02"]
-    assert states["birthday"] == "secondary" and states["favorite_things"] == "listed"
+    assert states["profile_rows.0"] == "secondary" and states["profile_rows.1"] == "listed"  # 프로필 줄마다 조사 값과 대조
     issue = job["outline"]["issues"]["card-02"]
     assert not issue["errors"] and any("근거를 확인하지 못한 정보예요: 좋아하는 것" in w for w in issue["warnings"])
 
 
 def test_missing_items_show_as_needing_input(client, fake):
-    fake.overrides = {"card-02": {"birthday": "", "creator": ""}}
+    fake.overrides = {"card-02": {"profile_rows": []}}
     job_id = start(client, mode="ai")
     job = wait(client, job_id, "waiting_outline")
-    states = job["outline"]["fieldStates"]["card-02"]
-    assert states["birthday"] == "missing" and states["creator"] == "missing"
+    card = job["outline"]["cards"][1]
+    assert card["fields"]["profile_rows"] == [] and not any(k.startswith("profile_rows.") for k in job["outline"]["fieldStates"]["card-02"])  # 근거 없는 줄을 채우지 않음
     assert all(i["state"] == "missing" for i in job["research"]["items"])  # 가짜 응답에 항목이 없으면 모두 정보 확인 필요
 
 

@@ -106,22 +106,26 @@ def test_image_validation(client):
     assert post(PNG, [{"rights": "확인 필요"}]).status_code == 201
 
 
-def test_only_permitted_images_reach_cards(client):
-    files = [("images", ("ok.png", PNG, "image/png")), ("images", ("../../no.png", PNG, "image/png"))]
-    meta = [{"rights": "허가됨", "source": "직접 촬영"}, {"rights": "확인 필요"}]
+def test_uploaded_images_reach_cards_without_choosing_rights(client):
+    """권한을 고르지 않은 이미지도 카드에 씁니다 (학술 연구·내부 시연용). 예전에 '허가 안 됨'으로 표시한 이미지만 쓰지 않습니다."""
+    files = [("images", ("ok.png", PNG, "image/png")), ("images", ("../../plain.png", PNG, "image/png")), ("images", ("no.png", PNG, "image/png"))]
+    meta = [{"rights": "허가됨", "source": "직접 촬영"}, {}, {"rights": "허가 안 됨"}]
     r = client.post("/api/jobs", data={**FORM, "imageMeta": json.dumps(meta)}, files=files)
     job = r.json()
-    allowed, blocked = job["assets"]
+    allowed, plain, blocked = job["assets"]
+    # 권한을 고르지 않은 이미지는 '확인 필요'로 기록됩니다 ('허가됨'으로 바꿔 기록하지 않음)
+    assert plain["rights"] == "확인 필요" and plain["source"] == ""
     wait(client, job["id"], "waiting_outline")
     client.post(f"/api/jobs/{job['id']}/outline/approve")
     job = wait(client, job["id"], "waiting_preview")
     used = [e["assetId"] for c in job["preview"]["cards"] for e in c["spec"]["elements"] if e["type"] == "image"]
-    # 허가된 이미지는 앞 카드부터 한 장씩만 쓰고, 나머지 카드에 반복하지 않음
-    assert used == [allowed["id"]]
+    # 앞 카드부터 한 장씩만 쓰고, 나머지 카드에 반복하지 않음
+    assert used == [allowed["id"], plain["id"]]
+    assert [a["rights"] for a in job["assets"]] == ["허가됨", "확인 필요", "허가 안 됨"]
 
     # 서버가 정한 이름으로만 저장되고, 올린 파일은 그대로 내려받을 수 있음
     saved = sorted(p.name for p in jobs.job_dir(job["id"]).joinpath("uploads").iterdir())
-    assert saved == sorted([allowed["id"] + ".png", blocked["id"] + ".png"])
+    assert saved == sorted([allowed["id"] + ".png", plain["id"] + ".png", blocked["id"] + ".png"])
     res = client.get(f"/api/jobs/{job['id']}/assets/{allowed['id']}")
     assert res.status_code == 200 and res.content == PNG
     assert client.get(f"/api/jobs/{job['id']}/assets/nope").status_code == 404

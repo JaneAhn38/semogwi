@@ -137,7 +137,7 @@ py scripts/cutout.py <원본> <출력.png> --max-size 1024           # 누끼 (�
 .claude/skills/                  analyze-image, research-topic, plan-cardnews, cutout-image, write-copy, fill-figma
 .claude/settings.json            터미널 Claude Code의 사이트 차단 규칙 (웹앱 site_policy.json과 같음)
 scripts/                         assign_images.py, cutout.py, fill_figma.py, figma/*.js
-templates/                       layers.md(규격), figma-config.md(Figma 연결·테스트 기록), card-images.md, cardnews-pipeline.md
+templates/                       layers.md(규격), figma-config.md(Figma 연결·테스트 기록), card-images.md, backgrounds.md(선택: card-02~05 배경), cardnews-pipeline.md
 assets/characters/<캐릭터>/      공식 출처(official.md), 원본·누끼 이미지
 sources.md                       공용 이미지 출처 기록
 projects/YYYY-MM-DD_주제/        카드뉴스 한 편의 작업 폴더

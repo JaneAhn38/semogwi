@@ -1,0 +1,15 @@
+/* 세모귀 카드뉴스 폰트 (둘 다 SIL Open Font License 1.1 — 상업적 이용 가능, OFL-*.txt 참고) */
+@font-face {
+  font-family: 'Jua';
+  src: url('./Jua-Regular.woff2') format('woff2'), url('./Jua-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Gowun Dodum';
+  src: url('./GowunDodum-Regular.woff2') format('woff2'), url('./GowunDodum-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}

@@ -7,7 +7,7 @@ description: 세모귀 카드뉴스 마지막 단계. slides.json 경로를 받�
 
 write-copy가 만든 `slides.json`을 Figma 템플릿에 채우고 PNG로 내보내는 단계다. **문구를 고치거나 이미지를 만드는 단계가 아니다.** 검사에서 문제가 나오면 고치지 말고 멈춘 뒤 보고한다.
 
-기준 문서: [`templates/layers.md`](../../../templates/layers.md) (레이어·slides.json 규격), [`templates/figma-config.md`](../../../templates/figma-config.md) (Figma 파일·작업 원칙)
+기준 문서: [`templates/layers.md`](../../../templates/layers.md) (레이어·slides.json 규격), [`templates/figma-config.md`](../../../templates/figma-config.md) (Figma 파일·작업 원칙), [`templates/backgrounds.md`](../../../templates/backgrounds.md) (선택: card-02 ~ card-05 배경)
 
 ## 입력
 
@@ -45,7 +45,7 @@ write-copy가 만든 `slides.json`을 Figma 템플릿에 채우고 PNG로 내보
    - `[경고]`는 보고에 모두 옮긴다. 다음 경고는 진행 전에 사용자에게 확인받는다.
      - 이미지 사용 허가가 `허가됨`이 아닌데 프로젝트 폴더 이름이 `_테스트`로 끝나지 않을 때
      - 이미지가 FIT에서 1.25배 넘게 확대될 때 (아래 "이미지 해상도" 참고)
-   - 결과의 `대상 페이지 이름`을 기록한다.
+   - 결과의 `대상 페이지 이름`을 기록한다. `배경 card-NN:` 줄이 있으면 카드별 경로와 Content-Type을 기록한다 (6단계 B).
 2. **Figma 연결**: `whoami`로 연결을 확인하고, `create_session`(fileKey, 작업 설명)으로 세션을 만든다. 이후 모든 Figma 호출에 같은 `sessionId`를 넘긴다.
 3. **사전 점검 (읽기 전용)**: `render preflight` → `use_figma`
    - `targetExists: true`면 **중단**한다. 이미 있는 페이지는 덮어쓰거나 지우지 않는다.
@@ -54,13 +54,14 @@ write-copy가 만든 `slides.json`을 Figma 템플릿에 채우고 PNG로 내보
    - `page1Signature.hash`를 기록한다 (11단계에서 비교).
 4. **복제 (첫 쓰기 = 편집 권한 확인)**: `render clone` → `use_figma`
    - 권한 오류면 중단하고 `whoami`의 팀·좌석(View/Full)을 함께 보고한다.
-   - 결과의 `pageId`, 각 프레임 ID, **`image`가 있는 카드마다** `main-image` ID를 기록한다.
+   - 결과의 `pageId`, 각 프레임 ID, **`image`가 있는 카드마다** `main-image` ID를 기록한다. 배경은 프레임 ID에 넣는다.
 5. **텍스트 교체 + 이미지 자리 정리 + 레이아웃 검사**: `render fill-text` → `use_figma`
    - title·body·source만 바꾸고, source가 `""`이면 그 레이어만 숨긴다.
    - `image`가 `""`인 카드는 `main-image` 레이어를 숨긴다. `image`가 있는 카드(card-01 ~ card-05 어느 카드든)는 보이게 두고 6단계에서 채운다. main-image의 채우기·위치·크기는 바꾸지 않는다.
    - title·body 텍스트 크기 조절이 `HEIGHT`가 아니면 아무것도 바꾸지 않고 오류로 끝난다 (3단계에서 이미 걸러야 정상).
    - `ok: false`면 중단한다. 각 프레임의 `errors`(제목 2줄, title-body 겹침, 하단 여백 침범, source-page-number 겹침, 고정 요소 변경, main-image 표시 상태)를 그대로 보고한다. 텍스트를 줄이거나 레이어를 옮겨서 맞추지 않는다.
-6. **카드 이미지 교체** (`image`가 있는 카드가 하나라도 있을 때)
+6. **이미지 교체**
+   **A. 카드 이미지** (`image`가 있는 카드가 하나라도 있을 때)
    - `upload_assets` **한 번**: `count: <image가 있는 카드 수>`, `nodeIds: [<그 카드들의 main-image ID, card 번호 순>]`, `scaleMode: "FIT"`, `currentPageId: <pageId>`
    - 돌려받은 `submitUrl`마다 **같은 순서의 카드 이미지** 원본 바이트를 보낸다. multipart 방식은 파일 이름이 레이어 이름으로 바뀔 수 있으므로 쓰지 않는다. 같은 이미지를 여러 카드에 쓰면 카드마다 한 번씩 보낸다.
      ```
@@ -68,8 +69,14 @@ write-copy가 만든 `slides.json`을 Figma 템플릿에 채우고 PNG로 내보
      ```
      Content-Type은 validate가 알려 준 **카드별 실제 형식**(png → `image/png`, jpeg → `image/jpeg`, webp → `image/webp`)을 쓴다.
    - 응답마다 `success: true`와 `placedOnNodeId`가 그 카드의 main-image ID와 같은지 확인한다. 하나라도 다르면 멈춘다.
+
+   **B. 배경** (validate 결과에 `배경 card-NN:` 줄이 있을 때, card-02 ~ card-05만)
+   - `upload_assets`를 카드 이미지와 **따로 한 번**: `count: <배경 카드 수>`, `nodeIds: [<그 카드들의 프레임 ID, card 번호 순>]`, `scaleMode: "FILL"`, `currentPageId: <pageId>`
+   - A와 같은 원본 바이트 방식으로 보낸다. Content-Type은 validate가 알려 준 값을 쓴다.
+   - 응답마다 `success: true`와 `placedOnNodeId`가 그 카드의 **프레임 ID**와 같은지 확인하고, `imageHash`를 기록한다. 하나라도 다르면 멈춘다.
 7. **결과 검증 (읽기 전용)**: `render verify` → `use_figma`
    - 레이어 수·이름, 텍스트, source 표시 여부와 함께, image가 있는 카드는 main-image가 보이고 FIT 이미지이며 레이어 이름이 그대로인지, image가 빈 카드는 main-image가 숨겨지고 이미지가 없는지 확인한다.
+   - 배경을 지정한 카드는 프레임 채우기가 `IMAGE(FILL)` 하나인지, 나머지 카드(card-01 포함)는 프레임에 이미지가 없는지 확인한다. 결과의 `backgrounds[].imageHash`가 6단계 B의 값과 같아야 한다.
    - `ok: false`면 중단하고 `problems`를 보고한다.
    - `exportFrames`(프레임 ID 5개)를 기록한다.
 8. **스크린샷 확인**: 5개 프레임에 `get_screenshot`을 한 번에(병렬로) 호출하고, 받은 URL을 `curl`로 세션 임시 폴더에 받아 직접 본다.
@@ -92,7 +99,7 @@ write-copy가 만든 `slides.json`을 Figma 템플릿에 채우고 PNG로 내보
 - [ ] **기존 테스트 페이지(`세모귀_2026-10-29_테스트` 등)도 지우거나 덮어쓰지 않는다.** 대상 페이지가 이미 있으면 3단계에서 멈춘다.
 - [ ] **이미 있는 페이지·PNG는 덮어쓰지 않는다.** 같은 이름의 페이지가 있거나 `png/`에 카드 PNG가 이미 있으면 멈추고 사용자에게 묻는다.
 - [ ] 레이어는 템플릿의 **6개 구조 그대로** 둔다. 추가·삭제·이름 변경·이동·크기 변경을 하지 않는다.
-- [ ] `page-number`, `bottom-overlay`, 배경(프레임 채우기)은 바꾸지 않는다.
+- [ ] `page-number`, `bottom-overlay`는 바꾸지 않는다. 배경(프레임 채우기)도 바꾸지 않되, **`backgrounds.json`에서 승인된 card-02 ~ card-05의 복제본 프레임만** 6단계 B로 교체한다. card-01은 고정 표지라 교체하지 않는다.
 - [ ] `main-image`: `image`가 있는 카드는 FIT으로 채우고, `image`가 빈 카드는 레이어를 **숨기기만** 한다 (지우거나 채우기·위치·크기를 바꾸지 않음). 이미지는 card-01 ~ card-05 어느 카드에나 들어갈 수 있다.
 - [ ] `source` 레이어는 텍스트만 바꾼다. 템플릿의 `@세모귀`는 임시 텍스트다. 빈 값이면 숨기기만 한다.
 - [ ] slides.json의 문구를 고치거나, 넘친 텍스트를 자르거나, 폰트 크기를 줄이지 않는다.
@@ -146,10 +153,10 @@ write-copy가 만든 `slides.json`을 Figma 템플릿에 채우고 PNG로 내보
 - Figma 페이지: 세모귀_<폴더> (pageId)
 - Page 1 보존: 서명 일치 (hash)
 
-| 프레임 | ID | title | body 줄 수 | source | 이미지 | PNG |
-| --- | --- | --- | --- | --- | --- | --- |
-| card-01 | 24:3 | 1줄 | 1 | 표시 | FIT ×1.52 | 1080×1350 ✅ |
-| card-02 | 24:10 | 1줄 | 2 | 표시 | 숨김 | 1080×1350 ✅ |
+| 프레임 | ID | title | body 줄 수 | source | 이미지 | 배경 | PNG |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| card-01 | 24:3 | 1줄 | 1 | 표시 | FIT ×1.52 | 템플릿 | 1080×1350 ✅ |
+| card-02 | 24:10 | 1줄 | 2 | 표시 | 숨김 | FILL / 템플릿 | 1080×1350 ✅ |
 
 - 경고: (validate·fill-text·스크린샷에서 나온 것)
 - PNG 위치: projects/<폴더>/png/

@@ -170,7 +170,8 @@
       "radius": 28,
       "fill": "white",
       "stroke": "ink",
-      "lineWidth": 3
+      "lineWidth": 3,
+      "if": "release_date"
     },
     {
       "type": "rect",
@@ -183,7 +184,8 @@
       "radius": 28,
       "fill": "white",
       "stroke": "ink",
-      "lineWidth": 3
+      "lineWidth": 3,
+      "if": "seller"
     },
     {
       "type": "text",

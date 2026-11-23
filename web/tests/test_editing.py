@@ -364,8 +364,13 @@ def test_card_image_selection_is_per_card(client, monkeypatch):
 
 def test_unpermitted_image_cannot_be_selected_and_is_dropped(client):
     job_id, [asset] = to_preview(client, 1)
-    other = api(client, job_id, "POST", "/assets", data={"rights": "확인 필요"}, files={"image": ("x.png", PNG, "image/png")}).json()["assets"][-1]["id"]
-    assert api(client, job_id, "PUT", "/preview/cards/card-02/image", json={"assetId": other}).status_code == 409
+    # 권한을 고르지 않고 올린 이미지는 바로 쓸 수 있음
+    plain = api(client, job_id, "POST", "/assets", files={"image": ("x.png", PNG, "image/png")}).json()["assets"][-1]
+    assert plain["rights"] == "확인 필요"
+    assert api(client, job_id, "PUT", "/preview/cards/card-02/image", json={"assetId": plain["id"]}).status_code == 200
+    # 예전에 '허가 안 됨'으로 직접 표시한 이미지는 쓰지 않음
+    other = api(client, job_id, "POST", "/assets", data={"rights": "허가 안 됨"}, files={"image": ("y.png", PNG, "image/png")}).json()["assets"][-1]["id"]
+    assert api(client, job_id, "PUT", "/preview/cards/card-03/image", json={"assetId": other}).status_code == 409
 
     api(client, job_id, "POST", "/preview/approve")
     wait(client, job_id, "done")

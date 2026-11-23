@@ -1,0 +1,99 @@
+{
+  "id": "collab-free",
+  "contentType": "collab",
+  "kind": "body",
+  "label": "자유 구성",
+  "purpose": "확보된 자료에 맞춰 주제를 정하는 카드. 가격·구매 방법, 구성, 참고 사항, 요약 등 다른 템플릿에 맞지 않는 확인된 정보를 담는다.",
+  "fonts": {
+    "display": "Jua",
+    "body": "Gowun Dodum"
+  },
+  "palette": {
+    "bg": "#FFF8F0",
+    "ink": "#2E2A35",
+    "inkSoft": "#5A5463",
+    "muted": "#8A8494",
+    "accent": "#C9D8F5",
+    "white": "#FFFFFF",
+    "paper": "#FFF8F0"
+  },
+  "fields": [
+    {
+      "key": "heading",
+      "label": "카드 제목",
+      "type": "text",
+      "max": 16,
+      "required": true,
+      "hint": "이 카드의 주제 (예: 가격과 구매 방법, 구매 전 참고 사항)"
+    },
+    {
+      "key": "lead",
+      "label": "소개 문장",
+      "type": "multiline",
+      "max": 60
+    },
+    {
+      "key": "points",
+      "label": "정보 줄",
+      "type": "pairs",
+      "maxItems": 5,
+      "labelMax": 8,
+      "valueMax": 40,
+      "hint": "항목 이름과 확인된 값 (예: 가격 / ¥550 세금 포함)"
+    },
+    {
+      "key": "notes",
+      "label": "참고 사항",
+      "type": "list",
+      "maxItems": 3,
+      "itemMax": 40
+    }
+  ],
+  "images": [
+    {
+      "key": "free_image",
+      "label": "카드 이미지",
+      "required": false
+    }
+  ],
+  "elements": [
+    {
+      "type": "header",
+      "tag": "콜라보",
+      "tagFill": "accent"
+    },
+    {
+      "type": "text",
+      "field": "heading",
+      "box": {
+        "x": 72,
+        "y": 178,
+        "w": 936,
+        "h": 84
+      },
+      "font": "display",
+      "size": 64,
+      "minSize": 44,
+      "color": "ink",
+      "align": "left",
+      "valign": "middle",
+      "maxLines": 1
+    },
+    {
+      "type": "stack",
+      "x": 74,
+      "w": 932,
+      "top": 300,
+      "bottom": 1200,
+      "gap": 36,
+      "lead": "lead",
+      "rows": "points",
+      "notes": "notes",
+      "slot": "free_image"
+    },
+    {
+      "type": "footer",
+      "left": "{source}"
+    }
+  ]
+}

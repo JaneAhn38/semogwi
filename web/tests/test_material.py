@@ -190,8 +190,10 @@ def test_user_material_is_separated_and_never_marked_verified(client):
 
 
 def test_card_source_text_says_user_provided(client):
+    # 출처 문구는 AI가 쓰지 않고 서버가 실제 출처로 적습니다. 판매처 칸 값은 출처가 아니라 쓰지 않고,
+    # 사용자가 준 주소(official-shop.example)는 30자를 넘어서 빼고 '사용자 제공'만 적습니다
     card = get(client, composed_job(client))["outline"]["cards"][1]
-    assert card["source"] == "출처: 치이카와 마켓 (사용자 제공)"
+    assert card["source"] == "출처: 사용자 제공"
 
 
 def test_user_material_warns_but_allows_approval(client):
@@ -242,10 +244,13 @@ def test_ai_marking_user_url_verified_is_impossible(client, fake):
 
 
 @pytest.mark.parametrize("body, status", [
-    ({"name": "이름만"}, 400),
-    ({"features": "특징만"}, 400),
-    ({"pasted": "짧음"}, 400),
+    ({}, 400),  # 아무것도 없으면 받지 않음 (상세 이미지도 없음)
+    ({"extra": "   "}, 400),
+    ({"sources": [{"url": "", "kind": "official", "text": ""}]}, 400),
     ({**MATERIAL, "sourceUrl": "javascript:alert(1)"}, 400),
+    ({"sources": [{"url": "javascript:alert(1)", "text": "내용"}]}, 400),
+    ({"sources": [{"text": "a"}] * 4}, 422),  # 출처 묶음은 3개까지
+    ({"sources": [{"text": "a", "kind": "공식"}]}, 422),
     ({"pasted": "가" * 8001}, 422),
     ({"unknown": "x", **MATERIAL}, 422),
 ])
@@ -263,12 +268,23 @@ def test_pasted_text_alone_is_enough(client, fake):
     assert "<user_material>치이카와 코인 실린더" in fake.calls[-1]["prompt"]
 
 
-def test_still_insufficient_stays_waiting_for_material(client, fake):
+def test_submitted_material_is_not_blocked_again_by_insufficient(client, fake):
+    # 자료를 낸 뒤 AI가 또 '부족'이라고 해도 카드가 있으면 구성안으로 갑니다 (같은 판단으로 다시 막지 않음)
+    job_id = blocked_job(client)
+    fake.queue = [{"status": "insufficient", "missing": ["판매처가 필요해요"], "cards": composed_cards()}]
+    api(client, job_id, "POST", "/material", json=MATERIAL)
+    job = wait(client, job_id, "waiting_outline")
+    assert job["userMaterial"]["name"] == MATERIAL["name"] and job["researchStage"]["forced"]
+    assert "판매처가 필요해요" in job["research"]["missing"]
+
+
+def test_submitted_material_without_any_cards_reports_reason(client, fake):
+    # 카드를 하나도 못 쓰면 다시 '자료 부족' 화면으로 돌리지 않고 이유를 알립니다 (입력한 자료는 남음)
     job_id = blocked_job(client)
     fake.queue = [{"status": "insufficient", "missing": ["판매처가 필요해요"], "cards": []}]
     api(client, job_id, "POST", "/material", json=MATERIAL)
     job = wait(client, job_id, "waiting_material")
-    assert job["research"]["missing"] == ["판매처가 필요해요"] and job["userMaterial"]["name"] == MATERIAL["name"]
+    assert "카드를 만들지 못했어요" in job["aiError"] and job["userMaterial"]["name"] == MATERIAL["name"] and job["outline"] is None
 
 
 def test_claude_failure_keeps_material_and_shows_reason(client, fake):
@@ -307,7 +323,7 @@ def test_rewrite_keeps_user_label_and_does_not_search(client, fake):
     api(client, job_id, "POST", "/outline/cards/card-02/regenerate")
     job = wait(client, job_id, "waiting_outline")
     assert fake.calls[-1]["tools"] == ()
-    assert job["outline"]["cards"][1]["source"] == "출처: 치이카와 마켓 (사용자 제공)"
+    assert job["outline"]["cards"][1]["source"] == "출처: 사용자 제공"  # 다시 써도 AI가 쓴 출처 문구로 바뀌지 않음
 
 
 def test_material_refused_after_outline_approval(client):

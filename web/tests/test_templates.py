@@ -25,23 +25,29 @@ OFFICIAL = "https://brand-official.example/news/1"
 BASE = {"topic": "치이카와 친구들", "contentType": "character", "url": "", "mode": "demo"}
 
 
-def _value(field: dict):
+# 카드마다 다른 값이 되도록 앞에 붙입니다. 같은 값이 여러 카드에 반복되면 '반복' 검사에 걸리기 때문입니다 (숫자는 쓰지 않음)
+PREFIX = {"card-01": "", "card-02": "", "card-03": "나 ", "card-04": "다 ", "card-05": "라 "}
+
+def _value(field: dict, prefix: str = ""):
     """규칙을 지키는 값. 숫자를 넣지 않아 자료 대조에 걸리지 않습니다."""
     kind = field["type"]
     if kind == "flag":
         return False
+    if kind == "choice":
+        return field["default"]
     if kind in ("text", "multiline"):
-        return "확인된 내용"[: field["max"]]
+        return (prefix + "확인된 내용")[: field["max"]]
     if kind == "list":
-        return ["확인"]
-    return [{sub["key"]: "확인 값"[: sub["max"]] for sub in field["fields"]}]
+        return [prefix + "확인"]
+    count = max(1, field.get("minItems", 1))  # 친구 캐릭터처럼 최소 인원이 있으면 그만큼
+    return [{sub["key"]: (prefix + "확인 값")[: sub["max"]] for sub in field["fields"]} for _ in range(count)]
 
 
 def valid_cards(type_id: str, source="출처: 공식 사이트", source_ids=("s1",), overrides=None):
     cards = []
     for frame, tid in zip(FRAMES, templates.template_set(type_id)):
         tpl = templates.TEMPLATES[tid]
-        fields = {f["key"]: _value(f) for f in tpl["fields"]}
+        fields = {f["key"]: _value(f, PREFIX[frame]) for f in tpl["fields"]}
         fields.update((overrides or {}).get(frame, {}))
         cover = tpl["kind"] == "cover"
         cards.append({"frame": frame, "role": tpl["label"][:10], "fields": fields, "source": "" if cover else source,
@@ -50,11 +56,23 @@ def valid_cards(type_id: str, source="출처: 공식 사이트", source_ids=("s1
 
 
 def type_of_schema(schema: dict) -> str:
+    if "cards" not in schema["properties"]:
+        # 조사 단계 응답 형식(카드 없음): 조사 항목 이름으로 유형을 알아냅니다
+        keys = set(schema["properties"]["items"]["items"]["properties"]["key"]["enum"])
+        for type_id, key in (("goods", "product_names"), ("collab", "partners"), ("popup", "popup_name")):
+            if key in keys:
+                return type_id
+        return "character"
     props = schema["properties"]["cards"]["items"]["properties"]["fields"]["properties"]
     for type_id, key in (("goods", "lineup_name"), ("collab", "brand_name"), ("popup", "start_date")):
         if key in props:
             return type_id
     return "character"
+
+
+def is_material_compose(prompt: str) -> bool:
+    """구성안 단계 호출이 사용자 자료(붙여 넣은 자료·입력 자료)로 쓰는 경우인지. 아니면 조사 결과로 쓰는 경우입니다."""
+    return '"id": "user1"' in prompt
 
 
 class Fake:
@@ -64,6 +82,7 @@ class Fake:
         self.rewrite_overrides = None
         self.classified = "popup"
         self.fetched = True
+        self.teaser = {"hint": "", "hintSourceIds": [], "reveal": "다음 게시물에서 만나요!"}
 
     def __call__(self, prompt, system, schema, *, tools=(), disallowed=(), **kwargs):
         self.calls.append({"prompt": prompt, "system": system, "schema": schema, "tools": tools})
@@ -74,14 +93,23 @@ class Fake:
             return run
         if "theme" in props or "elements" in json.dumps(props):
             raise AssertionError("고정 템플릿 작업은 디자인 AI를 부르면 안 돼요")
+        if "reveal" in props:
+            run.structured = self.teaser  # 다음 캐릭터 예고 문구 (마무리 카드 버튼)
+            return run
+        if "people" in props:
+            run.structured = {"sources": [], "people": [], "missing": []}  # 캐릭터별 2차 조사: 기본은 찾지 못함
+            return run
         type_id = type_of_schema(schema)
         if "sources" in props:
             run.searches = [{"query": "q", "results": [{"title": "공식", "url": OFFICIAL}]}]
             run.fetches = [{"url": OFFICIAL, "code": 200}] if self.fetched else []
             run.structured = {"status": "ok", "missing": [], "sources": [{"id": "s1", "title": "공식", "url": OFFICIAL, "kind": "official"}],
                               "facts": [{"text": "확인된 사실", "sourceIds": ["s1"]}], "cards": valid_cards(type_id, overrides=self.overrides)}
-        elif "status" in props:
+        elif "status" in props and is_material_compose(prompt):
             run.structured = {"status": "ok", "missing": [], "cards": valid_cards(type_id, "출처: 공식 계정", ("user1",))}
+        elif "status" in props:
+            # 조사 결과로 구성안을 쓰는 단계 (조사와 구성안 작성이 나뉜 뒤의 2단계)
+            run.structured = {"status": "ok", "missing": [], "cards": valid_cards(type_id, overrides=self.overrides)}
         else:
             frames = [f for f in FRAMES if f in prompt.split("다시 쓸 카드:")[-1]]
             cards = valid_cards(type_id, overrides=self.rewrite_overrides)
@@ -163,7 +191,7 @@ def test_twenty_templates_load_in_four_sets():
 
 
 @pytest.mark.parametrize("tid, label, field", [
-    ("character-05", "공식 계정", "official_account"), ("goods-05", "판매처", "seller"), ("collab-05", "핵심 혜택", "key_benefit"),
+    ("character-05-v1", "공식 계정", "official_account"), ("goods-05", "판매처", "seller"), ("collab-05", "핵심 혜택", "key_benefit"),
     ("popup-05", "추천 시간", "recommended_time"), ("popup-02", "휴무", "closed_days"), ("collab-02", "기간", "period"), ("goods-03", "소재", "material"),
 ])
 def test_labels_of_optional_fields_hide_with_value(tid, label, field):
@@ -176,9 +204,16 @@ def test_labels_of_optional_fields_hide_with_value(tid, label, field):
 
 
 def test_requested_character_profile_fields():
-    keys = {f["key"] for f in templates.TEMPLATES["character-02"]["fields"]}
-    assert {"character_name", "birthday", "favorite_things", "creator", "feature_tags", "debut_year", "debut_work"} <= keys
+    fields = {f["key"]: f for f in templates.TEMPLATES["character-02"]["fields"]}
+    # 이름은 필수, 나머지 프로필은 고정 칸이 아니라 조사 결과에 따라 0~3개 (구성안에서 추가·삭제)
+    assert {"character_name", "profile_rows", "profile_intro", "feature_tags", "debut_year", "debut_work"} <= set(fields)
+    assert fields["character_name"]["required"] and not {"birthday", "favorite_things", "creator"} & set(fields)
+    rows = fields["profile_rows"]
+    assert rows["type"] == "items" and rows["maxItems"] == 3 and rows["editor"] == "list" and not rows.get("minItems")
     assert templates.TEMPLATES["character-02"]["images"][0]["key"] == "character_image"
+    # 예전 카드용 판은 고정 4줄 그대로
+    old = {f["key"] for f in templates.TEMPLATES["character-02-v1"]["fields"]}
+    assert {"character_name", "birthday", "favorite_things", "creator"} <= old and "character-02-v1" not in templates.body_choices("character")
     assert templates.TEMPLATES["goods-02"]["fields"][0]["maxItems"] == 4 and len(templates.TEMPLATES["goods-02"]["images"]) == 4
 
 
@@ -202,7 +237,8 @@ def test_bad_templates_are_rejected(tmp_path):
 
 def test_options_send_templates_without_reference_data(client):
     options = client.get("/api/options").json()
-    assert len([t for t in options["templates"] if t[-3] == "-"]) == 20
+    assert len([t for t in options["templates"] if t[-3:-1] == "-0"]) == 20
+    assert "character-04-v1" in options["templates"]  # 예전에 저장한 친구와 TMI 카드를 그대로 그리기 위한 판
     assert options["templateTypes"] == sorted(TYPES)
     assert "reference" not in options["templates"]["goods-02"] and "sample" not in options["templates"]["goods-02"]
     assert {t["label"] for t in options["contentTypes"]} == {"캐릭터 소개", "굿즈 판매", "콜라보", "팝업스토어"}
@@ -222,7 +258,10 @@ def test_static_files_are_revalidated(client):
     ("character-02", {"character_name": ""}, "꼭 필요한 항목"),
     ("character-02", {"character_name": "가" * 13}, "12자 이내"),
     ("character-02", {"character_name": "치이", "feature_tags": ["하나", "둘", "셋", "넷"]}, "3개까지"),
-    ("character-02", {"character_name": "치이", "birthday": "MM월 DD일"}, "자리표시"),
+    ("character-02", {"character_name": "치이", "profile_rows": [{"label": "[항목]", "value": "MM월 DD일"}]}, "자리표시"),
+    ("character-02", {"character_name": "치이", "profile_rows": [{"label": "타입", "value": "전기"}] * 4}, "3개까지"),
+    ("character-02", {"character_name": "치이", "profile_rows": [{"label": "타입", "value": ""}]}, "꼭 필요한"),
+    ("character-02", {"character_name": "치이", "profile_rows": [{"label": "아주긴항목이름", "value": "전기"}]}, "6자 이내"),
     ("character-03", {"traits": [{"label": "공식 설정", "keyword": "", "description": "설명"}]}, "특징 키워드: 꼭 필요한"),
     ("character-03", {"traits": [{"keyword": "울보"}] * 3}, "2개까지"),
     ("goods-02", {"goods": [{"name": "[굿즈 이름]", "kind": "", "price": ""}]}, "자리표시"),
@@ -411,9 +450,12 @@ def test_upload_into_card_slot_from_outline(client):
     # 교체
     job = api(client, job_id, "POST", path, files=files, data={"rights": "허가됨", "source": "직접 촬영"}).json()
     assert job["slotImages"]["card-03"]["trait_image_1"]["assetId"] == job["assets"][-1]["id"] != new_id
+    # 권한·출처를 고르지 않아도 올려서 넣을 수 있음. 권한은 '확인 필요'로 기록 ('허가됨'으로 바꾸지 않음)
+    job = api(client, job_id, "POST", path, files=files).json()
+    assert job["assets"][-1]["rights"] == "확인 필요" and job["assets"][-1]["source"] == ""
+    assert job["slotImages"]["card-03"]["trait_image_1"]["assetId"] == job["assets"][-1]["id"]
     before = len(job["assets"])
-    assert api(client, job_id, "POST", path, files=files, data={"rights": "확인 필요", "source": ""}).status_code == 400
-    assert api(client, job_id, "POST", path, files=files, data={"rights": "허가됨", "source": ""}).status_code == 400
+    assert api(client, job_id, "POST", path, files=files, data={"rights": "허가됨", "source": ""}).status_code == 400  # '허가됨'으로 기록하려면 출처 필요
     assert api(client, job_id, "POST", "/cards/card-05/slots/nothing/upload", files=files, data={"rights": "허가됨", "source": "x"}).status_code == 409
     assert len(get(client, job_id)["assets"]) == before  # 거절된 업로드는 저장하지 않습니다
 
@@ -445,7 +487,7 @@ def test_renderer_has_no_mascot_placeholder_for_empty_slot():
 def test_edit_validation_and_preview_rebuild(client):
     job_id = start(client)
     wait(client, job_id, "waiting_outline")
-    fields = {"character_name": "하치와레", "birthday": "", "favorite_things": "", "creator": "", "feature_tags": ["다정함"], "debut_year": "", "debut_work": "", "profile_no": ""}
+    fields = {"character_name": "하치와레", "profile_rows": [], "profile_intro": "", "feature_tags": ["다정함"], "debut_year": "", "debut_work": "", "profile_no": ""}
     r = edit(client, job_id, "card-02", {**fields, "debut_work": "[작품]"})
     assert r.status_code == 409 and "자리표시" in r.json()["detail"]
     assert edit(client, job_id, "card-02", fields).status_code == 200
@@ -532,12 +574,15 @@ def test_ai_research_fills_template_fields_and_skips_design_ai(client, fake):
     job = wait(client, job_id, "waiting_outline")
     call = fake.calls[0]
     assert "제목: 16자 이하" not in call["system"] and "세모귀 말투" in call["system"]
-    assert "card-03 (성격과 특징)" in call["prompt"] and "억지로 채우지 않는다" in call["prompt"]
-    assert job["outline"]["cards"][2]["fields"]["traits"][0]["keyword"] == "확인 값"
+    assert "character-03 (성격과 특징)" in call["prompt"] and "억지로 채우지 않는다" in call["prompt"]
+    assert "character-free (자유 구성)" in call["prompt"] and "표지로 고정" in call["prompt"]
+    assert job["outline"]["cards"][2]["fields"]["traits"][0]["keyword"] == "나 확인 값"
     assert not any(i["errors"] for i in job["outline"]["issues"].values())
     api(client, job_id, "POST", "/outline/approve")
     wait(client, job_id, "waiting_preview")
-    assert len(fake.calls) == 1
+    # 조사(웹 도구) 1회 + 구성안(웹 도구 없음) 1회. 디자인 AI는 부르지 않습니다
+    assert len(fake.calls) == 2 and fake.calls[0]["tools"] == ("WebSearch", "WebFetch") and fake.calls[1]["tools"] == ()
+    assert "cards" not in fake.calls[0]["schema"]["properties"] and "cards" in fake.calls[1]["schema"]["properties"]
     r = api(client, job_id, "POST", "/preview/approve")
     assert r.status_code == 409 and "card-01 대표 캐릭터 이미지" in r.json()["detail"]
     asset = upload(client, job_id)
@@ -549,13 +594,13 @@ def test_ai_overlong_field_gets_one_rewrite_but_missing_value_does_not(client, f
     fake.overrides = {"card-02": {"character_name": "가" * 20}}
     job_id = start(client, mode="ai")
     job = wait(client, job_id, "waiting_outline")
-    assert len(fake.calls) == 2 and job["outline"]["cards"][1]["fields"]["character_name"] == "확인된 내용"
+    assert len(fake.calls) == 3 and job["outline"]["cards"][1]["fields"]["character_name"] == "확인된 내용"  # 조사·구성안·다시 쓰기
 
     fake.calls.clear()
     fake.overrides = {"card-01": {"character_name": ""}}  # 확인하지 못한 이름: 다시 쓰게 하지 않고 사용자에게 입력을 요청합니다
     job_id = start(client, mode="ai")
     job = wait(client, job_id, "waiting_outline")
-    assert len(fake.calls) == 1
+    assert len(fake.calls) == 2  # 조사·구성안 (다시 쓰기 없음)
     assert any("꼭 필요한 항목" in e for e in job["outline"]["issues"]["card-01"]["errors"])
     assert api(client, job_id, "POST", "/outline/approve").status_code == 409
 
@@ -565,25 +610,32 @@ def test_ai_goods_price_must_come_from_material(client, fake):
     fake.overrides = {"card-03": {"featured_price": "9,900원"}}
     job_id = start(client, mode="ai", contentType="goods", topic="세모귀 키링")
     job = wait(client, job_id, "waiting_outline")
-    assert len(fake.calls) == 2 and job["outline"]["cards"][2]["fields"]["featured_price"] == "확인된 내용"
-    # 그래도 남으면 승인을 막습니다
+    assert len(fake.calls) == 3 and job["outline"]["cards"][2]["fields"]["featured_price"] == "나 확인된 내용"  # 조사·구성안·다시 쓰기
+    # 다시 써도 남으면: 비울 수 있는 칸(가격)은 비우고 알립니다
     fake.calls.clear()
     fake.rewrite_overrides = {"card-03": {"featured_price": "9,900원"}}
+    job_id = start(client, mode="ai", contentType="goods", topic="세모귀 키링")
+    job = wait(client, job_id, "waiting_outline")
+    card = job["outline"]["cards"][2]
+    assert card["fields"]["featured_price"] == "" and card["cleared"][0]["value"] == "9,900원"
+    assert not any("9,900" in e for e in job["outline"]["issues"]["card-03"]["errors"])
+    # 비울 수 없는 꼭 필요한 칸에 남은 지어낸 숫자는 계속 승인을 막습니다
+    fake.overrides = {"card-03": {"featured_name": "키링 9,900원"}}
+    fake.rewrite_overrides = {"card-03": {"featured_name": "키링 9,900원"}}
     job_id = start(client, mode="ai", contentType="goods", topic="세모귀 키링")
     job = wait(client, job_id, "waiting_outline")
     assert any("9,900" in e for e in job["outline"]["issues"]["card-03"]["errors"])
     assert api(client, job_id, "POST", "/outline/approve").status_code == 409
 
 
-def test_ai_listing_only_source_blocks_goods_and_warns_character(client, fake):
+def test_ai_listing_only_source_warns_without_blocking(client, fake):
+    # 검색 결과만 있는 출처: 참고 자료로 쓰고, 원문을 읽지 못했다는 사실을 경고로 알립니다 (굿즈·캐릭터 모두)
     fake.fetched = False
-    job_id = start(client, mode="ai", contentType="goods", topic="세모귀 키링")
-    job = wait(client, job_id, "waiting_outline")
-    assert any("검색 목록에 주소만" in e for e in job["outline"]["issues"]["card-02"]["errors"])
-    job_id = start(client, mode="ai")
-    job = wait(client, job_id, "waiting_outline")
-    issue = job["outline"]["issues"]["card-02"]
-    assert not issue["errors"] and any("검색 목록에 주소만" in w for w in issue["warnings"])
+    for extra in ({"contentType": "goods", "topic": "세모귀 키링"}, {}):
+        job_id = start(client, mode="ai", **extra)
+        job = wait(client, job_id, "waiting_outline")
+        issue = job["outline"]["issues"]["card-02"]
+        assert not issue["errors"] and any("원문 페이지는 읽지 못했어요" in w for w in issue["warnings"])
 
 
 def test_ai_material_marks_user_source_on_body_cards_only(client, fake):
@@ -592,17 +644,20 @@ def test_ai_material_marks_user_source_on_body_cards_only(client, fake):
     assert api(client, job_id, "POST", "/material", json=material).status_code == 200
     job = wait(client, job_id, "waiting_outline")
     cards = job["outline"]["cards"]
-    assert cards[0]["source"] == "" and cards[1]["source"] == "출처: 공식 계정 (사용자 제공)"
+    # 팝업의 seller 칸은 '장소'라 출처 이름으로 쓰지 않습니다 (굿즈의 판매처만 출처 이름으로)
+    assert cards[0]["source"] == "" and cards[1]["source"] == "출처: 사용자 제공"  # 표지는 출처 없음
     assert fake.calls[0]["tools"] == () and type_of_schema(fake.calls[0]["schema"]) == "popup"
 
 
 def test_ai_card_rewrite_returns_fields(client, fake):
     job_id = start(client, mode="ai")
     wait(client, job_id, "waiting_outline")
-    fake.rewrite_overrides = {"card-04": {"tmi_items": ["다시 쓴 사실"]}}
+    friends = [{"name": "하치와레", "relation": "단짝", "tmi": "다시 쓴 사실"}, {"name": "우사기", "relation": "친구", "tmi": ""}]
+    fake.rewrite_overrides = {"card-04": {"friends": friends}}
     assert api(client, job_id, "POST", "/outline/cards/card-04/regenerate").status_code == 200
     job = wait(client, job_id, "waiting_outline")
-    assert job["outline"]["cards"][3]["fields"]["tmi_items"] == ["다시 쓴 사실"] and job["outline"]["cards"][3]["regenCount"] == 1
+    card = job["outline"]["cards"][3]
+    assert card["template"] == "character-04" and card["fields"]["friends"] == friends and card["regenCount"] == 1
 
 
 # ---------- 호환 ----------
