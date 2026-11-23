@@ -1,6 +1,6 @@
-"""친구·가족 칸 사진 → 캐릭터 이름 확정 → 카드 문구 테스트. Claude와 외부 사이트에 접속하지 않습니다.
+"""친구 칸 사진 → 캐릭터 이름 확정 → 카드 문구 테스트. Claude와 외부 사이트에 접속하지 않습니다.
 
-사진과 항목은 자리 번호로 잇습니다: friend_image_N(가족은 family_image_N)이 N번째 항목의 사진입니다.
+사진과 항목은 자리 번호로 잇습니다: friend_image_N이 N번째 친구의 사진입니다.
 """
 
 import copy
@@ -57,13 +57,11 @@ def base_cards():
     cards[0]["fields"]["character_name"] = "피카츄"
     # 조사 단계의 AI는 사진을 모른 채 다른 친구를 골랐습니다 (이번 버그의 원래 모습)
     cards[3]["fields"]["friends"] = [item("라이츄", "진화형", "꼬부기와 물놀이를 좋아해요"), item("꼬부기", "친구")]
-    cards[3]["fields"]["family"] = [item("엄마", "가족"), item("아빠", "가족")]
     return cards
 
 
-def friend_card(friends_value, category="friends"):
-    other = "family" if category == "friends" else "friends"
-    return {"frame": "card-04", "role": "친구와 TMI", "fields": {"category": category, category: friends_value, other: []},
+def friend_card(friends_value):
+    return {"frame": "card-04", "role": "친구와 TMI", "fields": {"friends": friends_value},
             "source": "출처: 포켓몬 도감", "sourceIds": ["s1"]}
 
 
@@ -189,13 +187,12 @@ def identities_done(job):
 
 
 # ---------- 템플릿 ----------
-def test_card04_photo_slots_link_by_position_for_friends_and_family():
+def test_card04_photo_slots_link_by_position():
     tpl = templates.TEMPLATES["character-04"]
     slots = templates.identify_slots(tpl)
-    assert [s["key"] for s in slots if s["identify"] == "friends"] == [f"friend_image_{n}" for n in range(1, 5)]
-    assert [s["key"] for s in slots if s["identify"] == "family"] == [f"family_image_{n}" for n in range(1, 5)]
+    assert [s["key"] for s in slots] == [f"friend_image_{n}" for n in range(1, 5)] and all(s["identify"] == "friends" for s in slots)
     fields = {f["key"]: f for f in tpl["fields"]}
-    assert fields["friends"]["linkedName"] == fields["family"]["linkedName"] == "name"
+    assert fields["friends"]["linkedName"] == "name" and set(fields) == {"friends"}
     # 팀원의 2~4명 구성은 그대로입니다
     assert (fields["friends"]["minItems"], fields["friends"]["maxItems"]) == (2, 4)
 
@@ -206,7 +203,7 @@ def test_identify_slot_needs_matching_slot_prefix():
     with pytest.raises(templates.TemplateError, match="slotPrefix"):
         templates._check_template(tpl, "bad.json")
     tpl = copy.deepcopy(templates.TEMPLATES["character-04"])
-    del next(f for f in tpl["fields"] if f["key"] == "family")["linkedName"]
+    del next(f for f in tpl["fields"] if f["key"] == "friends")["linkedName"]
     with pytest.raises(templates.TemplateError, match="linkedName"):
         templates._check_template(tpl, "bad.json")
 
@@ -338,25 +335,6 @@ def test_reordering_friends_keeps_photo_and_confirmed_name_together(client, fake
     assert names(job)[:2] == ["푸린", "파이리"]
     assert job["slotImages"]["card-04"]["friend_image_2"]["assetId"] == fire
     assert photo_names(job) == [("friend_image_1", "푸린"), ("friend_image_2", "파이리")]
-    assert not job["outline"]["issues"]["card-04"]["errors"]
-
-
-def test_family_photos_are_identified_and_friend_slots_are_ignored(client, fake):
-    job_id = outline(client, "demo")
-    fields = copy.deepcopy(card04(get(client, job_id))["fields"])
-    fields["category"] = "family"
-    fields["family"] = [item("엄마", "엄마"), item("아빠", "아빠")]
-    assert save_card(client, job_id, fields).status_code == 200
-    put_photo(client, job_id, "family_image_1", b"mom")
-    put_photo(client, job_id, "family_image_2", b"fire")
-    job = get(client, job_id)
-    assert sum("이름을 확인하고 확정해" in e for e in job["outline"]["issues"]["card-04"]["errors"]) == 2
-    assert confirm(client, job_id, "friend_image_1", "파이리").status_code == 409  # 가족 카드에서는 친구 칸을 확인하지 않습니다
-    assert confirm(client, job_id, "family_image_1", "엄마피카").status_code == 200
-    assert confirm(client, job_id, "family_image_2", "아빠피카").status_code == 200
-    job = get(client, job_id)
-    assert names(job, "family") == ["엄마피카", "아빠피카"]
-    assert photo_names(job, "family_image_") == [("family_image_1", "엄마피카"), ("family_image_2", "아빠피카")]
     assert not job["outline"]["issues"]["card-04"]["errors"]
 
 

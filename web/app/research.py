@@ -51,13 +51,10 @@ SPECS = {
         {"key": "friends", "label": "친구 캐릭터", "importance": "high", "many": True,
          "hint": "중심 캐릭터의 친구를 한 명씩 최대 4명. 가족은 넣지 않는다. '이름(관계), 이름(관계)'처럼 한 value에 쉼표로 나열한다. "
                  "공식 캐릭터 소개나 등장인물 목록 페이지에서 확인한다. " + PEOPLE_RULE},
-        {"key": "family", "label": "가족 캐릭터(반려동물 포함)", "importance": "high", "many": True,
-         "hint": "부모·형제·반려동물 등 가족을 한 명씩 최대 4명. 친구는 넣지 않는다. 반려동물은 가족에 넣고 관계에 '반려견'처럼 쓴다. "
-                 "'이름(관계), 이름(관계)'처럼 한 value에 쉼표로 나열한다"},
         {"key": "relations", "label": "관계 설명", "importance": "normal",
          "hint": "친구 모임·소속처럼 개별 캐릭터가 아닌 관계 정보 (예: 유치원 친구 모임 이름)"},
         {"key": "tmi", "label": "캐릭터별 TMI", "importance": "high", "many": True,
-         "hint": "친구·가족 캐릭터별로 확인된 짧은 사실. '이름: 내용 / 이름: 내용'처럼 한 value에 적는다. 캐릭터마다 60자 이내"},
+         "hint": "친구 캐릭터별로 확인된 짧은 사실. '이름: 내용 / 이름: 내용'처럼 한 value에 적는다. 캐릭터마다 60자 이내"},
         {"key": "official_account", "label": "공식 계정", "importance": "normal", "hint": "공식 SNS 계정 이름이나 주소"},
         {"key": "profile_extra", "label": "기타 공식 프로필", "importance": "normal", "many": True,
          "hint": "작품이 공식으로 밝힌 프로필 중 생일·좋아하는 것 외의 항목 (예: 도감 번호, 타입, 분류, 키, 소속). "
@@ -143,7 +140,7 @@ EMPTY_STATES = {"not_searched", "not_found", "failed", "blocked", "missing"}  # 
 OUTCOMES = ("found", "not_found", "not_searched")  # AI가 항목마다 적는 조사 결과
 COVERAGES = ("complete", "partial", "unknown")  # AI가 적는 충분성: 출처에 나온 것을 모두 담았는지
 
-PEOPLE_KEYS = ("friends", "family")  # 친구와 가족은 서로 다른 카테고리로 저장합니다 (반려동물은 가족)
+PEOPLE_KEYS = ("friends",)  # card-04는 친구만 다룹니다 (2026-11-23 가족 카드 제거. 예전 자료의 family 항목은 읽지 않음)
 
 
 _RELATION_ONLY = re.compile(r"^(아빠|엄마|아버지|어머니|부모님?|동생|여동생|남동생|형|누나|언니|오빠|할아버지|할머니|친구|가족|반려견|반려묘|반려동물)$")
@@ -175,7 +172,7 @@ def _tmi_by_name(items: list[dict]) -> dict[str, str]:
 
 
 def people_of(items: list[dict] | None) -> dict[str, list[dict]]:
-    """조사에서 근거로 확인된 친구·가족 캐릭터. {"friends": [{name, relation, tmi, sourceIds}], "family": [...]}
+    """조사에서 근거로 확인된 친구 캐릭터. {"friends": [{name, relation, tmi, sourceIds}]}
 
     확인되지 않은 항목(근거 없음·검색 목록만·충돌)은 쓰지 않습니다. TMI는 그 캐릭터 이름으로 적힌 것만 붙입니다.
     """
@@ -228,13 +225,13 @@ _RELATION_END = re.compile(r"(멤버|소속|일원|구성원|친구|가족|동�
 
 
 def people_from(research: dict | None) -> dict[str, list[dict]]:
-    """조사 결과의 친구·가족. 캐릭터별 조사(peopleResearch)에서 확인한 TMI·근거·출처가 있으면 그것을 씁니다.
+    """조사 결과의 친구. 캐릭터별 조사(peopleResearch)에서 확인한 TMI·근거·출처가 있으면 그것을 씁니다.
 
-    {"friends"|"family": [{name, relation, tmi, quote, sourceIds, state}]}
+    {"friends": [{name, relation, tmi, quote, sourceIds, state}]}
     """
     research = research or {}
     base = people_of(research.get("items"))
-    details = {(p["category"], p["name"]): p for p in (research.get("peopleResearch") or {}).get("people", []) if p.get("tmi")}
+    details = {(p.get("category", "friends"), p["name"]): p for p in (research.get("peopleResearch") or {}).get("people", []) if p.get("tmi")}
     for key in PEOPLE_KEYS:
         for person in base[key]:
             found = details.get((key, person["name"]))

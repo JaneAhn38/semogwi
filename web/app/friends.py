@@ -1,13 +1,12 @@
-"""사진으로 확정한 캐릭터와 카드 문구를 잇습니다 (캐릭터 소개 card-04의 친구·가족 칸).
+"""사진으로 확정한 캐릭터와 카드 문구를 잇습니다 (캐릭터 소개 card-04의 친구 칸).
 
 - 칸(identify가 있는 이미지 자리)에 사진을 넣으면 그 사진의 캐릭터 이름을 확인해 slotIdentities에 둡니다.
-- 사진과 항목은 자리 번호로 잇습니다: friend_image_N(가족은 family_image_N)이 N번째 항목의 사진입니다.
+- 사진과 항목은 자리 번호로 잇습니다: friend_image_N이 N번째 친구의 사진입니다.
   사진이 없는 항목도 지우지 않습니다. 1·3번에만 사진이 있으면 2번째 항목은 사진 없이 그려집니다.
   항목을 지우거나 순서를 바꾸면 사진이 그 항목을 따라갑니다(templates.remap_item_slots).
 - 사용자가 이름을 확정하면 그 번호 항목의 이름을 서버가 정합니다. AI는 관계·TMI만 씁니다.
 - 칸에 사진이 있으면 그 카드에는 목록의 캐릭터(확정한 이름, 사진 없는 항목의 이름)와 중심 캐릭터 말고
   다른 캐릭터 이름을 쓰지 않습니다.
-- 카드에는 친구 또는 가족 중 고른 쪽(category)만 보이므로, 확인도 고른 쪽 칸만 합니다.
 
 slotIdentities[frame][slot] = {assetId, status, name, suggested, confidence, candidates, evidence, error}
 status: processing(AI 확인 중) / suggested(AI 제안) / failed / manual(직접 입력) / confirmed(사용자 확정)
@@ -37,7 +36,7 @@ def _card(job: dict, frame: str) -> dict | None:
 
 
 def _field(job: dict, frame: str, card: dict | None = None) -> dict:
-    """사진으로 이름을 확인하는 항목 가운데 지금 카드에 보이는 쪽(친구 또는 가족)."""
+    """사진으로 이름을 확인하는 항목 (조건이 있는 템플릿이면 지금 카드에 보이는 쪽)."""
     tpl = templates.template_for(job, frame)
     keys = list(dict.fromkeys(s["identify"] for s in templates.identify_slots(tpl)))
     fields = [f for f in tpl["fields"] if f["key"] in keys]
@@ -221,7 +220,7 @@ def _texts(job: dict, frame: str, card: dict) -> list[str]:
             for item in value or []:
                 texts += [str(v) for k, v in item.items() if k != field["linkedName"] and v]
         elif f.get("linkedName"):
-            continue  # 카드에 보이지 않는 쪽(친구/가족 중 고르지 않은 쪽)
+            continue  # 카드에 보이지 않는 목록
         else:
             texts += templates._strings(value)
     return texts

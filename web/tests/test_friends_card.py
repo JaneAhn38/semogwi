@@ -21,12 +21,12 @@ def friends(n, tmi=TMI_60):
 # ---------- 템플릿 정의 ----------
 def test_friends_template_definition():
     tpl = templates.TEMPLATES["character-04"]
-    # 공통 TMI 입력란(tmi_items)은 없고, 친구와 가족 목록을 따로 둡니다
-    assert [f["key"] for f in tpl["fields"]] == ["category", "friends", "family"]
-    for field in tpl["fields"][1:]:
+    # 공통 TMI 입력란(tmi_items)은 없고, 친구 목록만 둡니다 (가족 카드는 2026-11-23에 없앰)
+    assert [f["key"] for f in tpl["fields"]] == ["friends"]
+    for field in tpl["fields"]:
         assert (field["minItems"], field["maxItems"], field["defaultItems"]) == (2, 4, 3)
         assert {s["key"]: s["max"] for s in field["fields"]} == {"name": 8, "relation": 8, "tmi": 60}
-    assert [s["key"] for s in tpl["images"]] == [f"friend_image_{i}" for i in range(1, 5)] + [f"family_image_{i}" for i in range(1, 5)]
+    assert [s["key"] for s in tpl["images"]] == [f"friend_image_{i}" for i in range(1, 5)]
     assert any(el["type"] == "columns" for el in tpl["elements"])
     assert not any(el.get("field") == "tmi_items" for el in tpl["elements"])
     trait = next(f for f in templates.TEMPLATES["character-03"]["fields"] if f["key"] == "traits")
@@ -174,7 +174,7 @@ def test_friend_names_from_research():
     assert research.friend_names([{**item, "state": "unverified"}]) == []
     text = research.checklist_text("character")
     assert "그룹 이름(예: OO 방위대)은 캐릭터로 세지 않는다" in text and "'이름(관계), 이름(관계)'" in text
-    assert "- friends: 친구 캐릭터" in text and "가족은 넣지 않는다" in text and "- family: 가족 캐릭터(반려동물 포함)" in text
+    assert "- friends: 친구 캐릭터" in text and "가족은 넣지 않는다" in text and "- family:" not in text
 
 
 class FriendsFake:
@@ -233,13 +233,13 @@ def test_ai_keeps_free_card_and_explains_when_only_a_group_is_confirmed(client, 
 
 def test_ai_rules_forbid_padding_friends():
     rules = templates.ai_field_rules("character", templates.template_set("character"))
-    assert "2~4개" in rules and "친구 캐릭터 2개 또는 가족 캐릭터 2개 이상일 때만" in rules
+    assert "2~4개" in rules and "친구 캐릭터 2개 이상일 때만" in rules and "가족 캐릭터 2개" not in rules
     from app import ai_rules
     assert "인원을 채우려고" in ai_rules.TEMPLATE_TYPE_RULES["character"]
 
 
 def test_ai_card_with_one_friend_is_converted(client, fake):
-    fake.overrides = {"card-04": {"friends": [{"name": "하치와레", "relation": "단짝", "tmi": ""}], "family": []}}
+    fake.overrides = {"card-04": {"friends": [{"name": "하치와레", "relation": "단짝", "tmi": ""}]}}
     job_id = start(client, mode="ai")
     job = wait(client, job_id, "waiting_outline")
     card = job["outline"]["cards"][3]

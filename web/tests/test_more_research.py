@@ -11,12 +11,6 @@ from tests.test_templates import api, client, clear_cooldowns, fake, get, wait  
 
 USE_TEMPLATES = True
 NEW_PAGE = "https://ko.wikipedia.org/wiki/짱구_생일"
-FAMILY_TMI = [
-    {"name": "히로시", "tmi": "발 냄새가 지독하기로 유명해요.", "quote": "히로시는 발 냄새가 지독하다", "sourceIds": ["p1"]},
-    {"name": "미사에", "tmi": "바겐세일을 놓치지 않아요.", "quote": "미사에는 바겐세일을 놓치지 않는다", "sourceIds": ["p1"]},
-    {"name": "히마와리", "tmi": "반짝이는 것을 좋아해요.", "quote": "히마와리는 반짝이는 것을 좋아한다", "sourceIds": ["p1"]},
-    {"name": "시로", "tmi": "솜사탕처럼 하얀 강아지예요.", "quote": "시로는 하얀 강아지", "sourceIds": ["p1"]},
-]
 # 추가 조사 결과: 비어 있던 생일은 새로 찾고, 성격은 기존 값(마이페이스)과 다른 값을 찾음
 MORE_ITEMS = [
     {"key": "birthday", "value": "5월 5일", "quote": "생일은 5월 5일", "sourceIds": ["s1"]},
@@ -54,7 +48,7 @@ def separate_library(tmp_path, monkeypatch):
 
 @pytest.fixture
 def more_fake(fake, monkeypatch):
-    spy = MoreFake(fake, people=FRIEND_TMI + FAMILY_TMI)  # 첫 조사에서 모든 캐릭터의 TMI를 찾음
+    spy = MoreFake(fake, people=FRIEND_TMI)  # 첫 조사에서 모든 캐릭터의 TMI를 찾음
     monkeypatch.setattr(claude_cli, "run", spy)
     return spy
 
@@ -102,7 +96,7 @@ def test_more_research_makes_a_draft_without_touching_research_or_outline(client
     assert any(f.get("round") == 1 and "5월 5일" in f["text"] for f in draft["research"]["facts"])
     assert draft["summary"]["added"] == ["birthday"] and draft["summary"]["conflicts"] == ["personality"]
     # 기존 값은 그대로 (추가 조사에서 찾지 않은 항목도 유지)
-    assert items["family"]["value"].startswith("히로시") and "moreRound" not in items["family"]
+    assert items["friends"]["value"].startswith("철수") and "moreRound" not in items["friends"]
 
 
 def test_accept_needs_a_choice_then_saves_new_version_and_keeps_outline(client, more_fake):
@@ -213,7 +207,7 @@ def test_accept_refuses_if_research_changed_meanwhile(client, more_fake):
 
 
 def test_character_people_round_runs_only_when_tmi_is_missing(client, fake, monkeypatch):
-    spy = MoreFake(fake)  # 첫 조사에서 캐릭터별 TMI를 찾지 못함 → 철수·시로 말고는 TMI가 없음
+    spy = MoreFake(fake)  # 첫 조사에서 캐릭터별 TMI를 찾지 못함 → 철수 말고는 TMI가 없음
     monkeypatch.setattr(claude_cli, "run", spy)
     job_id, _ = outline_job(client)
     spy.kinds.clear()
@@ -222,10 +216,10 @@ def test_character_people_round_runs_only_when_tmi_is_missing(client, fake, monk
     kinds = [k for k, _ in spy.kinds]
     assert kinds[0] == "more" and "people" in kinds
     prompt = spy.prompts["rounds"][-1]
-    assert "철수" not in prompt.split("조사할 캐릭터:")[1].split("\n추가로")[0]  # TMI가 있는 캐릭터는 다시 찾지 않음
+    assert "- 유리" in prompt.split("조사할 캐릭터:")[1].split("\n추가로")[0]  # TMI가 없는 캐릭터를 찾음
     people = {p["name"]: p for p in job["researchDraft"]["research"]["peopleResearch"]["people"]}
     assert people["유리"]["round"] == 1 and "유리" in job["researchDraft"]["summary"]["people"]
-    assert all(not p.get("tmi") or p["name"] in ("철수", "시로") for p in job["research"]["people"]["friends"] + job["research"]["people"]["family"])
+    assert all(not p.get("tmi") or p["name"] == "철수" for p in job["research"]["people"]["friends"])
 
 
 def test_waiting_research_review_integrates_and_saves_one_version_on_approve(client, more_fake):

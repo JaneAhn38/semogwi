@@ -76,14 +76,14 @@ RESEARCH_SCHEMA = {
     "additionalProperties": False,
 }
 
-# 캐릭터 소개 2차 조사: 친구·가족 캐릭터별 TMI
+# 캐릭터 소개 2차 조사: 친구 캐릭터별 TMI
 PEOPLE_SCHEMA = {
     "type": "object",
     "properties": {
         "sources": RESEARCH_SCHEMA["properties"]["sources"],
         "people": {"type": "array", "items": {
             "type": "object",
-            "properties": {"name": {"type": "string"}, "category": {"type": "string", "enum": ["friends", "family"]},
+            "properties": {"name": {"type": "string"}, "category": {"type": "string", "enum": ["friends"]},
                            "relation": {"type": "string"}, "tmi": {"type": "string"}, "quote": {"type": "string"},
                            "sourceIds": {"type": "array", "items": {"type": "string"}}},
             "required": ["name", "category", "relation", "tmi", "quote", "sourceIds"], "additionalProperties": False}},
@@ -330,7 +330,7 @@ def _fill_profile_cards(cards: dict, research: dict) -> None:
 
 
 def _fill_people_cards(cards: dict, research: dict) -> None:
-    """캐릭터별 조사에서 확인한 TMI를 AI가 쓴 친구·가족 카드에 넣습니다 (사용자가 고친 카드에는 쓰지 않음).
+    """캐릭터별 조사에서 확인한 TMI를 AI가 쓴 친구 카드에 넣습니다 (사용자가 고친 카드에는 쓰지 않음).
 
     그 캐릭터의 TMI가 조사로 확인됐으면 그것을 쓰고, 확인되지 않은 캐릭터는 AI 문장 중 관계만 반복한 것을 지웁니다.
     이름이 조사 결과와 같은 캐릭터에만 넣으므로 다른 캐릭터의 사실을 옮겨 붙이지 않습니다. 근거 출처 id도 카드에 더합니다.
@@ -339,7 +339,6 @@ def _fill_people_cards(cards: dict, research: dict) -> None:
     people = research_items.people_from(research)
     group = next((i["value"] for i in research.get("items") or [] if i["key"] == "relations" and i["value"]), "")
     group_words = tuple(w for w in re.split(r"[,，、\s]+", group) if len(w) >= 2)
-    tpl = templates.TEMPLATES.get(FRIENDS_TEMPLATE)
     for card in cards.values():
         if card.get("template") != FRIENDS_TEMPLATE:
             continue
@@ -354,10 +353,6 @@ def _fill_people_cards(cards: dict, research: dict) -> None:
             if extra and len(listed) + len(extra) >= 2:
                 fields[key] = listed + [{"name": p["name"], "relation": p["relation"], "tmi": ""} for p in extra]
                 card["sourceIds"] = list(dict.fromkeys(card.get("sourceIds", []) + [i for p in extra for i in p.get("sourceIds", [])]))
-        if tpl and templates._missing_required(tpl, fields):
-            switched = templates._fit_choice(tpl, fields)  # 고른 카테고리가 비었으면 채워진 카테고리로
-            if switched:
-                card["fields"] = fields = switched
         for key in research_items.PEOPLE_KEYS:
             found = {p["name"]: p for p in people.get(key, []) if p.get("tmi")}
             seen: set[str] = set()
@@ -465,22 +460,17 @@ FRIENDS_TEMPLATE = "character-04"
 
 
 def _friends_card_error(cards: dict, job: dict | None, research: dict | None) -> dict:
-    """캐릭터 소개: 친구 또는 가족이 2명 이상 확인됐는데 가로형 카드(character-04)가 없거나, 친구와 가족이 섞였으면 고쳐 달라고 합니다.
+    """캐릭터 소개: 친구가 2명 이상 확인됐는데 가로형 카드(character-04)가 없으면 고쳐 달라고 합니다.
 
-    인원은 조사 항목(friends·family)에서 근거로 확인된 이름만 셉니다. 2명 미만이면 요구하지 않습니다 (캐릭터를 만들어 내지 않게).
+    인원은 조사 항목(friends)에서 근거로 확인된 이름만 셉니다. 2명 미만이면 요구하지 않습니다 (캐릭터를 만들어 내지 않게).
     """
     if not job or job.get("contentType") != "character" or not templates.is_flexible(job) or FRIENDS_TEMPLATE not in templates.TEMPLATES:
         return {}
     people = research_items.people_of((research or {}).get("items"))
-    errors = {}
-    for frame, card in cards.items():
-        if card.get("template") == FRIENDS_TEMPLATE:
-            mixed = templates.mixed_people(card, people)
-            if mixed:
-                errors[frame] = [f"친구와 가족이 섞였다 ({mixed}). 섞인 캐릭터는 조사된 카테고리 목록(friends 또는 family)으로 옮기고, 카드에는 category에 맞는 목록만 보인다"]
+    errors: dict = {}
     if any(c.get("template") == FRIENDS_TEMPLATE for c in cards.values()):
         return errors
-    key = next((k for k in ("friends", "family") if len(people.get(k, [])) >= 2), None)
+    key = "friends" if len(people.get("friends", [])) >= 2 else None
     if key is None:
         return errors
     names = [p["name"] for p in people[key]]
@@ -488,8 +478,8 @@ def _friends_card_error(cards: dict, job: dict | None, research: dict | None) ->
     free = templates.free_id("character")
     frame = next((f for f in FRAMES[1:] if (cards.get(f) or {}).get("template") == free), "card-04")
     errors.setdefault(frame, []).append(
-        f"조사에서 {label} 캐릭터 {len(names)}명({', '.join(names)})이 확인됐다. 이 카드는 {FRIENDS_TEMPLATE}로 바꾸고 category를 {key}로 해서 "
-        f"{key}에 캐릭터마다 이름·관계·TMI를 담는다. 친구와 가족을 섞지 않는다. 확인되지 않은 관계·TMI는 빈 문자열로 두고, 확인되지 않은 캐릭터는 넣지 않는다")
+        f"조사에서 {label} 캐릭터 {len(names)}명({', '.join(names)})이 확인됐다. 이 카드는 {FRIENDS_TEMPLATE}로 바꾸고 "
+        f"{key}에 캐릭터마다 이름·관계·TMI를 담는다. 가족은 넣지 않는다. 확인되지 않은 관계·TMI는 빈 문자열로 두고, 확인되지 않은 캐릭터는 넣지 않는다")
     return errors
 
 
@@ -726,7 +716,7 @@ class AIProvider:
         parsed, research, data = self._web_research(job, extraction, separate=True)
         calls.append(claude_cli.call_meta("research", parsed))
         if type_id == "character":
-            # 캐릭터 소개: 1차에서 확인된 친구·가족 각각의 TMI (1차 조사는 중심 캐릭터 위주라 캐릭터별 정보가 비기 쉽습니다)
+            # 캐릭터 소개: 1차에서 확인된 친구 각각의 TMI (1차 조사는 중심 캐릭터 위주라 캐릭터별 정보가 비기 쉽습니다)
             calls += self._research_people(job, research)
         self._finish_research(job, research, extraction)
         core_only = False
@@ -770,7 +760,7 @@ class AIProvider:
         return {"research": merged, "calls": calls, "extraction": extraction}
 
     def _supplement_people(self, job: dict, merged: dict, only_missing_tmi: bool = False) -> list[dict]:
-        """친구·가족 TMI: 기존 자료에 TMI가 있는 캐릭터는 다시 찾지 않고, 없는 캐릭터와 부족한 인원만 더 찾습니다.
+        """친구 TMI: 기존 자료에 TMI가 있는 캐릭터는 다시 찾지 않고, 없는 캐릭터와 부족한 인원만 더 찾습니다.
 
         only_missing_tmi: TMI가 없는 캐릭터가 있을 때만 조사합니다 (인원을 더 찾으려고 AI를 부르지 않음, 사용자 요청 추가 조사)
         """
@@ -978,7 +968,7 @@ class AIProvider:
         return {"status": "ok", "research": research, "cards": [cards[f] for f in FRAMES], "calls": calls, "extraction": extraction}
 
     def _research_people(self, job: dict, research: dict, known: list[dict] | None = None) -> list[dict]:
-        """캐릭터 소개 2차 조사: 1차 조사에서 확인된 친구·가족 각각의 TMI를 찾아 research에 캐릭터별로 남깁니다.
+        """캐릭터 소개 2차 조사: 1차 조사에서 확인된 친구 각각의 TMI를 찾아 research에 캐릭터별로 남깁니다.
 
         결과: research["peopleResearch"] = {people: [{name, category, relation, tmi, quote, sourceIds, state}], rejected, missing, queries}
         읽은 페이지에서 확인되지 않았거나, 관계만 반복했거나, 다른 캐릭터와 같은 문장은 쓰지 않고 rejected에 이유를 남깁니다.
@@ -988,7 +978,7 @@ class AIProvider:
         known = [dict(p) for p in known or []]  # 보완 조사: 이미 TMI가 확인된 캐릭터 (다시 찾지 않고 결과에 그대로 남김)
         known_names = {p["name"] for p in known}
         targets = [(key, p) for key in research_items.PEOPLE_KEYS for p in people[key] if p["name"] not in known_names]
-        # 1차 조사에서 친구나 가족이 4명 미만이면 그 카테고리의 캐릭터를 4명까지 더 찾습니다 (출처에 개별 이름이 나온 캐릭터만)
+        # 1차 조사에서 친구가 4명 미만이면 4명까지 더 찾습니다 (출처에 개별 이름이 나온 캐릭터만)
         discover = [key for key in research_items.PEOPLE_KEYS if len(people[key]) < 4]
         if not targets and not any(i["key"] == "official_name" and i.get("value") for i in research.get("items", [])):
             return []  # 중심 캐릭터조차 확인되지 않았으면 추가 조사를 하지 않습니다
@@ -1017,7 +1007,7 @@ class AIProvider:
             if round_no == 1 and discover:
                 labels = " / ".join(f"{templates.CATEGORY_LABELS[k]}({k}) {4 - len(people[k])}명" for k in discover)
                 find = (f"\n추가로 찾을 캐릭터: 위 목록에 더해 중심 캐릭터의 {labels}까지 (카테고리마다 모두 4명이 되도록). 읽은 페이지에 개별 이름이 나온 캐릭터만 넣고, 위 목록과 같은 캐릭터는 다시 넣지 않는다. "
-                        "그룹 이름은 캐릭터가 아니다. 친구와 가족(반려동물 포함)을 섞지 않는다. 가족은 부모·형제·반려동물을 먼저 찾는다. "
+                        "그룹 이름은 캐릭터가 아니다. 가족(부모·형제·반려동물)은 넣지 않는다. "
                         "한국어 페이지에 나온 한국어 이름을 우선 쓴다. 이름은 8자 이내, relation은 중심 캐릭터와의 관계를 8자 이내로 쓴다.")
             again = ("\n앞선 조사에서 아래 캐릭터의 TMI를 찾지 못했다. 캐릭터마다 '작품 이름 + 캐릭터 이름 + 성격'처럼 따로 검색하고, "
                      "그 캐릭터를 다룬 문서나 문단을 읽는다. 그래도 확인되지 않으면 tmi를 빈 문자열로 둔다.") if round_no == 2 else ""
@@ -1033,7 +1023,7 @@ class AIProvider:
             calls.append(claude_cli.call_meta("people", parsed))
             self._merge_people_round(research, parsed, acc, wanted, targets, allow_new=round_no == 1)
         accepted, rejected, discovered = known + acc["accepted"], acc["rejected"], acc["discovered"]
-        # 새로 찾은 친구·가족은 조사 항목에도 이름(관계)로 더합니다 (2명 이상일 때만 카드에 쓸 수 있음)
+        # 새로 찾은 친구는 조사 항목에도 이름(관계)로 더합니다 (2명 이상일 때만 카드에 쓸 수 있음)
         for key, found_people in discovered.items():
             if not found_people:
                 continue
@@ -1060,7 +1050,7 @@ class AIProvider:
         if acc["error"]:
             research["peopleResearch"]["error"] = acc["error"]
         research["facts"] = _dedupe_facts(research["facts"] + [
-            {"text": f"{p['name']}({p['relation'] or templates.CATEGORY_LABELS[p['category']]}) TMI: {p['tmi']}", "sourceIds": p["sourceIds"], "origin": "ai"}
+            {"text": f"{p['name']}({p['relation'] or templates.CATEGORY_LABELS.get(p.get('category'), '친구')}) TMI: {p['tmi']}", "sourceIds": p["sourceIds"], "origin": "ai"}
             for p in accepted])
         # 조사 항목의 TMI도 캐릭터별 값으로 채워 체크리스트와 보관함에 보이게 합니다
         for item in research.get("items", []):

@@ -17,20 +17,9 @@
     "white": "#FFFFFF",
     "paper": "#FFF8F0"
   },
-  "purpose": "친구 또는 가족 캐릭터 2~4명을 가로로 나란히 소개하는 카드. 캐릭터마다 이름, 관계, 개별 TMI를 담는다. 친구와 가족은 한 카드에 섞지 않는다.",
+  "purpose": "친구 캐릭터 2~4명을 가로로 나란히 소개하는 카드. 캐릭터마다 이름, 관계, 개별 TMI를 담는다. 가족은 다루지 않는다.",
   "pickWithoutData": true,
   "fields": [
-    {
-      "key": "category",
-      "label": "카테고리",
-      "type": "choice",
-      "default": "friends",
-      "options": [
-        {"value": "friends", "label": "친구"},
-        {"value": "family", "label": "가족"}
-      ],
-      "hint": "확인된 친구가 2명 이상이면 friends, 아니고 가족(반려동물 포함)이 2명 이상이면 family. 카드에는 고른 쪽 목록만 보인다"
-    },
     {
       "key": "friends",
       "label": "친구 캐릭터",
@@ -39,7 +28,6 @@
       "minItems": 2,
       "maxItems": 4,
       "defaultItems": 3,
-      "if": "category=friends",
       "hint": "출처로 확인된 친구 캐릭터만 넣는다. 가족은 넣지 않는다. 관계와 TMI도 확인된 것만 쓰고, 없으면 빈 문자열로 둔다. 인원을 채우려고 캐릭터·관계·TMI를 만들지 않는다",
       "fields": [
         {"key": "name", "label": "이름", "type": "text", "max": 8, "required": true},
@@ -49,57 +37,29 @@
       "item": "friends",
       "slotPrefix": "friend_image_",
       "linkedName": "name"
-    },
-    {
-      "key": "family",
-      "label": "가족 캐릭터",
-      "type": "items",
-      "required": true,
-      "minItems": 2,
-      "maxItems": 4,
-      "defaultItems": 3,
-      "if": "category=family",
-      "hint": "출처로 확인된 가족 캐릭터만 넣는다(반려동물 포함, 관계에 '반려견'처럼). 친구는 넣지 않는다. 관계와 TMI도 확인된 것만 쓰고, 없으면 빈 문자열로 둔다",
-      "fields": [
-        {"key": "name", "label": "이름", "type": "text", "max": 8, "required": true},
-        {"key": "relation", "label": "관계", "type": "text", "max": 8},
-        {"key": "tmi", "label": "TMI", "type": "multiline", "max": 60}
-      ],
-      "item": "family",
-      "slotPrefix": "family_image_",
-      "linkedName": "name"
     }
   ],
   "images": [
-    {"key": "friend_image_1", "label": "친구 1 이미지", "required": false, "shape": "circle", "if": ["category=friends", "friends.0"], "identify": "friends"},
-    {"key": "friend_image_2", "label": "친구 2 이미지", "required": false, "shape": "circle", "if": ["category=friends", "friends.1"], "identify": "friends"},
-    {"key": "friend_image_3", "label": "친구 3 이미지", "required": false, "shape": "circle", "if": ["category=friends", "friends.2"], "identify": "friends"},
-    {"key": "friend_image_4", "label": "친구 4 이미지", "required": false, "shape": "circle", "if": ["category=friends", "friends.3"], "identify": "friends"},
-    {"key": "family_image_1", "label": "가족 1 이미지", "required": false, "shape": "circle", "if": ["category=family", "family.0"], "identify": "family"},
-    {"key": "family_image_2", "label": "가족 2 이미지", "required": false, "shape": "circle", "if": ["category=family", "family.1"], "identify": "family"},
-    {"key": "family_image_3", "label": "가족 3 이미지", "required": false, "shape": "circle", "if": ["category=family", "family.2"], "identify": "family"},
-    {"key": "family_image_4", "label": "가족 4 이미지", "required": false, "shape": "circle", "if": ["category=family", "family.3"], "identify": "family"}
+    {"key": "friend_image_1", "label": "친구 1 이미지", "required": false, "shape": "circle", "if": "friends.0", "identify": "friends"},
+    {"key": "friend_image_2", "label": "친구 2 이미지", "required": false, "shape": "circle", "if": "friends.1", "identify": "friends"},
+    {"key": "friend_image_3", "label": "친구 3 이미지", "required": false, "shape": "circle", "if": "friends.2", "identify": "friends"},
+    {"key": "friend_image_4", "label": "친구 4 이미지", "required": false, "shape": "circle", "if": "friends.3", "identify": "friends"}
   ],
   "elements": [
     {"type": "header", "tag": "캐릭터 소개", "tagFill": "accent"},
-    {"type": "text", "if": "category=friends", "text": "친구들 & TMI", "box": {"x": 72, "y": 178, "w": 936, "h": 84}, "font": "display", "size": 64,
+    {"type": "text", "text": "친구들 & TMI", "box": {"x": 72, "y": 178, "w": 936, "h": 84}, "font": "display", "size": 64,
      "color": "ink", "align": "left", "valign": "middle", "maxLines": 1},
-    {"type": "text", "if": "category=family", "text": "가족들 & TMI", "box": {"x": 72, "y": 178, "w": 936, "h": 84}, "font": "display", "size": 64,
-     "color": "ink", "align": "left", "valign": "middle", "maxLines": 1},
-    {"type": "columns", "if": "category=friends", "field": "friends", "slotPrefix": "friend_image_", "x": 72, "w": 936, "top": 292, "bottom": 1212},
-    {"type": "columns", "if": "category=family", "field": "family", "slotPrefix": "family_image_", "x": 72, "w": 936, "top": 292, "bottom": 1212},
+    {"type": "columns", "field": "friends", "slotPrefix": "friend_image_", "x": 72, "w": 936, "top": 292, "bottom": 1212},
     {"type": "footer", "left": "{source}"}
   ],
   "sample": {
     "source": "출처: [공식 계정 / 홈페이지]",
     "fields": {
-      "category": "friends",
       "friends": [
         {"name": "[이름]", "relation": "[관계]", "tmi": "[이 캐릭터의 확인된 TMI]"},
         {"name": "[이름]", "relation": "[관계]", "tmi": "[이 캐릭터의 확인된 TMI]"},
         {"name": "[이름]", "relation": "[관계]", "tmi": "[이 캐릭터의 확인된 TMI]"}
-      ],
-      "family": []
+      ]
     }
   }
 }

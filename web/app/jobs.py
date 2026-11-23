@@ -1242,7 +1242,7 @@ def _apply_outline_result(job: dict, result: dict) -> None:
     _set_step(job, "research", "done")
     job["error"] = None
     if job["contentType"] == "character" and job["research"].get("items"):
-        # 친구·가족을 카테고리별로 나눠 둡니다 (구성안 편집에서 카테고리를 바꿀 때 불러옴)
+        # 조사에서 확인한 친구 목록 (화면의 조사 결과·자료 보관함에 보여 줌)
         job["research"]["people"] = research_items.people_from(job["research"])
     if result["status"] == "need_material":
         # 조사는 끝났습니다. 다시 검색하지 않고 '현재 자료로 구성안 작성'이나 자료 보완을 고를 수 있게 기록만 남깁니다

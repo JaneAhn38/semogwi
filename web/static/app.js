@@ -48,7 +48,7 @@
       example: "예: 치이카와 코인 실린더 / ¥440(세금 포함) / 전 8종 랜덤 / 치이카와 마켓 / 11월 20일 발매" },
     collab: { guide: "콜라보 상대, 기간, 장소·판매처, 메뉴·상품, 특전과 받는 조건을 알려 주세요.",
       example: "예: 치이카와 × ○○카페 / 12.1 ~ 12.31 / 전국 매장 / 음료 1잔당 코스터 1장 랜덤 증정" },
-    character: { guide: "캐릭터 이름, 등장 작품, 성격·특징, 친구·가족, 공식 프로필처럼 확인한 내용을 알려 주세요.",
+    character: { guide: "캐릭터 이름, 등장 작품, 성격·특징, 친구, 공식 프로필처럼 확인한 내용을 알려 주세요.",
       example: "예: 하치와레는 치이카와의 친구예요. 밝고 긍정적이고 노래를 좋아해요." },
   };
   const NOTE_KINDS = [["", "출처 종류 선택 안 함"], ["official", "공식 출처"], ["namuwiki", "나무위키"], ["other", "기타"]];
@@ -246,11 +246,11 @@
       el("li", { dataset: { origin: f.origin || "ai" } }, f.text, roundTag(f.round))));
   }
 
-  // 캐릭터 소개: 친구·가족 캐릭터별로 찾은 TMI와 근거 문장·출처, 찾지 못한 캐릭터, 쓰지 않은 내용과 이유
+  // 캐릭터 소개: 친구 캐릭터별로 찾은 TMI와 근거 문장·출처, 찾지 못한 캐릭터, 쓰지 않은 내용과 이유
   function renderPeople(research) {
     const people = research.people || {};
     const detail = research.peopleResearch || null;
-    const groups = [["friends", "친구"], ["family", "가족"]].filter(([key]) => (people[key] || []).length);
+    const groups = [["friends", "친구"]].filter(([key]) => (people[key] || []).length);
     $("research-people-wrap").hidden = !groups.length;
     if (!groups.length) return;
     const found = groups.reduce((n, [key]) => n + people[key].filter((p) => p.tmi).length, 0);
@@ -1683,11 +1683,11 @@
 
   function templateControl(field, value, frame) {
     if (field.type === "choice") {
-      // 예: 친구/가족. 바꾸면 그 카테고리 목록이 보이고, 다른 목록은 지우지 않고 보관합니다 (templateEditor가 처리)
+      // 선택 필드: 바꾸면 그 선택지의 목록이 보이고, 다른 목록은 지우지 않고 보관합니다 (templateEditor가 처리)
       const select = el("select", { name: `field-${field.key}`, dataset: { choice: field.key }, "aria-label": field.label });
       for (const option of field.options) select.append(el("option", { value: option.value, textContent: option.label, selected: (value || field.default) === option.value }));
       return el("label", { class: "edit-field" }, el("span", { textContent: field.label }), select,
-        el("small", { class: "hint", textContent: "바꿔도 입력한 친구·가족 정보는 따로 보관돼요. 비어 있는 쪽으로 바꾸면 조사 자료에서 불러와요." }));
+        el("small", { class: "hint", textContent: "바꿔도 입력한 정보는 따로 보관돼요. 비어 있는 쪽으로 바꾸면 조사 자료에서 불러와요." }));
     }
     if (field.type === "flag") {
       const box = el("input", { type: "checkbox", name: `field-${field.key}`, checked: Boolean(value) });
@@ -1726,7 +1726,7 @@
   }
 
   // 개수를 늘리고 줄일 수 있는 항목 (예: 친구 캐릭터 2~4명, 프로필 항목 0~3개). 항목마다 저장 전 번호(orig)를 기억해 이미지가 그 항목을 따라가게 합니다
-  // editor: "list"인 필드(프로필 항목)는 0개부터 쓸 수 있고 단위(unit)를 따로 정합니다. 친구·가족은 지금처럼 '명' 단위입니다
+  // editor: "list"인 필드(프로필 항목)는 0개부터 쓸 수 있고 단위(unit)를 따로 정합니다. 친구는 지금처럼 '명' 단위입니다
   function itemsEditor(field, value, frame) {
     const minItems = field.minItems || 0;
     const unit = field.unit || "명";
@@ -1782,7 +1782,7 @@
     return group;
   }
 
-  // 카테고리(친구/가족) 선택에 따라 보이는 목록을 바꿉니다. 숨긴 목록도 폼에 남겨 저장하므로 입력한 정보가 사라지지 않습니다
+  // 선택 필드 값에 따라 보이는 목록을 바꿉니다 (지금 기본 템플릿에는 선택 필드가 없음). 숨긴 목록도 폼에 남겨 저장하므로 입력한 정보가 사라지지 않습니다
   function bindChoices(form, tpl) {
     const sync = (fromUser) => {
       const values = Object.fromEntries([...form.querySelectorAll("[data-choice]")].map((s) => [s.dataset.choice, s.value]));
@@ -2671,14 +2671,14 @@
     detail.replaceChildren(libraryDetail(library.details.get(chosen.id)));
   }
 
-  // 저장된 자료 확인: 항목별 값과 확인 상태, 친구·가족, 출처와 조사일
+  // 저장된 자료 확인: 항목별 값과 확인 상태, 친구, 출처와 조사일
   function libraryDetail(version) {
     const items = (version.research.items || []).filter((i) => i.value);
     const people = version.people || {};
     const list = el("ul", { class: "library-items" }, ...items.map((item) =>
       el("li", { dataset: { state: item.state } }, `${item.label}: ${item.value}`)));
     const details = version.peopleDetails || {};
-    const groups = Object.entries({ friends: "친구", family: "가족" }).filter(([k]) => (people[k] || []).length)
+    const groups = Object.entries({ friends: "친구" }).filter(([k]) => (people[k] || []).length)
       .flatMap(([k, label]) => (details[k] || people[k].map((name) => ({ name }))).map((p) =>
         el("li", {}, el("b", { textContent: `${label} ${p.name}` }), p.relation ? ` (${p.relation})` : "", ` · TMI: ${p.tmi || "찾지 못함"}`)));
     const sources = el("ul", { class: "library-sources" }, ...version.sources.map((s) =>

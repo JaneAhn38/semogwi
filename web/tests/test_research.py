@@ -77,7 +77,7 @@ def test_every_type_has_a_checklist_matching_the_request():
 def test_template_fields_point_to_known_items():
     for type_id in ("character", "goods", "collab", "popup"):
         mapped = {f["item"] for tid in templates.template_set(type_id) for f in templates.TEMPLATES[tid]["fields"] if f.get("item")}
-        assert mapped <= set(research.keys_of(type_id)) and len(mapped) >= 5
+        assert mapped <= set(research.keys_of(type_id)) and len(mapped) >= (4 if type_id == "character" else 5)
 
 
 @pytest.mark.parametrize("ids, state", [
