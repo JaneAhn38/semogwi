@@ -219,8 +219,8 @@ def _texts(job: dict, frame: str, card: dict) -> list[str]:
 
 
 def violations(job: dict, frame: str, card: dict, cards: list[dict] | None = None) -> list[str]:
-    """칸에 사진이 있는 카드에서, 목록의 친구와 중심 캐릭터 말고 다른 캐릭터 이름을 찾습니다."""
-    if frame not in frames(job) or not filled(job, frame, card):
+    """칸에 사진이 있거나 사용자가 친구를 고른 카드에서, 목록의 친구와 중심 캐릭터 말고 다른 캐릭터 이름을 찾습니다."""
+    if frame not in frames(job) or not (filled(job, frame, card) or (job.get("friendPick") or {}).get("chosen")):
         return []
     listed = [n for n in _names(job, frame, card) if n]
     main = main_name(job, cards)
@@ -244,6 +244,9 @@ def add_issues(job: dict, cards: list[dict], issues: dict) -> None:
         if not card or frame not in issues:
             continue
         issues[frame]["warnings"] += photo_notes(job, frame, card)
+        if (card.get("fields") or {}).get("category") == "family" and len([n for n in _names(job, frame, card) if n]) < 2:
+            # 가족 카드(2026-11-23에 없앰)로 만든 예전 카드
+            issues[frame]["errors"].append("가족 카드는 없어졌어요. '친구 다시 고르기'로 친구를 골라 주세요")
         written = _names(job, frame, card)
         repeated = sorted({n for n in written if n and written.count(n) > 1})
         if repeated and filled(job, frame, card):  # 사진을 넣었을 때만 (사진이 어느 친구 것인지 헷갈리지 않게)

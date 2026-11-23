@@ -31,7 +31,7 @@ STALE_DAYS = 7
 # supplement·basedOn: 저장된 자료를 바탕으로 보완 조사한 버전의 통합 기록 (어느 버전에서, 무엇을 더했는지)
 # moreResearch: 조사 결과 화면의 '추가 조사'를 통합한 기록 (회차·요청 내용·더한 항목과 출처)
 KEEP = ("sources", "facts", "items", "missing", "queries", "searchPerformed", "partial", "peopleResearch", "pipeline", "researchedAtTime",
-        "supplement", "basedOn", "moreResearch")
+        "supplement", "basedOn", "moreResearch", "friendCandidates", "friendResearch")
 
 
 def topic_key(content_type: str, topic: str) -> str:
@@ -182,6 +182,9 @@ def research_for_job(version: dict, notes: str = "", notes_kind: str = "", notes
         research["peopleResearch"] = saved["peopleResearch"]
     if saved.get("moreResearch"):
         research["moreResearch"] = saved["moreResearch"]
+    for key in ("friendCandidates", "friendResearch"):  # card-04 친구 후보 (저장된 자료를 쓰면 다시 추천하지 않음)
+        if saved.get(key):
+            research[key] = saved[key]
     if notes:
         # 시작 화면에 새로 적은 참고 자료는 사용자 제공 자료로 더합니다 (저장된 자료를 고치지 않음)
         research["sources"] = [s for s in research["sources"] if s.get("id") != research_items.USER_NOTES_ID] + [

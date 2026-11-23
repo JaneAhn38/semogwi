@@ -177,6 +177,10 @@ class MaterialBody(Strict):
         return any(t.strip() for t in texts) or any(b.url for b in self.sources)
 
 
+class FriendPickBody(Strict):
+    names: list[str] = Field(min_length=1, max_length=4)  # 고른 순서 = 카드 순서 (2~4명, 이름 8자 이내는 서버가 검사)
+
+
 class RedesignBody(Strict):
     text: str = Field(default="", max_length=DESIGN_REQUEST_MAX)
 
@@ -498,6 +502,20 @@ async def choose_research_value(job_id: str, key: str, body: ResearchChoice):
 async def approve_research(job_id: str):
     """검토한 통합 자료를 새 버전으로 저장하고 그 자료로 구성안을 씁니다."""
     return _call(jobs.approve_research, job_id)
+
+
+@app.post("/api/jobs/{job_id}/friends/pick")
+async def pick_friends(job_id: str, body: FriendPickBody):
+    """card-04 친구를 고릅니다. 고른 친구만 조사하고 구성안을 씁니다 (구성안 단계면 card-04만 다시 씀)."""
+    if any(len(n) > 40 for n in body.names):
+        raise HTTPException(422, "친구 이름이 너무 길어요")
+    return _call(jobs.pick_friends, job_id, body.names)
+
+
+@app.post("/api/jobs/{job_id}/friends/recommend")
+async def recommend_friends(job_id: str):
+    """'후보 다시 추천': 누를 때만 AI를 부릅니다."""
+    return _call(jobs.recommend_friends_again, job_id)
 
 
 @app.post("/api/jobs/{job_id}/research/supplement-retry")
