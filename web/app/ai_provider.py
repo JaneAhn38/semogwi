@@ -1325,13 +1325,13 @@ class AIProvider:
                 "evidence": " ".join(str(data.get("evidence") or "").split())[:120], "calls": [claude_cli.call_meta("identify", parsed)]}
 
     def write_friends(self, job: dict, frame: str) -> dict:
-        """사진으로 확정한 친구에 맞춰 카드 한 장을 다시 씁니다. 저장된 조사 자료에 없는 친구만 짧게 다시 조사합니다."""
+        """카드의 친구 목록(이름·순서)에 맞춰 카드 한 장을 다시 씁니다. 저장된 조사 자료에 없는 친구만 짧게 다시 조사합니다."""
         research = {**_new_research(), **(job.get("research") or {})}
-        names = [n for _, n in friends.confirmed(job, frame)]
+        names = [n for n in friends.listed_names(job, frame) if n]
         lacking = friends.unknown_names(job, names)
         current = {c["frame"]: c for c in job["outline"]["cards"]}
         calls = []
-        instruction = "사진으로 확정한 친구에 맞춰 이 카드를 새로 쓴다. 자료에 있는 사실만 쓴다."
+        instruction = "목록의 친구에 맞춰 이 카드를 새로 쓴다. 자료에 있는 사실만 쓴다."
         if lacking:
             plan = _plan(job)
             material = {"sources": [{k: s[k] for k in ("id", "title", "kind")} for s in research["sources"]], "facts": research["facts"]}

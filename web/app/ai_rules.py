@@ -154,7 +154,7 @@ REWRITE_SYSTEM = REWRITE_BASE + COPY_RULES
 TEMPLATE_RESEARCH_BASE = RESEARCH_BASE.replace("WebSearch를 최대 4회, WebFetch를 최대 3회", "WebSearch를 최대 6회, WebFetch를 최대 5회")
 assert TEMPLATE_RESEARCH_BASE != RESEARCH_BASE
 
-# 사진으로 확정한 친구 중 조사 자료에 없는 캐릭터만 짧게 확인합니다
+# 카드 친구 목록 중 조사 자료에 없는 캐릭터만 짧게 확인합니다
 FRIENDS_RESEARCH_BASE = RESEARCH_BASE.replace("WebSearch를 최대 4회, WebFetch를 최대 3회", "WebSearch를 최대 2회, WebFetch를 최대 2회")
 assert FRIENDS_RESEARCH_BASE != RESEARCH_BASE
 

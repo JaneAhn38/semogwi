@@ -1558,30 +1558,27 @@
       file, source, button, error);
   }
 
-  // 친구 칸: 사진 속 캐릭터 이름을 보여 주고 사용자가 고쳐서 확정합니다. 친구 문구는 확정한 이름으로만 써요
+  // 친구 칸: 사진 속 캐릭터를 AI가 알아본 결과를 보여 줍니다. 이름은 고른 친구 그대로이고, 달라 보이면 경고만 해요 (서버 friends.photo_notes와 같은 기준)
+  const sameCharacter = (a, b) => {
+    const x = String(a || "").replace(/\s+/g, ""), y = String(b || "").replace(/\s+/g, "");
+    return Boolean(x && y) && (x.includes(y) || y.includes(x));
+  };
   function identityPanel(frame, slot) {
     const record = identityOf(frame, slot.key);
-    const status = record ? record.status : "manual";
     const field = templateFor(frame).fields.find((f) => f.key === slot.identify);
-    const nameMax = field.fields.find((s) => s.key === field.linkedName).max;
+    const n = Number((slot.key.match(/(\d+)$/) || [])[1] || 0) - 1;
+    const card = ((job.outline && job.outline.cards) || []).find((c) => c.frame === frame);
+    const item = (((card && card.fields) || {})[field.key] || [])[n] || {};
+    const name = String(item[field.linkedName] || "").trim();
+    const status = record ? record.status : "manual";
     let note;
-    if (status === "processing") note = el("small", { class: "cutout-status" }, el("span", { class: "spinner", "aria-hidden": "true" }), "사진 속 캐릭터 이름을 확인하고 있어요. 기다리지 않고 직접 입력해도 돼요.");
-    else if (status === "suggested" && record.suggested) note = el("small", { class: "hint", textContent: `AI 인식: ${record.suggested} (확신도 ${record.confidence})${record.evidence ? ` · 근거: ${record.evidence}` : ""}. 맞으면 확정하고, 다르면 고쳐서 확정해 주세요.` });
-    else if (status === "suggested") note = el("small", { class: "hint", textContent: `AI가 이름을 확신하지 못했어요${record.candidates.length ? ` (후보: ${record.candidates.join(", ")})` : ""}. 이름을 직접 입력해 주세요.` });
-    else if (status === "failed") note = el("small", { class: "cutout-error", textContent: record.error });
-    else if (status === "confirmed") note = el("small", { class: "hint", textContent: `확정: ${record.name}. 이 칸의 문구는 이 이름으로만 써요.` });
-    else note = el("small", { class: "hint", textContent: "사진 속 캐릭터 이름을 입력해 확정해 주세요." });
-    const input = el("input", {
-      type: "text", maxLength: nameMax, placeholder: "캐릭터 이름", "aria-label": `${frame} ${slot.label} 캐릭터 이름`,
-      value: status === "confirmed" ? record.name : (record && record.suggested) || "", dataset: { identityName: `${frame}:${slot.key}` },
-    });
-    const button = el("button", {
-      class: "btn btn-primary btn-small", type: "button", textContent: status === "confirmed" ? "이름 바꾸기" : "이 이름으로 확정",
-      dataset: { identityConfirm: `${frame}:${slot.key}` },
-      onclick: () => slotAction(`cards/${frame}/slots/${slot.key}/identity`, jsonInit("PUT", { name: input.value })),
-    });
-    return el("div", { class: "slot-identity", dataset: { identity: `${frame}:${slot.key}` } },
-      el("label", { class: "tile-image" }, el("span", { textContent: `캐릭터 이름 (${nameMax}자 이내)` }), input), button, note);
+    if (status === "processing") note = el("small", { class: "cutout-status" }, el("span", { class: "spinner", "aria-hidden": "true" }), "사진 속 캐릭터를 확인하고 있어요. 기다리지 않아도 돼요.");
+    else if (status === "suggested" && record.suggested && ["높음", "중간"].includes(record.confidence) && name && !sameCharacter(record.suggested, name))
+      note = el("small", { class: "photo-mismatch", textContent: `⚠ 이 사진은 ${record.suggested}처럼 보여요 (고른 친구: ${name}). 맞는 사진이면 그대로 둬도 돼요.` });
+    else if (status === "suggested" && record.suggested && name && sameCharacter(record.suggested, name)) note = el("small", { class: "hint", textContent: `✓ ${name} 사진으로 보여요.` });
+    else if (status === "failed") note = el("small", { class: "hint", textContent: record.error || "사진 속 캐릭터를 확인하지 못했어요." });
+    else note = el("small", { class: "hint", textContent: name ? `${n + 1}번째 친구(${name})의 사진이에요.` : `${n + 1}번째 친구의 사진이에요.` });
+    return el("div", { class: "slot-identity", dataset: { identity: `${frame}:${slot.key}` } }, note);
   }
 
   function slotPanel(frame, slot, context) {
@@ -1589,7 +1586,7 @@
     const asset = current && job.assets.find((a) => a.id === current.assetId);
     const suggestion = !current && suggestionOf(frame, slot.key);
     const key = JSON.stringify([current && currentSlot(frame, slot.key), suggestion, asset, permittedAssets().map((a) => [a.id, a.name, a.useVariant, hasCutout(a)]),
-      options.cutout.available, job.state, slot.identify ? identityOf(frame, slot.key) : null]);
+      options.cutout.available, job.state, slot.identify ? [identityOf(frame, slot.key), JSON.stringify(((job.outline && job.outline.cards) || []).find((c) => c.frame === frame) || {})] : null]);
     const cacheKey = `${context}:${frame}:${slot.key}`;
     const cached = slotPanels.get(cacheKey);
     if (cached && cached.key === key) return cached.node;
@@ -1754,15 +1751,11 @@
       list.replaceChildren(...rows.map((row, i) => {
         const box = el("div", { class: "item-row", dataset: { item: `${field.key}-${i}` } }, el("b", { textContent: `${i + 1}` }),
           el("input", { type: "hidden", name: `field-${field.key}-${i}-orig`, value: String(row.orig) }));
-        // 사진에서 이름을 확정한 항목은 이름을 사진 칸에서만 바꿉니다 (여기서 고쳐도 서버가 확정한 이름으로 되돌려요)
-        const record = frame && field.linkedName && field.slotPrefix && row.orig >= 0 ? identityOf(frame, `${field.slotPrefix}${row.orig + 1}`) : null;
-        const locked = record && record.status === "confirmed";
         for (const sub of field.fields) {
-          const lock = locked && sub.key === field.linkedName;
           const input = sub.type === "multiline"
             ? el("textarea", { value: row.item[sub.key] || "", rows: 3, name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.placeholder || sub.default || "" })
-            : el("input", { type: "text", value: row.item[sub.key] || "", name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.placeholder || sub.default || "", readOnly: lock });
-          box.append(editField(lock ? `${sub.label} · 사진 칸에서 확정` : `${sub.label}${sub.required ? " (필수)" : ""}`, input, sub.max));
+            : el("input", { type: "text", value: row.item[sub.key] || "", name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.placeholder || sub.default || "" });
+          box.append(editField(`${sub.label}${sub.required ? " (필수)" : ""}`, input, sub.max));
         }
         box.append(el("button", { class: "btn btn-ghost btn-small item-remove", type: "button", textContent: "삭제", disabled: rows.length <= minItems,
           dataset: { itemRemove: `${field.key}-${i}` }, "aria-label": `${field.label} ${i + 1} 삭제`,

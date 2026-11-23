@@ -185,6 +185,7 @@ input[aria-invalid="true"] { border-color: var(--pink-deep); }
 .cutout-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .cutout-status { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .86rem; font-weight: 700; }
 .cutout-error { margin: 0; padding: 8px 10px; color: #8c1d40; font-size: .86rem; font-weight: 700; background: #ffe9ef; border-radius: 10px; }
+.photo-mismatch { display: block; margin: 0; padding: 8px 10px; color: #7a4b00; font-size: .86rem; font-weight: 700; background: #fff4d6; border-radius: 10px; }
 .spinner { flex: none; width: 16px; height: 16px; border: 3px solid var(--pink-soft); border-top-color: var(--pink-deep); border-radius: 50%; animation: spin .9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .use-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 0; padding: 0; border: 0; }
