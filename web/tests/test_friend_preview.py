@@ -47,13 +47,11 @@ def mock_client(routes: dict, log: list):
     return httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
 
 
-def test_link_prefers_official_then_read_secondary():
-    assert friend_preview.link_for(candidate(), SOURCES) == {"url": OWN, "site": "pokemonkorea.co.kr", "official": True}
-    assert friend_preview.link_for(candidate(ids=("s4", "s3")), SOURCES) == {"url": WIKI, "site": "나무위키", "official": False}  # 미러 제외
-    # 자동 접근 금지 사이트도 사람이 여는 링크로는 걸 수 있습니다 (이미지는 쓰지 않음)
-    assert friend_preview.link_for(candidate(ids=("s5",)), SOURCES)["url"].startswith("https://chiikawamarket.jp")
-    assert friend_preview.link_for(candidate(ids=("s4",)), SOURCES) is None
-    assert friend_preview.link_for(candidate(ids=()), SOURCES) is None  # 직접 입력한 후보
+def test_old_page_links_are_dropped():
+    # '공식 페이지에서 보기' 링크는 '사진 보기'(화면에서 만드는 이미지 검색 주소)로 바꿨습니다 (2026-11-24)
+    assert not hasattr(friend_preview, "link_for")
+    found, _ = friend_preview.attach([{**candidate(ids=("s3",)), "link": {"url": WIKI}}], {"sources": SOURCES}, look=False)
+    assert "link" not in found[0]
 
 
 def test_page_must_be_official_read_and_own():
@@ -80,7 +78,7 @@ def test_attach_finds_preview_and_keeps_only_urls():
     client = mock_client({"/robots.txt": (200, "User-agent: *\nAllow: /"), "/pokedex/7": (200, PAGE)}, log)
     found, failures = friend_preview.attach([candidate(), candidate("라이츄", ("s2",))], {"sources": SOURCES}, client=client)
     assert found[0]["preview"] == {"imageUrl": "https://pokemonkorea.co.kr/img/0007.png", "pageUrl": OWN, "site": "pokemonkorea.co.kr"}
-    assert found[1]["preview"] is None and found[1]["link"]["url"] == LIST
+    assert found[1]["preview"] is None and "link" not in found[1]
     assert failures == [] and not any(u.endswith(".png") for u in log)  # 이미지 파일은 받지 않습니다
     # 이미 찾아본 후보는 다시 요청하지 않습니다
     log.clear()
@@ -112,7 +110,7 @@ def test_no_requests_without_lookup_or_pages():
     log = []
     client = mock_client({}, log)
     found, _ = friend_preview.attach([candidate()], {"sources": SOURCES}, look=False, client=client)  # 데모
-    assert log == [] and found[0]["preview"] is None and found[0]["link"]["official"]
+    assert log == [] and found[0]["preview"] is None
     found, _ = friend_preview.attach([candidate(ids=("s3",))], {"sources": SOURCES}, client=client)  # 사진을 찾을 페이지 없음
     assert log == [] and found[0]["preview"] is None
 

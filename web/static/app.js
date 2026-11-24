@@ -718,28 +718,41 @@
       error,
       el("div", { class: "actions" }, submit, again, close),
       el("small", { class: "hint", textContent: job.mode === "ai"
-        ? "고른 크루만 공식 출처를 먼저 조사해요. TMI를 이미 찾은 캐릭터는 다시 찾지 않고, 출처에서 찾지 못한 TMI는 비워 둬요. '후보 다시 추천'은 누를 때만 AI를 불러요 (추천 + 공식 프로필 검색, Pro 사용 한도 차감). 미리보기 사진은 공식 페이지의 이미지를 그대로 띄우는 것이고 저장하거나 카드에 넣지 않아요."
+        ? "고른 크루만 공식 출처를 먼저 조사해요. TMI를 이미 찾은 캐릭터는 다시 찾지 않고, 출처에서 찾지 못한 TMI는 비워 둬요. '후보 다시 추천'은 누를 때만 AI를 불러요 (추천 + 공식 프로필 검색, Pro 사용 한도 차감). 미리보기 사진은 공식 페이지의 이미지를 그대로 띄우는 것이고 저장하거나 카드에 넣지 않아요. '사진 보기'는 네이버 이미지 검색 결과라 다른 캐릭터나 팬아트가 섞일 수 있어요."
         : "데모에서는 조사 없이 고른 크루 이름으로 예시 카드를 만들어요." })));
   }
 
   // 크루 후보 미리보기 (서버 app/friend_preview.py). 공식 페이지의 대표 이미지 주소를 브라우저가 바로 띄웁니다(저장·카드 반영 안 함).
-  // 사진이 없거나 못 불러오면 '공식 페이지에서 보기'(없으면 2차 자료 페이지) 링크, 그것도 없으면 이름만 보여 줍니다
-  function pickLink(link) {
-    if (!link || !/^https?:\/\//.test(link.url)) return null;
-    return el("a", { class: "btn btn-ghost btn-small pick-link", href: link.url, target: "_blank", rel: "noopener noreferrer",
-      textContent: link.official ? "공식 페이지에서 보기" : `참고 페이지에서 보기 (${link.site})` });
+  // 사진이 없거나 못 불러오면 '사진 보기': "후보 이름 + 작품명" 네이버 이미지 검색을 새 탭으로 엽니다 (2026-11-24).
+  // 검색 주소만 만들고, 서버는 검색 사이트에 요청하지 않으며 이미지를 가져오거나 저장하지 않습니다
+  const IMAGE_SEARCH = "https://search.naver.com/search.naver?where=image&query=";
+  const squash = (text) => String(text || "").replace(/\s+/g, "");
+
+  // 작품명: 조사 항목 '작품·시리즈명'(series)에서 괄호 속 원제와 『』「」를 뺀 이름. 없으면 주제
+  function workName() {
+    const series = ((job.research && job.research.items) || []).find((i) => i.key === "series" && i.value);
+    const raw = series ? series.value : job.topic || "";
+    return raw.replace(/[(（][^)）]*[)）]/g, " ").replace(/[『』「」《》]/g, " ").split(/[,·/]/)[0].replace(/\s+/g, " ").trim();
+  }
+
+  function imageSearchQuery(name) {
+    const work = job.mode === "ai" ? workName() : ""; // 데모의 예시 후보는 작품이 정해져 있지 않아 이름만 씁니다
+    if (!work || squash(work).includes(squash(name))) return work || name;
+    return `${name} ${work}`;
+  }
+
+  function photoSearchButton(name) {
+    const query = imageSearchQuery(name);
+    return el("a", { class: "btn btn-ghost btn-small pick-link", href: IMAGE_SEARCH + encodeURIComponent(query), target: "_blank",
+      rel: "noopener noreferrer", title: `네이버 이미지 검색: ${query} (새 탭)`, dataset: { photoSearch: query }, textContent: "사진 보기" });
   }
 
   function pickPreview(c, pick) {
     const box = el("div", { class: "pick-preview", dataset: { preview: c.name } });
-    const fallback = () => {
-      const link = pickLink(c.link);
-      if (link) box.replaceChildren(link);
-      else box.remove(); // 사진도 페이지도 없으면 이름과 추천 이유만
-    };
+    const fallback = () => box.replaceChildren(photoSearchButton(c.name));
     if (job.mode !== "ai") {
       box.append(el("span", { class: "pick-thumb is-empty", "aria-hidden": "true", textContent: (c.name || "?").slice(0, 1) }),
-        el("small", { class: "hint", textContent: "미리보기 없음 (데모)" }));
+        el("small", { class: "hint", textContent: "미리보기 없음 (데모)" }), photoSearchButton(c.name));
       return box;
     }
     const preview = c.preview;
@@ -752,12 +765,11 @@
       return box;
     }
     if (!("preview" in c) && pick.previewPending) {
-      box.append(el("span", { class: "pick-thumb is-empty", "aria-hidden": "true", textContent: "…" }), el("small", { class: "hint", textContent: "미리보기 찾는 중" }));
+      box.append(el("span", { class: "pick-thumb is-empty", "aria-hidden": "true", textContent: "…" }), el("small", { class: "hint", textContent: "미리보기 찾는 중" }),
+        photoSearchButton(c.name));
       return box;
     }
-    const link = pickLink(c.link);
-    if (!link) return "";
-    box.append(link);
+    fallback();
     return box;
   }
 

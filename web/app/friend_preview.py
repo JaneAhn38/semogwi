@@ -1,21 +1,20 @@
 """크루 고르기 화면의 후보 미리보기 (2026-11-24).
 
-캐릭터를 모르는 사용자도 후보를 보고 고를 수 있게, 후보마다 작은 사진이나 확인할 페이지 링크를 붙입니다.
+캐릭터를 모르는 사용자도 후보를 보고 고를 수 있게, 후보마다 작은 사진을 붙입니다.
 
 - 사진(preview): 공식 출처 중 AI가 실제로 읽었고 **그 후보 전용인** 페이지(제목이나 주소에 후보 이름이 있음)에서만 찾습니다.
   서버는 그 페이지 HTML만 한 번 받아(사이트 규칙·robots.txt·대기 시간은 detail_images._Fetcher 그대로)
   페이지가 정한 대표 이미지(og:image·twitter:image), 없으면 alt가 후보 이름인 이미지의 **주소만** 고릅니다.
   이미지 파일은 받지도 저장하지도 않습니다. 브라우저가 원래 주소로 띄우고(referrer 없음), 카드·PNG·사진 칸에는 넣지 않습니다.
   목록 페이지나 중심 캐릭터 페이지의 대표 이미지는 후보가 아닐 수 있어 쓰지 않습니다 (틀린 사진보다 사진 없음이 낫습니다).
-- 링크(link): 사진이 없거나 불러오지 못하면 보여 줄 페이지. 공식 출처 우선, 없으면 AI가 읽은 2차 자료(미러 제외).
-  사람이 직접 여는 링크라 요청하지 않으며, 자동 접근 금지 사이트도 링크로는 걸 수 있습니다.
+- 사진이 없거나 불러오지 못하면 화면(app.js)이 '사진 보기' 버튼을 보여 줍니다: "후보 이름 + 작품명" 네이버 이미지 검색 주소를
+  새 탭으로 엽니다. 서버는 그 주소를 만들지도 요청하지도 않습니다 (예전 후보에도 버튼이 나오게 화면에서 만듦).
 - 나무위키 등 2차 자료의 이미지는 쓰지 않습니다. 데모와 직접 입력한 후보는 출처가 없어 요청하지 않습니다.
 - 조사 자료에 전용 페이지가 없는 후보는, 후보 추천 뒤 AI가 공식 프로필 페이지를 한 번 더 찾습니다(add_profiles, 실제 AI만).
   도구 기록으로 AI가 실제로 읽은 공식 페이지만 받고, 서버가 받은 HTML에도 후보 이름이 있어야 사진을 씁니다.
 
 후보에 붙는 값 (주소 문자열만):
     preview: {imageUrl, pageUrl, site} | None   # None = 찾아봤지만 없음. 키가 없으면 아직 찾지 않음
-    link:    {url, site, official} | None
     profileSource: 출처 기록 | None              # AI가 찾은 공식 프로필 페이지 (None = 찾아봤지만 없음)
 """
 
@@ -27,10 +26,9 @@ from urllib.parse import unquote, urljoin, urlparse
 from . import site_policy
 from .detail_images import PAGE_MAX_BYTES, SKIP_WORDS, USER_AGENT, _Fetcher, _public_host
 
-FIND_BUDGET = 20  # 한 번에 미리보기를 찾는 시간(초). 넘으면 남은 후보는 링크만 보여 줍니다
+FIND_BUDGET = 20  # 한 번에 미리보기를 찾는 시간(초). 넘으면 남은 후보는 '사진 보기' 버튼만 보여 줍니다
 MAX_PAGES = 5  # 한 번에 받는 페이지 수 (후보 5명)
 _READ = ("fetched",)
-_LINKABLE_OFFICIAL = ("fetched", "search_result", "restricted")
 
 
 def _norm(text: str) -> str:
@@ -52,18 +50,6 @@ def _cited(candidate: dict, sources: list[dict]) -> list[dict]:
     if isinstance(candidate.get("profileSource"), dict):
         found.insert(0, candidate["profileSource"])  # 후보 추천 뒤 AI가 찾아 읽은 공식 프로필 페이지 (add_profiles)
     return [s for s in found if _http(s.get("url")) and not site_policy.mirror_site(s["url"]) and s.get("verification") != "mirror"]
-
-
-def link_for(candidate: dict, sources: list[dict]) -> dict | None:
-    """'공식 페이지에서 보기' 링크: 공식 출처 우선, 없으면 읽은 2차 자료. 없으면 None."""
-    cited = _cited(candidate, sources)
-    official = next((s for s in cited if s.get("kind") == "official" and s.get("verification") in _LINKABLE_OFFICIAL), None)
-    if official:
-        return {"url": official["url"], "site": site_name(official), "official": True}
-    secondary = next((s for s in cited if s.get("kind") != "official" and s.get("verification") in _READ), None)
-    if secondary:
-        return {"url": secondary["url"], "site": site_name(secondary), "official": False}
-    return None
 
 
 def is_own_page(name: str, source: dict) -> bool:
@@ -170,14 +156,8 @@ def add_profiles(candidates: list[dict], research: dict | None, find) -> tuple[l
     return result, found.get("calls", [])
 
 
-def with_links(candidates: list[dict], research: dict | None) -> list[dict]:
-    """요청 없이 링크만 붙입니다 (미리보기는 attach가 뒤이어 찾음)."""
-    sources = (research or {}).get("sources") or []
-    return [{**c, "link": link_for(c, sources)} for c in candidates or []]
-
-
 def attach(candidates: list[dict], research: dict | None, look: bool = True, client=None) -> tuple[list[dict], list[dict]]:
-    """후보마다 link와 preview를 붙입니다. look=False면(데모) 요청하지 않습니다.
+    """후보마다 preview를 붙입니다. look=False면(데모) 요청하지 않습니다.
 
     이미 찾아본 후보(preview 키가 있음)는 다시 요청하지 않습니다. 결과: (후보 목록, 사이트 접속 실패 기록)
     실패 기록은 이벤트 루프에서 site_policy.record_failures로 남깁니다.
@@ -185,7 +165,7 @@ def attach(candidates: list[dict], research: dict | None, look: bool = True, cli
     sources = (research or {}).get("sources") or []
     result = [dict(c) for c in candidates or []]
     for c in result:
-        c["link"] = link_for(c, sources)
+        c.pop("link", None)  # 예전 '공식 페이지에서 보기' 링크 (2026-11-24에 '사진 보기' 검색 버튼으로 바꿈)
     pending = [c for c in result if "preview" not in c]
     pages = {id(c): page_for(c, sources) for c in pending} if look else {}
     if not look or not any(pages.values()):
@@ -228,7 +208,8 @@ def merge(job: dict, found: list[dict]) -> None:
     for items in lists:
         for c in items:
             if c.get("name") in by_name:
-                for key in ("link", "preview", "profileSource"):
+                c.pop("link", None)
+                for key in ("preview", "profileSource"):
                     if key in by_name[c["name"]]:
                         c[key] = by_name[c["name"]][key]
     pick["previewPending"] = False

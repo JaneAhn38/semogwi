@@ -359,7 +359,11 @@ def test_pick_screen_is_wired_in_the_page(client):
     assert client.get("/").status_code == 200
     # 미리보기 (2026-11-24): referrer 없이 띄우고, 못 불러오면 링크로 바뀌며, 데모는 자리표시만
     assert 'referrerPolicy: "no-referrer"' in app_js and '"error", fallback' in app_js
-    assert "공식 페이지에서 보기" in app_js and "참고 페이지에서 보기" in app_js and "미리보기 없음 (데모)" in app_js
+    assert "미리보기 없음 (데모)" in app_js
+    # 사진이 없으면 '사진 보기': "후보 이름 + 작품명" 네이버 이미지 검색을 새 탭으로 (주소만 만듦, 2026-11-24)
+    assert '"사진 보기"' in app_js and "https://search.naver.com/search.naver?where=image&query=" in app_js
+    assert "encodeURIComponent(query)" in app_js and 'i.key === "series"' in app_js
+    assert "공식 페이지에서 보기" not in app_js and "참고 페이지에서 보기" not in app_js
 
 
 def wait_previews(client, job_id):
@@ -381,9 +385,8 @@ def test_profile_search_adds_official_page_for_previews(client, fake):
     by_name = {c["name"]: c for c in job["friendPick"]["candidates"]}
     # 실제로 읽은 공식 페이지만 받습니다. 짐작한 주소(읽지 않음)와 후보가 아닌 이름은 버립니다
     assert by_name["꼬부기"]["profileSource"]["url"] == PROFILE and by_name["꼬부기"]["profileSource"]["verification"] == "fetched"
-    assert by_name["꼬부기"]["link"] == {"url": PROFILE, "site": "pokemonkorea.co.kr", "official": True}
     assert by_name["라이츄"]["profileSource"] is None
-    assert by_name["라이츄"]["link"] == {"url": WIKI, "site": "ko.wikipedia.org", "official": False}  # 공식이 없으면 읽은 2차 자료
+    assert all("link" not in c for c in by_name.values())  # 사진이 없으면 화면이 '사진 보기' 검색 주소를 만듭니다
     assert all(c["preview"] is None for c in by_name.values())  # 테스트는 사이트에 요청하지 않습니다 (conftest)
     assert any(c["kind"] == "profiles" for c in job["aiCalls"])
     # 후보 자료에도 남아 '저장된 자료 사용' 때 다시 찾지 않습니다
@@ -403,7 +406,7 @@ def test_profile_search_failure_keeps_candidates(client, fake, monkeypatch):
     wait(client, job_id, "waiting_friends")
     job = wait_previews(client, job_id)
     assert [c["name"] for c in job["friendPick"]["candidates"]] == ["꼬부기", "라이츄"] and not job["aiError"]
-    assert all(c["link"]["url"] == WIKI and c["preview"] is None for c in job["friendPick"]["candidates"])  # 검색이 실패해도 링크는 남습니다
+    assert all(c["preview"] is None for c in job["friendPick"]["candidates"])  # 검색이 실패해도 후보는 그대로 ('사진 보기'로 확인)
 
 
 def test_recommend_again_searches_profiles_too(client, fake):
@@ -413,11 +416,11 @@ def test_recommend_again_searches_profiles_too(client, fake):
     assert api(client, job_id, "POST", "/friends/recommend").status_code == 200
     job = wait_previews(client, job_id)
     assert len(fake.kinds("profiles")) == 2
-    assert next(c for c in job["friendPick"]["candidates"] if c["name"] == "꼬부기")["link"]["url"] == PROFILE
+    assert next(c for c in job["friendPick"]["candidates"] if c["name"] == "꼬부기")["profileSource"]["url"] == PROFILE
 
 
 def test_demo_has_no_preview_requests(client, fake):
     job_id = start(client, mode="demo")
     job = wait(client, job_id, "waiting_friends")
     assert fake.kinds("profiles") == [] and not job["friendPick"].get("previewPending")
-    assert all(not c.get("preview") and not c.get("link") for c in job["friendPick"]["candidates"])
+    assert all(not c.get("preview") for c in job["friendPick"]["candidates"])

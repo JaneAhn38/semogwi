@@ -542,7 +542,6 @@ async def _offer_friends(job_id: str, provider) -> None:
         job = _read(job_id)
         _record_calls(job, calls)
     research = job.get("research") or {}
-    candidates = friend_preview.with_links(candidates, research)
     friend_pick.offer(job, candidates, error)
     look = any("preview" not in c for c in candidates)
     job["friendPick"]["previewPending"] = look
