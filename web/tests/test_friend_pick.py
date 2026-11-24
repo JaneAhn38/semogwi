@@ -68,6 +68,7 @@ class Fake:
         self.recommend_error = None
         self.tmi = {"라이츄": "볼에 전기 주머니가 있어요"}  # 캐릭터별 조사에서 찾는 TMI
         self.rewrite = None
+        self.friends_value = "라이츄(진화형), 꼬부기(친구)"  # 1차 조사의 친구 항목
 
     def kinds(self, kind):
         return [c for c in self.calls if c["kind"] == kind]
@@ -112,7 +113,7 @@ class Fake:
         run.structured = {"status": "ok", "missing": [], "sources": [{"id": "s1", "title": "위키백과", "url": WIKI, "kind": "secondary"}],
                           "facts": [{"text": "피카츄는 전기 타입 포켓몬이다", "sourceIds": ["s1"]}],
                           "items": [{"key": "official_name", "value": "피카츄", "quote": "피카츄", "sourceIds": ["s1"]},
-                                    {"key": "friends", "value": "라이츄(진화형), 꼬부기(친구)", "quote": "라이츄와 꼬부기", "sourceIds": ["s1"]}],
+                                    {"key": "friends", "value": self.friends_value, "quote": "라이츄와 꼬부기", "sourceIds": ["s1"]}],
                           "cards": base_cards()}
         return run
 
@@ -417,6 +418,29 @@ def test_recommend_again_searches_profiles_too(client, fake):
     job = wait_previews(client, job_id)
     assert len(fake.kinds("profiles")) == 2
     assert next(c for c in job["friendPick"]["candidates"] if c["name"] == "꼬부기")["profileSource"]["url"] == PROFILE
+
+
+def test_parenthesized_friends_reach_people_research_intact(client, fake):
+    # 짱구 재현 (2026-11-24): 괄호 안 쉼표에서 잘리지 않고, 철수까지 4명이 한국 이름으로 캐릭터별 조사에 들어갑니다
+    fake.friends_value = "훈이(마사오, 유치원 친구), 맹구(보오), 유리(네네), 철수(토오루)"
+    job_id = start(client)
+    job = wait(client, job_id, "waiting_friends")
+    listing = fake.kinds("people")[0]["prompt"].split("조사할 캐릭터:")[1].split("\n자동 접근")[0]
+    assert "- 훈이 (친구, 유치원 친구; 다른 이름: 마사오)" in listing and "- 철수 (친구; 다른 이름: 토오루)" in listing
+    assert "훈이(마사오" not in listing and "유치원 친구)" not in listing
+    names = [p["name"] for p in job["research"]["people"]["friends"]]
+    assert names == ["훈이", "맹구", "유리", "철수"]
+    assert all(p["relation"] not in ("보오", "네네", "토오루") for p in job["research"]["people"]["friends"])  # 원어 이름은 관계가 아님
+
+
+def test_candidates_are_at_most_four(client, fake):
+    fake.candidates = [{"name": n, "relation": "", "reason": "귀여워요", "sourceIds": ["s1"]} for n in ("꼬부기", "라이츄", "피카츄", "고라파덕", "이브이")]
+    fake.friends_value = "라이츄(진화형), 꼬부기(친구), 고라파덕(친구), 이브이(친구)"
+    job_id = start(client)
+    job = wait(client, job_id, "waiting_friends")
+    assert [c["name"] for c in job["friendPick"]["candidates"]] == ["꼬부기", "라이츄", "고라파덕", "이브이"]  # 중심 캐릭터 제외, 최대 4명
+    assert friend_pick.MAX_CANDIDATES == 4 and len(friend_pick.DEMO_CANDIDATES) == 4
+    assert "최대 4명" in fake.kinds("recommend")[0]["prompt"]
 
 
 def test_demo_has_no_preview_requests(client, fake):

@@ -530,7 +530,7 @@ def approve_research(job_id: str) -> dict:
 
 
 # ---------- 캐릭터 소개 card-04 친구 고르기 ----------
-# 조사가 끝나면 AI가 친구 후보 5명을 추천하고 waiting_friends에서 멈춥니다. 사용자가 2~4명을 고르면(직접 입력 가능)
+# 조사가 끝나면 AI가 친구 후보를 최대 4명 추천하고 waiting_friends에서 멈춥니다. 사용자가 2~4명을 고르면(직접 입력 가능)
 # 고른 친구만 조사해 새 조사 버전으로 저장하고 구성안을 씁니다. 구성안 단계에서는 card-04만 다시 고를 수 있습니다.
 async def _offer_friends(job_id: str, provider) -> None:
     job = _read(job_id)
@@ -1763,7 +1763,7 @@ async def _build_outline(job_id: str) -> None:
     await _step(job_id, "research")
     job = _read(job_id)
     if friend_pick.needed(job):
-        # 데모: 조사 없이 예시 후보 5명으로 친구 고르기 화면을 보여 줍니다
+        # 데모: 조사 없이 예시 후보 4명으로 친구 고르기 화면을 보여 줍니다
         friend_pick.offer(job, [dict(c) for c in friend_pick.DEMO_CANDIDATES])
         job["state"] = friend_pick.WAITING
         save(job)

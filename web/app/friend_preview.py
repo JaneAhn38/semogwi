@@ -27,7 +27,7 @@ from . import site_policy
 from .detail_images import PAGE_MAX_BYTES, SKIP_WORDS, USER_AGENT, _Fetcher, _public_host
 
 FIND_BUDGET = 20  # 한 번에 미리보기를 찾는 시간(초). 넘으면 남은 후보는 '사진 보기' 버튼만 보여 줍니다
-MAX_PAGES = 5  # 한 번에 받는 페이지 수 (후보 5명)
+MAX_PAGES = 4  # 한 번에 받는 페이지 수 (후보 최대 4명)
 _READ = ("fetched",)
 
 

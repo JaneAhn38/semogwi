@@ -1,6 +1,6 @@
 """캐릭터 소개 card-04 '친구 고르기' (2026-11-23).
 
-조사가 끝나면 AI가 친구 후보 5명을 추천하고(귀여운 캐릭터 우선, 이유 한 줄 + 출처), 제작은 '친구 고르기'(waiting_friends)에서 멈춥니다.
+조사가 끝나면 AI가 친구 후보를 최대 4명 추천하고(귀여운 캐릭터 우선, 이유 한 줄 + 출처), 제작은 '친구 고르기'(waiting_friends)에서 멈춥니다.
 사용자가 2~4명을 고르면(목록에 없는 캐릭터도 직접 입력 가능, 고른 순서 = 카드 순서) 고른 친구만 공식 출처 우선으로 조사하고,
 그 자료를 새 조사 버전으로 저장한 뒤 구성안을 씁니다. 친구 이름과 순서는 서버가 정하고 AI는 관계·TMI만 씁니다.
 
@@ -20,7 +20,7 @@ from .friends import COVER_NAME_KEY, same_character
 
 FRAME = "card-04"
 TEMPLATE = "character-04"
-MIN_PICK, MAX_PICK, NAME_MAX, MAX_CANDIDATES = 2, 4, 8, 5
+MIN_PICK, MAX_PICK, NAME_MAX, MAX_CANDIDATES = 2, 4, 8, 4  # 후보는 최대 4명 (조사도 친구를 최대 4명 모음, 2026-11-24)
 REASON_MAX = 40
 NO_TMI = "출처에서 찾지 못했어요"
 WAITING = "waiting_friends"
@@ -31,7 +31,6 @@ DEMO_CANDIDATES = [
     {"name": "이브이", "relation": "친구", "reason": "복슬복슬한 꼬리가 귀여운 인기 캐릭터예요 (예시)", "sourceIds": []},
     {"name": "파이리", "relation": "친구", "reason": "꼬리 불꽃과 동그란 눈이 귀여워요 (예시)", "sourceIds": []},
     {"name": "꼬부기", "relation": "친구", "reason": "등껍질과 웃는 얼굴이 귀여운 캐릭터예요 (예시)", "sourceIds": []},
-    {"name": "고라파덕", "relation": "친구", "reason": "멍한 표정으로 사랑받는 캐릭터예요 (예시)", "sourceIds": []},
 ]
 
 
@@ -100,7 +99,7 @@ def readable_ids(research: dict) -> set[str]:
 
 
 def clean_candidates(raw: list, job: dict, research: dict) -> list[dict]:
-    """AI가 추천한 후보를 검사합니다. 읽은 자료에 이름이 나오고 읽은 페이지가 근거인 후보만 5명까지 받습니다."""
+    """AI가 추천한 후보를 검사합니다. 읽은 자료에 이름이 나오고 읽은 페이지가 근거인 후보만 MAX_CANDIDATES(4)명까지 받습니다."""
     text, ids, main = _text(research), readable_ids(research), _main_name(job, research)
     result: list[dict] = []
     for item in raw or []:
