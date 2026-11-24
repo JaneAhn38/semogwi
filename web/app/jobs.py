@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from . import claude_cli, cutout, detail_images, friend_pick, friends, research as research_items, research_library, research_merge, site_policy, templates
+from . import claude_cli, cutout, detail_images, friend_pick, friend_preview, friends, research as research_items, research_library, research_merge, site_policy, templates
 from .ai_provider import card_source_state, get_ai_provider, material_text, policy_stop_research, separates_research
 from .claude_cli import AIError
 from .layout import ImageElement, LayoutError, TextElement, validate_layout
@@ -541,11 +541,42 @@ async def _offer_friends(job_id: str, provider) -> None:
         candidates, error, calls = await asyncio.to_thread(_recommend, provider, job, research)
         job = _read(job_id)
         _record_calls(job, calls)
+    research = job.get("research") or {}
+    candidates = friend_preview.with_links(candidates, research)
     friend_pick.offer(job, candidates, error)
+    look = any("preview" not in c for c in candidates)
+    job["friendPick"]["previewPending"] = look
     _store_research(job)  # 새로 조사한 자료는 후보와 함께 보관함에 먼저 남깁니다
     _set_step(job, "research", "done")
     _set_step(job, "outline", "pending")
     job.update(state=friend_pick.WAITING, error=None)
+    save(job)
+    if look:
+        await _find_previews(job_id, provider, job, candidates, research)  # 후보는 먼저 보여 주고 사진은 뒤이어 채웁니다
+
+
+def _previews(provider, job: dict, candidates: list[dict], research: dict) -> tuple[list, list, list]:
+    """크루 후보 미리보기 (app/friend_preview.py): 전용 페이지가 없는 후보는 AI가 공식 프로필 페이지를 찾고(AI 1회),
+    서버가 그 페이지에서 사진 주소만 고릅니다. 결과: (후보, AI 호출 기록, 사이트 접속 실패)"""
+    calls = []
+    if hasattr(provider, "find_profiles"):
+        candidates, calls = friend_preview.add_profiles(candidates, research, lambda names: provider.find_profiles(job, names))
+    try:
+        candidates, failures = friend_preview.attach(candidates, research)
+    except Exception:
+        candidates, failures = [{"preview": None, **c} for c in candidates], []
+    return candidates, calls, failures
+
+
+async def _find_previews(job_id: str, provider, job: dict, candidates: list[dict], research: dict) -> None:
+    try:
+        found, calls, failures = await asyncio.to_thread(_previews, provider, job, candidates, research)
+    except Exception:
+        found, calls, failures = [{"preview": None, **c} for c in candidates], [], []
+    job = _read(job_id)
+    _record_calls(job, calls)
+    site_policy.record_failures(failures)
+    friend_preview.merge(job, found)
     save(job)
 
 
@@ -574,11 +605,15 @@ def recommend_friends_again(job_id: str) -> dict:
         raise JobConflict(state["reason"])
 
     def work(snapshot):
-        candidates, error, calls = _recommend(get_ai_provider(), snapshot, snapshot.get("research") or {})
-        return {"candidates": candidates, "error": error, "calls": calls}
+        provider = get_ai_provider()
+        candidates, error, calls = _recommend(provider, snapshot, snapshot.get("research") or {})
+        candidates, more, failures = _previews(provider, snapshot, candidates, snapshot.get("research") or {})  # 미리보기 (프로필 검색 AI 1회)
+        return {"candidates": candidates, "error": error, "calls": calls + more, "failures": failures}
 
     def apply(current, result):
+        site_policy.record_failures(result.get("failures") or [])
         friend_pick.offer(current, result["candidates"], result["error"])
+        current["friendPick"]["previewPending"] = False
 
     return _start_ai_task(job, "friends_pick", friend_pick.FRAME, work, apply)
 

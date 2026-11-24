@@ -508,7 +508,13 @@ body.format-template .legacy-only, body:not(.format-template) .template-only { d
 /* card-04 친구 고르기 */
 .friend-pick { display: grid; gap: 12px; }
 .pick-candidates, .pick-chosen { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.pick-candidate { padding: 10px 12px; border: 1px solid var(--line, #e6dfe8); border-radius: 12px; background: #fff; }
+.pick-candidate { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; border: 1px solid var(--line, #e6dfe8); border-radius: 12px; background: #fff; }
+.pick-main { flex: 1 1 auto; min-width: 0; }
+.pick-preview { display: flex; flex: none; flex-direction: column; align-items: center; gap: 4px; width: 84px; text-align: center; }
+.pick-preview .hint { font-size: .72rem; line-height: 1.3; overflow-wrap: anywhere; }
+.pick-thumb { display: grid; place-items: center; width: 56px; height: 56px; object-fit: contain; background: var(--paper, #fff8f0); border: 1px solid var(--line, #e6dfe8); border-radius: 50%; }
+.pick-thumb.is-empty { color: var(--muted, #8a8494); font-weight: 700; background: #f1edf2; }
+.pick-link { white-space: normal; font-size: .76rem; line-height: 1.3; }
 .pick-candidate.is-picked { border-color: var(--pink-deep, #d9577f); background: #fff5f8; }
 .pick-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 0; color: inherit; font: inherit; text-align: left; background: none; border: 0; cursor: pointer; }
 .pick-toggle:disabled { cursor: not-allowed; opacity: .55; }

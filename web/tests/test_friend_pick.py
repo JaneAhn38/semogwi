@@ -20,6 +20,7 @@ FRIEND_PICK = True  # conftest: 이 파일은 친구 고르기를 켭니다
 
 WIKI = "https://ko.wikipedia.org/wiki/피카츄"
 DEX = "https://pokemonkorea.co.kr/pokedex/26"
+PROFILE = "https://pokemonkorea.co.kr/pokedex/7"
 CANDIDATES = [
     {"name": "꼬부기", "relation": "친구", "reason": "등껍질과 웃는 얼굴이 귀여워요", "sourceIds": ["s1"]},
     {"name": "라이츄", "relation": "진화형", "reason": "볼이 말랑말랑해 보여요", "sourceIds": ["s1"]},
@@ -79,6 +80,16 @@ class Fake:
             if self.recommend_error:
                 raise AIError("timeout", self.recommend_error)
             run.structured = {"candidates": self.candidates}
+            return run
+        if "profiles" in props:  # 크루 미리보기용 공식 프로필 페이지 찾기 (2026-11-24)
+            self.calls.append({"kind": "profiles", "prompt": prompt, "tools": tools})
+            run.searches = [{"query": "꼬부기 공식", "results": [{"title": "꼬부기 | 포켓몬 도감", "url": PROFILE}]}]
+            run.fetches = [{"url": PROFILE, "code": 200}]
+            run.structured = {"profiles": [
+                {"name": "꼬부기", "url": PROFILE, "title": "꼬부기 | 포켓몬 도감", "kind": "official"},
+                {"name": "라이츄", "url": "https://pokemonkorea.co.kr/pokedex/26-guess", "title": "라이츄", "kind": "official"},  # 읽지 않은 주소 (짐작)
+                {"name": "뮤츠", "url": PROFILE, "title": "뮤츠", "kind": "official"},  # 후보가 아닌 이름
+            ]}
             return run
         if "people" in props:
             self.calls.append({"kind": "people", "prompt": prompt, "tools": tools})
@@ -346,3 +357,67 @@ def test_pick_screen_is_wired_in_the_page(client):
     assert ">크루 고르기</h2>" in html and "친구" not in html  # 화면에는 '크루'로 보입니다 (2026-11-24)
     assert "/identity`" not in app_js  # 사진 이름 확정 화면은 없앴습니다
     assert client.get("/").status_code == 200
+    # 미리보기 (2026-11-24): referrer 없이 띄우고, 못 불러오면 링크로 바뀌며, 데모는 자리표시만
+    assert 'referrerPolicy: "no-referrer"' in app_js and '"error", fallback' in app_js
+    assert "공식 페이지에서 보기" in app_js and "참고 페이지에서 보기" in app_js and "미리보기 없음 (데모)" in app_js
+
+
+def wait_previews(client, job_id):
+    for _ in range(600):
+        job = get(client, job_id)
+        if not job["friendPick"].get("previewPending") and not job["aiTask"]:
+            return job
+        time.sleep(0.01)
+    raise AssertionError("미리보기를 끝내지 않았어요")
+
+
+def test_profile_search_adds_official_page_for_previews(client, fake):
+    job_id = start(client)
+    wait(client, job_id, "waiting_friends")
+    job = wait_previews(client, job_id)
+    profiles = fake.kinds("profiles")
+    assert len(profiles) == 1 and set(profiles[0]["tools"]) == {"WebSearch", "WebFetch"}
+    assert "꼬부기" in profiles[0]["prompt"] and "라이츄" in profiles[0]["prompt"]
+    by_name = {c["name"]: c for c in job["friendPick"]["candidates"]}
+    # 실제로 읽은 공식 페이지만 받습니다. 짐작한 주소(읽지 않음)와 후보가 아닌 이름은 버립니다
+    assert by_name["꼬부기"]["profileSource"]["url"] == PROFILE and by_name["꼬부기"]["profileSource"]["verification"] == "fetched"
+    assert by_name["꼬부기"]["link"] == {"url": PROFILE, "site": "pokemonkorea.co.kr", "official": True}
+    assert by_name["라이츄"]["profileSource"] is None
+    assert by_name["라이츄"]["link"] == {"url": WIKI, "site": "ko.wikipedia.org", "official": False}  # 공식이 없으면 읽은 2차 자료
+    assert all(c["preview"] is None for c in by_name.values())  # 테스트는 사이트에 요청하지 않습니다 (conftest)
+    assert any(c["kind"] == "profiles" for c in job["aiCalls"])
+    # 후보 자료에도 남아 '저장된 자료 사용' 때 다시 찾지 않습니다
+    assert {c["name"]: c.get("profileSource") is not None for c in job["research"]["friendCandidates"]} == {"꼬부기": True, "라이츄": False}
+    # 미리보기는 카드에 들어가지 않습니다
+    assert pick(client, job_id, ["꼬부기", "라이츄"]).status_code == 200
+    job = wait(client, job_id, "waiting_outline")
+    assert "preview" not in str(card04(job)) and PROFILE not in str(card04(job)["fields"])
+
+
+def test_profile_search_failure_keeps_candidates(client, fake, monkeypatch):
+    from app import ai_provider
+    def boom(self, job, names):
+        raise AIError("timeout", "시간 초과")
+    monkeypatch.setattr(ai_provider.AIProvider, "find_profiles", boom)
+    job_id = start(client)
+    wait(client, job_id, "waiting_friends")
+    job = wait_previews(client, job_id)
+    assert [c["name"] for c in job["friendPick"]["candidates"]] == ["꼬부기", "라이츄"] and not job["aiError"]
+    assert all(c["link"]["url"] == WIKI and c["preview"] is None for c in job["friendPick"]["candidates"])  # 검색이 실패해도 링크는 남습니다
+
+
+def test_recommend_again_searches_profiles_too(client, fake):
+    job_id = start(client)
+    wait(client, job_id, "waiting_friends")
+    wait_previews(client, job_id)
+    assert api(client, job_id, "POST", "/friends/recommend").status_code == 200
+    job = wait_previews(client, job_id)
+    assert len(fake.kinds("profiles")) == 2
+    assert next(c for c in job["friendPick"]["candidates"] if c["name"] == "꼬부기")["link"]["url"] == PROFILE
+
+
+def test_demo_has_no_preview_requests(client, fake):
+    job_id = start(client, mode="demo")
+    job = wait(client, job_id, "waiting_friends")
+    assert fake.kinds("profiles") == [] and not job["friendPick"].get("previewPending")
+    assert all(not c.get("preview") and not c.get("link") for c in job["friendPick"]["candidates"])

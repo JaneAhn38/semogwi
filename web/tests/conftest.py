@@ -25,3 +25,11 @@ def _friend_pick(request, monkeypatch):
     if not getattr(request.module, "FRIEND_PICK", False):
         from app import friend_pick
         monkeypatch.setattr(friend_pick, "needed", lambda job: False)
+
+
+@pytest.fixture(autouse=True)
+def _no_preview_network(request, monkeypatch):
+    """크루 후보 미리보기(2026-11-24)는 테스트에서 실제 사이트에 요청하지 않습니다. test_friend_preview.py는 가짜 응답으로 따로 검사합니다."""
+    if not getattr(request.module, "PREVIEW_NETWORK", False):
+        from app import friend_preview
+        monkeypatch.setattr(friend_preview, "find_image", lambda fetcher, page, name: None)

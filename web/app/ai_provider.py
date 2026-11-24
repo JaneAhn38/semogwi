@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from . import claude_cli, detail_images, friend_pick, friends, research as research_items, research_merge, site_policy, templates
-from .ai_rules import (CLASSIFY_SYSTEM, COMPOSE_BASE, COMPOSE_SYSTEM, DESIGN_SYSTEM, EXTRACT_SYSTEM, FRIEND_PICK_SYSTEM, FRIENDS_RESEARCH_BASE, IDENTIFY_SYSTEM, PEOPLE_SYSTEM,
+from .ai_rules import (CLASSIFY_SYSTEM, COMPOSE_BASE, COMPOSE_SYSTEM, DESIGN_SYSTEM, EXTRACT_SYSTEM, FRIEND_PICK_SYSTEM, FRIENDS_RESEARCH_BASE, IDENTIFY_SYSTEM, PEOPLE_SYSTEM, PROFILE_SYSTEM,
                        RESEARCH_BASE, RESEARCH_SYSTEM, REWRITE_BASE, REWRITE_SYSTEM, TEMPLATE_RESEARCH_BASE, TEMPLATE_TYPE_RULES, TONE_RULES, TYPE_RULES)
 from .claude_cli import AIError
 from .design import BODY_FONTS, DISPLAY_FONTS, clean_theme, finalize_card
@@ -102,6 +102,16 @@ FRIEND_PICK_SCHEMA = {
                        "sourceIds": {"type": "array", "items": {"type": "string"}}},
         "required": ["name", "relation", "reason", "sourceIds"], "additionalProperties": False}}},
     "required": ["candidates"],
+    "additionalProperties": False,
+}
+
+PROFILE_SCHEMA = {
+    "type": "object",
+    "properties": {"profiles": {"type": "array", "items": {
+        "type": "object",
+        "properties": {"name": {"type": "string"}, "url": {"type": "string"}, "title": {"type": "string"}, "kind": {"type": "string"}},
+        "required": ["name", "url", "title", "kind"], "additionalProperties": False}}},
+    "required": ["profiles"],
     "additionalProperties": False,
 }
 
@@ -870,6 +880,25 @@ class AIProvider:
         parsed = claude_cli.run(prompt, FRIEND_PICK_SYSTEM, FRIEND_PICK_SCHEMA, model=CONTENT_MODEL, effort="low", timeout=180, budget_usd=0.3)
         candidates = friend_pick.clean_candidates(parsed.structured.get("candidates", []), job, research)
         return {"candidates": candidates, "calls": [claude_cli.call_meta("friends_pick", parsed)]}
+
+    def find_profiles(self, job: dict, names: list[str]) -> dict:
+        """크루 고르기 미리보기용: 후보마다 공식 프로필 페이지 한 곳을 찾습니다 (WebSearch·WebFetch). 결과: {profiles: {이름: 출처}, calls}
+
+        도구 기록과 대조해 AI가 실제로 읽은(fetched) 공식 페이지만 받습니다. 사진은 서버가 그 페이지에서 따로 찾습니다(app/friend_preview.py).
+        """
+        denied = [s["domain"] for s in site_policy.restricted_sites()] + site_policy.cooling_hosts()
+        prompt = (f"중심 캐릭터: <topic>{job['topic']}</topic>\n프로필 페이지를 찾을 캐릭터: {', '.join(names)}\n"
+                  f"자동 접근 금지·대기 중 사이트(하위 도메인 포함): {', '.join(denied) or '없음'}\n캐릭터마다 name, url, title, kind를 JSON으로 답한다.")
+        parsed = claude_cli.run(prompt, PROFILE_SYSTEM, PROFILE_SCHEMA, tools=("WebSearch", "WebFetch"), model=CONTENT_MODEL,
+                                effort="low", timeout=240, budget_usd=0.5, disallowed=tuple(site_policy.deny_rules("character")))
+        wanted = set(names)
+        raw = [p for p in parsed.structured.get("profiles", []) if p.get("name") in wanted and p.get("url")]
+        checked = verify_sources([{"id": f"profile{i}", **p} for i, p in enumerate(raw, 1)], parsed, "character")
+        profiles = {}
+        for p, source in zip(raw, checked):
+            if source["kind"] == "official" and source["verification"] == "fetched" and p["name"] not in profiles:
+                profiles[p["name"]] = {**source, "origin": "profile"}
+        return {"profiles": profiles, "calls": [claude_cli.call_meta("profiles", parsed)]}
 
     def research_friends(self, job: dict, research: dict, names: list[str]) -> dict:
         """고른 친구만 조사합니다 (공식 출처 우선, 새 캐릭터는 찾지 않음). TMI가 이미 있는 친구는 다시 찾지 않습니다.

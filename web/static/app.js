@@ -15,7 +15,7 @@
   const AI_TASK_TEXT = {
     outline: "AI가 문구를 다시 쓰고 있어요. 저장된 조사 결과만 쓰고 검색은 다시 하지 않아요.",
     friends: "AI가 고른 크루를 조사하고 크루 카드만 다시 쓰고 있어요. TMI를 이미 찾은 캐릭터는 다시 찾지 않아요.",
-    friends_pick: "AI가 크루 후보를 다시 추천하고 있어요. 조사 자료만 보고 골라요 (검색 안 함).",
+    friends_pick: "AI가 크루 후보를 다시 추천하고 있어요. 후보는 조사 자료만 보고 고르고, 미리보기용 공식 프로필 페이지만 검색해요. 1~2분 걸릴 수 있어요.",
     compose: "AI가 입력한 자료로 구성안을 쓰고 있어요. 사이트에는 접속하지 않아요.",
     design: "AI가 카드 5장을 다시 디자인하고 있어요. 1~3분 걸릴 수 있어요.",
     redesign: "AI가 이 카드만 다시 디자인하고 있어요. 1분 안팎 걸려요. 다른 카드는 그대로예요.",
@@ -659,13 +659,15 @@
       const order = chosen.indexOf(c.name);
       const sources = (job.research ? (c.sourceIds || []).map((id) => job.research.sources.find((s) => s.id === id)).filter(Boolean) : []);
       return el("li", { class: `pick-candidate${order >= 0 ? " is-picked" : ""}`, dataset: { candidate: c.name } },
-        el("button", { class: "pick-toggle", type: "button", "aria-pressed": String(order >= 0), disabled: order < 0 && chosen.length >= PICK_MAX,
-          onclick: () => toggle(c.name) },
-          el("span", { class: "pick-order", textContent: order >= 0 ? String(order + 1) : "+" }),
-          el("b", { textContent: c.name }), c.relation ? el("span", { class: "hint", textContent: ` · ${c.relation}` }) : ""),
-        el("p", { class: "pick-reason", textContent: c.reason || "" }),
-        sources.length ? el("div", { class: "card-links" }, el("span", { class: "hint", textContent: "출처 " }), ...sources.map(sourceLink))
-          : job.mode === "ai" ? "" : el("small", { class: "hint", textContent: "예시 후보 (출처 없음)" }));
+        pickPreview(c, pick),
+        el("div", { class: "pick-main" },
+          el("button", { class: "pick-toggle", type: "button", "aria-pressed": String(order >= 0), disabled: order < 0 && chosen.length >= PICK_MAX,
+            onclick: () => toggle(c.name) },
+            el("span", { class: "pick-order", textContent: order >= 0 ? String(order + 1) : "+" }),
+            el("b", { textContent: c.name }), c.relation ? el("span", { class: "hint", textContent: ` · ${c.relation}` }) : ""),
+          el("p", { class: "pick-reason", textContent: c.reason || "" }),
+          sources.length ? el("div", { class: "card-links" }, el("span", { class: "hint", textContent: "출처 " }), ...sources.map(sourceLink))
+            : job.mode === "ai" ? "" : el("small", { class: "hint", textContent: "예시 후보 (출처 없음)" })));
     }));
 
     const manual = el("input", { type: "text", maxLength: PICK_NAME_MAX, placeholder: "목록에 없는 크루 이름", "aria-label": "직접 넣을 크루 이름" });
@@ -716,8 +718,47 @@
       error,
       el("div", { class: "actions" }, submit, again, close),
       el("small", { class: "hint", textContent: job.mode === "ai"
-        ? "고른 크루만 공식 출처를 먼저 조사해요. TMI를 이미 찾은 캐릭터는 다시 찾지 않고, 출처에서 찾지 못한 TMI는 비워 둬요. '후보 다시 추천'은 누를 때만 AI를 불러요 (Pro 사용 한도 차감)."
+        ? "고른 크루만 공식 출처를 먼저 조사해요. TMI를 이미 찾은 캐릭터는 다시 찾지 않고, 출처에서 찾지 못한 TMI는 비워 둬요. '후보 다시 추천'은 누를 때만 AI를 불러요 (추천 + 공식 프로필 검색, Pro 사용 한도 차감). 미리보기 사진은 공식 페이지의 이미지를 그대로 띄우는 것이고 저장하거나 카드에 넣지 않아요."
         : "데모에서는 조사 없이 고른 크루 이름으로 예시 카드를 만들어요." })));
+  }
+
+  // 크루 후보 미리보기 (서버 app/friend_preview.py). 공식 페이지의 대표 이미지 주소를 브라우저가 바로 띄웁니다(저장·카드 반영 안 함).
+  // 사진이 없거나 못 불러오면 '공식 페이지에서 보기'(없으면 2차 자료 페이지) 링크, 그것도 없으면 이름만 보여 줍니다
+  function pickLink(link) {
+    if (!link || !/^https?:\/\//.test(link.url)) return null;
+    return el("a", { class: "btn btn-ghost btn-small pick-link", href: link.url, target: "_blank", rel: "noopener noreferrer",
+      textContent: link.official ? "공식 페이지에서 보기" : `참고 페이지에서 보기 (${link.site})` });
+  }
+
+  function pickPreview(c, pick) {
+    const box = el("div", { class: "pick-preview", dataset: { preview: c.name } });
+    const fallback = () => {
+      const link = pickLink(c.link);
+      if (link) box.replaceChildren(link);
+      else box.remove(); // 사진도 페이지도 없으면 이름과 추천 이유만
+    };
+    if (job.mode !== "ai") {
+      box.append(el("span", { class: "pick-thumb is-empty", "aria-hidden": "true", textContent: (c.name || "?").slice(0, 1) }),
+        el("small", { class: "hint", textContent: "미리보기 없음 (데모)" }));
+      return box;
+    }
+    const preview = c.preview;
+    if (preview && /^https?:\/\//.test(preview.imageUrl)) {
+      // referrer 없이, 화면에 보일 때만 불러옵니다 (src보다 먼저 정해야 첫 요청에 적용됨)
+      const img = el("img", { class: "pick-thumb", referrerPolicy: "no-referrer", loading: "lazy", decoding: "async",
+        alt: `${c.name} (공식 이미지)`, src: preview.imageUrl });
+      img.addEventListener("error", fallback, { once: true });
+      box.append(img, el("small", { class: "hint", textContent: `공식 · ${preview.site}` }));
+      return box;
+    }
+    if (!("preview" in c) && pick.previewPending) {
+      box.append(el("span", { class: "pick-thumb is-empty", "aria-hidden": "true", textContent: "…" }), el("small", { class: "hint", textContent: "미리보기 찾는 중" }));
+      return box;
+    }
+    const link = pickLink(c.link);
+    if (!link) return "";
+    box.append(link);
+    return box;
   }
 
   // 작업 중(setBusy)이 끝나도 꺼 둬야 하는 버튼(인원이 모자란 제출, 맨 위의 ↑ 등)은 data-locked로 표시합니다
@@ -1379,7 +1420,8 @@
     if (job.state !== "draft" && (first || limit > lastMaxStep || viewStep > limit)) goToStep(limit, !first);
     lastMaxStep = limit;
     await renderJob();
-    if (job.state === "running" || job.aiTask || visibleAssets().some(isProcessing) || identifying()) pollTimer = setTimeout(poll, POLL_MS);
+    const previewing = (job.friendPick || {}).previewPending; // 크루 후보 미리보기를 찾는 중이면 결과가 올 때까지 확인합니다
+    if (job.state === "running" || job.aiTask || visibleAssets().some(isProcessing) || identifying() || previewing) pollTimer = setTimeout(poll, POLL_MS);
   }
 
   async function poll() {
