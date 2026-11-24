@@ -2,7 +2,7 @@
   "id": "character-04",
   "contentType": "character",
   "kind": "body",
-  "label": "친구와 TMI",
+  "label": "크루와 TMI",
   "reference": "reference/캐릭터 소개 · 04 친구들·TMI.png",
   "fonts": {
     "display": "Jua",
@@ -19,10 +19,11 @@
   },
   "purpose": "친구 캐릭터 2~4명을 가로로 나란히 소개하는 카드. 캐릭터마다 이름, 관계, 개별 TMI를 담는다. 가족은 다루지 않는다.",
   "pickWithoutData": true,
+  "inherit": ["character_name"],
   "fields": [
     {
       "key": "friends",
-      "label": "친구 캐릭터",
+      "label": "크루",
       "type": "items",
       "required": true,
       "minItems": 2,
@@ -40,14 +41,14 @@
     }
   ],
   "images": [
-    {"key": "friend_image_1", "label": "친구 1 이미지", "required": false, "shape": "circle", "if": "friends.0", "identify": "friends"},
-    {"key": "friend_image_2", "label": "친구 2 이미지", "required": false, "shape": "circle", "if": "friends.1", "identify": "friends"},
-    {"key": "friend_image_3", "label": "친구 3 이미지", "required": false, "shape": "circle", "if": "friends.2", "identify": "friends"},
-    {"key": "friend_image_4", "label": "친구 4 이미지", "required": false, "shape": "circle", "if": "friends.3", "identify": "friends"}
+    {"key": "friend_image_1", "label": "크루 1 이미지", "required": false, "shape": "circle", "if": "friends.0", "identify": "friends"},
+    {"key": "friend_image_2", "label": "크루 2 이미지", "required": false, "shape": "circle", "if": "friends.1", "identify": "friends"},
+    {"key": "friend_image_3", "label": "크루 3 이미지", "required": false, "shape": "circle", "if": "friends.2", "identify": "friends"},
+    {"key": "friend_image_4", "label": "크루 4 이미지", "required": false, "shape": "circle", "if": "friends.3", "identify": "friends"}
   ],
   "elements": [
     {"type": "header", "tag": "캐릭터 소개", "tagFill": "accent"},
-    {"type": "text", "text": "친구들 & TMI", "box": {"x": 72, "y": 178, "w": 936, "h": 84}, "font": "display", "size": 64,
+    {"type": "text", "text": "{character_name} 크루 & TMI", "box": {"x": 72, "y": 178, "w": 936, "h": 84}, "font": "display", "size": 64,
      "color": "ink", "align": "left", "valign": "middle", "maxLines": 1},
     {"type": "columns", "field": "friends", "slotPrefix": "friend_image_", "x": 72, "w": 936, "top": 292, "bottom": 1212},
     {"type": "footer", "left": "{source}"}

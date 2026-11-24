@@ -69,12 +69,12 @@ def check_names(names: list) -> list[str]:
         if not name:
             continue
         if len(name) > NAME_MAX:
-            raise ValueError(f"친구 이름은 {NAME_MAX}자 이내로 적어 주세요: {name}")
+            raise ValueError(f"크루 이름은 {NAME_MAX}자 이내로 적어 주세요: {name}")
         if any(same_character(name, n) for n in result):
-            raise ValueError(f"같은 친구를 두 번 골랐어요: {name}")
+            raise ValueError(f"같은 캐릭터를 두 번 골랐어요: {name}")
         result.append(name)
     if not MIN_PICK <= len(result) <= MAX_PICK:
-        raise ValueError(f"친구를 {MIN_PICK}~{MAX_PICK}명 골라 주세요 (지금 {len(result)}명)")
+        raise ValueError(f"크루원을 {MIN_PICK}~{MAX_PICK}명 골라 주세요 (지금 {len(result)}명)")
     return result
 
 
@@ -127,7 +127,7 @@ def from_research(job: dict, research: dict, found: list[dict] | None = None) ->
         name = person["name"]
         if len(name) > NAME_MAX or (main and same_character(name, main)) or any(same_character(name, c["name"]) for c in result):
             continue
-        result.append({"name": name, "relation": person.get("relation", "")[:8], "reason": "조사 자료에 친구로 나온 캐릭터예요",
+        result.append({"name": name, "relation": person.get("relation", "")[:8], "reason": "조사 자료에 함께 나온 캐릭터예요",
                        "sourceIds": list(person.get("sourceIds") or [])})
     return result
 
@@ -200,7 +200,7 @@ def apply(job: dict, cards: dict, research: dict) -> None:
     written = (card.get("fields") or {}).get("friends") if card.get("template") == TEMPLATE else []
     card["template"] = TEMPLATE
     card["fields"] = {"friends": people_items(job, research, names, written)}
-    card.setdefault("role", "친구와 TMI")
+    card.setdefault("role", "크루와 TMI")
     if not card.get("source"):
         card["source"] = "출처: 조사 자료"
     card["sourceIds"] = list(dict.fromkeys((card.get("sourceIds") or []) + source_ids(research, names)))

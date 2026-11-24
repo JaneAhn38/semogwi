@@ -508,7 +508,7 @@ async def approve_research(job_id: str):
 async def pick_friends(job_id: str, body: FriendPickBody):
     """card-04 친구를 고릅니다. 고른 친구만 조사하고 구성안을 씁니다 (구성안 단계면 card-04만 다시 씀)."""
     if any(len(n) > 40 for n in body.names):
-        raise HTTPException(422, "친구 이름이 너무 길어요")
+        raise HTTPException(422, "크루 이름이 너무 길어요")
     return _call(jobs.pick_friends, job_id, body.names)
 
 

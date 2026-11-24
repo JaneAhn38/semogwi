@@ -228,12 +228,12 @@ def test_ai_keeps_free_card_and_explains_when_only_a_group_is_confirmed(client, 
     assert spy.rewrites == []  # 친구를 채우라고 요구하지 않습니다 (지어내지 않게)
     assert job["outline"]["cards"][3]["template"] == "character-free"
     warnings = job["outline"]["issues"]["card-04"]["warnings"]
-    assert any("2명 미만" in w and "지어내지 않았어요" in w and "'친구와 TMI'를 고르면" in w for w in warnings)
+    assert any("2명 미만" in w and "지어내지 않았어요" in w and "'크루와 TMI'를 고르면" in w for w in warnings)
 
 
 def test_ai_rules_forbid_padding_friends():
     rules = templates.ai_field_rules("character", templates.template_set("character"))
-    assert "2~4개" in rules and "친구 캐릭터 2개 이상일 때만" in rules and "가족 캐릭터 2개" not in rules
+    assert "2~4개" in rules and "크루 2개 이상일 때만" in rules and "친구 캐릭터 2~4명" in rules and "가족 캐릭터 2개" not in rules
     from app import ai_rules
     assert "인원을 채우려고" in ai_rules.TEMPLATE_TYPE_RULES["character"]
 

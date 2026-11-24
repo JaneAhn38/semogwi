@@ -238,7 +238,7 @@ def load(job_id: str) -> dict | None:
     for frame, records in (job.get("slotIdentities") or {}).items():
         for slot, record in records.items():
             if record["status"] == "processing" and _identity_key(job_id, frame, slot) not in _identify_tasks:
-                record.update(status="failed", error="서버가 다시 시작되어 사진 확인이 중단됐어요. 카드는 고른 친구 이름 그대로 만들어요.")
+                record.update(status="failed", error="서버가 다시 시작되어 사진 확인이 중단됐어요. 카드는 고른 크루 이름 그대로 만들어요.")
                 changed = True
     if changed:
         save(job)
@@ -554,9 +554,9 @@ def _recommend(provider, job: dict, research: dict) -> tuple[list, str | None, l
     try:
         result = provider.recommend_friends(job, research)
     except AIError as e:
-        return friend_pick.from_research(job, research), f"AI가 친구 후보를 추천하지 못했어요 ({e.message}). 조사 자료의 친구를 보여 드려요", []
+        return friend_pick.from_research(job, research), f"AI가 크루 후보를 추천하지 못했어요 ({e.message}). 조사 자료에 나온 캐릭터를 보여 드려요", []
     found = result["candidates"]
-    note = None if len(found) >= friend_pick.MIN_PICK else "추천할 친구가 부족해 조사 자료의 친구를 더했어요. 목록에 없으면 직접 적어 주세요"
+    note = None if len(found) >= friend_pick.MIN_PICK else "추천할 크루가 부족해 조사 자료에 나온 캐릭터를 더했어요. 목록에 없으면 직접 적어 주세요"
     return friend_pick.from_research(job, research, found) if note else found, note, result["calls"]
 
 
@@ -564,7 +564,7 @@ def recommend_friends_again(job_id: str) -> dict:
     """'후보 다시 추천' (누를 때만 AI를 부릅니다). 고른 친구는 그대로 둡니다."""
     job = _require(job_id, friend_pick.WAITING, "waiting_outline")
     if not friend_pick.applies(job) or (job.get("outline") or {}).get("approved"):
-        raise JobConflict("지금은 친구 후보를 다시 추천할 수 없어요")
+        raise JobConflict("지금은 크루 후보를 다시 추천할 수 없어요")
     if not _is_ai(job):
         friend_pick.offer(job, [dict(c) for c in friend_pick.DEMO_CANDIDATES])
         save(job)
@@ -587,7 +587,7 @@ def pick_friends(job_id: str, names: list[str]) -> dict:
     """친구를 고릅니다 (2~4명, 순서 = 카드 순서). 친구 고르기 단계면 조사 뒤 구성안을 쓰고, 구성안 단계면 card-04만 다시 씁니다."""
     job = _require(job_id, friend_pick.WAITING, "waiting_outline")
     if not friend_pick.applies(job):
-        raise JobConflict("이 작업에는 친구 카드가 없어요")
+        raise JobConflict("이 작업에는 크루 카드가 없어요")
     if job.get("researchDraft"):
         raise JobConflict(DRAFT_PENDING)
     try:
@@ -2557,9 +2557,9 @@ async def _run_identify(job_id: str, frame: str, slot: str, asset_id: str) -> No
     try:
         result = await asyncio.to_thread(get_ai_provider().identify_character, path, job["topic"])
     except AIError as e:
-        error = f"사진 속 캐릭터를 확인하지 못했어요 ({e.message}). 카드는 고른 친구 이름 그대로 만들어요."
+        error = f"사진 속 캐릭터를 확인하지 못했어요 ({e.message}). 카드는 고른 크루 이름 그대로 만들어요."
     except Exception:
-        error = "사진 속 캐릭터를 확인하지 못했어요. 카드는 고른 친구 이름 그대로 만들어요."
+        error = "사진 속 캐릭터를 확인하지 못했어요. 카드는 고른 크루 이름 그대로 만들어요."
     job = _read(job_id)
     # 확인하는 동안 친구 순서를 바꿨을 수 있어 자리 이름이 아니라 사진으로 기록을 찾습니다
     records = ((job.get("slotIdentities") or {}).get(frame) or {}).values()

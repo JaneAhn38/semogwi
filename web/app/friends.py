@@ -134,8 +134,8 @@ def photo_notes(job: dict, frame: str, card: dict) -> list[str]:
             notes.append(f"{slot['label']}: {record.get('error') or '사진 속 캐릭터를 확인하지 못했어요'}")
         elif (record["status"] == "suggested" and record.get("suggested") and record.get("confidence") in WARN_CONFIDENCE
               and name and not same_character(record["suggested"], name)):
-            notes.append(f"{slot['label']}: 사진이 '{record['suggested']}'처럼 보여요 (고른 친구: {name}). "
-                         "사진을 바꾸거나 친구를 다시 골라 주세요. 맞는 사진이면 그대로 둬도 돼요")
+            notes.append(f"{slot['label']}: 사진이 '{record['suggested']}'처럼 보여요 (고른 크루: {name}). "
+                         "사진을 바꾸거나 크루를 다시 골라 주세요. 맞는 사진이면 그대로 둬도 돼요")
     return notes
 
 
@@ -235,7 +235,7 @@ def violations(job: dict, frame: str, card: dict, cards: list[dict] | None = Non
     if not hits:
         return []
     names = ", ".join(listed) or "없음"
-    return [f"목록에 없는 캐릭터 이름이 들어 있어요: {', '.join(hits)}. 목록의 친구({names}){f'와 중심 캐릭터({main})' if main else ''}만 써 주세요"]
+    return [f"목록에 없는 캐릭터 이름이 들어 있어요: {', '.join(hits)}. 목록의 크루({names}){f'와 중심 캐릭터({main})' if main else ''}만 써 주세요"]
 
 
 def add_issues(job: dict, cards: list[dict], issues: dict) -> None:
@@ -246,11 +246,11 @@ def add_issues(job: dict, cards: list[dict], issues: dict) -> None:
         issues[frame]["warnings"] += photo_notes(job, frame, card)
         if (card.get("fields") or {}).get("category") == "family" and len([n for n in _names(job, frame, card) if n]) < 2:
             # 가족 카드(2026-11-23에 없앰)로 만든 예전 카드
-            issues[frame]["errors"].append("가족 카드는 없어졌어요. '친구 다시 고르기'로 친구를 골라 주세요")
+            issues[frame]["errors"].append("가족 카드는 없어졌어요. '크루 다시 고르기'로 크루를 골라 주세요")
         written = _names(job, frame, card)
         repeated = sorted({n for n in written if n and written.count(n) > 1})
         if repeated and filled(job, frame, card):  # 사진을 넣었을 때만 (사진이 어느 친구 것인지 헷갈리지 않게)
-            issues[frame]["errors"].append(f"{_field(job, frame, card)['label']}에 같은 캐릭터가 두 번 들어 있어요: {', '.join(repeated)}. 한 명을 다른 친구로 바꿔 주세요")
+            issues[frame]["errors"].append(f"{_field(job, frame, card)['label']}에 같은 캐릭터가 두 번 들어 있어요: {', '.join(repeated)}. 한 명을 다른 캐릭터로 바꿔 주세요")
         issues[frame]["errors"] += violations(job, frame, card, cards)
 
 

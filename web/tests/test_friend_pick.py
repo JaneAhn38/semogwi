@@ -332,7 +332,7 @@ def test_old_family_card_asks_to_pick_friends(client, fake):
     card = next(c for c in job["outline"]["cards"] if c["frame"] == "card-04")
     card["fields"] = {"category": "family", "friends": [], "family": [item("엄마"), item("아빠")]}  # 예전 가족 카드
     job["outline"]["issues"] = jobs._issues(job)
-    assert any("친구를 골라 주세요" in e for e in job["outline"]["issues"]["card-04"]["errors"])
+    assert any("크루를 골라 주세요" in e for e in job["outline"]["issues"]["card-04"]["errors"])
 
 
 def test_pick_screen_is_wired_in_the_page(client):
@@ -341,7 +341,8 @@ def test_pick_screen_is_wired_in_the_page(client):
     html, app_js = (static / "index.html").read_text(encoding="utf-8"), (static / "app.js").read_text(encoding="utf-8")
     assert 'id="friend-pick"' in html and 'id="friend-pick-body"' in html
     assert '"friends/pick"' in app_js and '"friends/recommend"' in app_js
-    assert "친구 다시 고르기" in app_js and "새로 넣은 친구 조사하기" in app_js and "후보 다시 추천" in app_js
-    assert "waiting_friends" in app_js and "친구 고르기 대기" in app_js
+    assert "크루 다시 고르기" in app_js and "새로 넣은 크루 조사하기" in app_js and "후보 다시 추천" in app_js
+    assert "waiting_friends" in app_js and "크루 고르기 대기" in app_js
+    assert ">크루 고르기</h2>" in html and "친구" not in html  # 화면에는 '크루'로 보입니다 (2026-11-24)
     assert "/identity`" not in app_js  # 사진 이름 확정 화면은 없앴습니다
     assert client.get("/").status_code == 200

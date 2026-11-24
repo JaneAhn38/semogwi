@@ -333,7 +333,7 @@ def test_ai_identifies_each_photo_and_only_warns_on_mismatch(client, fake):
     assert len(fake.calls) == calls + 3 and names(job) == ["파이리", "이브이", "이브이브"]
     # 2번 사진(푸린처럼 보임, 중간)만 경고합니다. 1번은 일치, 3번은 확신이 낮아 경고하지 않음
     warned = [w for w in notes(job) if "처럼 보여요" in w]
-    assert len(warned) == 1 and "'푸린'처럼 보여요 (고른 친구: 이브이)" in warned[0] and "친구 2 이미지" in warned[0]
+    assert len(warned) == 1 and "'푸린'처럼 보여요 (고른 크루: 이브이)" in warned[0] and "크루 2 이미지" in warned[0]
     assert not errors(job)
     assert api(client, job_id, "POST", "/outline/approve").status_code == 200  # 경고만, 승인은 막지 않음
 

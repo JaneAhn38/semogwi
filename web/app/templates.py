@@ -437,8 +437,8 @@ def issues_of(job: dict, cards: list[dict]) -> dict:
         if target is not None:
             issues[target["frame"]]["warnings"].append(
                 (f"조사에서 {enough[0][0]} 캐릭터 {len(enough[0][1])}명({', '.join(p['name'] for p in enough[0][1])})이 확인됐어요. " if enough else
-                 "출처로 확인된 친구 캐릭터가 2명 미만이라 캐릭터별 사진·TMI 가로형 카드 대신 자유 구성으로 만들었어요. 캐릭터를 지어내지 않았어요. ")
-                + "'카드 구성'에서 '친구와 TMI'를 고르면 친구 캐릭터 2~4명의 이름·관계·TMI를 직접 입력할 수 있어요")
+                 "출처로 확인된 크루원이 2명 미만이라 캐릭터별 사진·TMI 가로형 카드 대신 자유 구성으로 만들었어요. 캐릭터를 지어내지 않았어요. ")
+                + "'카드 구성'에서 '크루와 TMI'를 고르면 크루원 2~4명의 이름·관계·TMI를 직접 입력할 수 있어요")
     for card in cards[1:]:
         if card.get("template") == friends_id:
             issues[card["frame"]]["warnings"] += tmi_notes(card, job.get("mode") == "ai")

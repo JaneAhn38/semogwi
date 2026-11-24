@@ -462,7 +462,24 @@ def test_upload_into_card_slot_from_outline(client):
 
 def test_character_card_labels():
     assert templates.TEMPLATES["character-03"]["label"] == "성격과 특징"
-    assert templates.TEMPLATES["character-04"]["label"] == "친구와 TMI"
+    assert templates.TEMPLATES["character-04"]["label"] == "크루와 TMI"
+    assert templates.TEMPLATES["character-04-v1"]["label"] == "크루와 TMI (이전 형식)"
+
+
+def test_crew_card_title_uses_cover_name(client):
+    # card-04 제목은 "{표지 캐릭터 이름} 크루 & TMI" (2026-11-24). 이름은 표지에서 물려받고 card-04에는 저장하지 않습니다
+    for tid in ("character-04", "character-04-v1"):
+        tpl = templates.TEMPLATES[tid]
+        assert tpl["inherit"] == ["character_name"]
+        assert any(e.get("text") == "{character_name} 크루 & TMI" for e in tpl["elements"])
+    job_id = start(client, contentType="character")
+    job = wait(client, job_id, "waiting_outline")
+    cover = job["outline"]["cards"][0]
+    assert edit(client, job_id, "card-01", {**cover["fields"], "character_name": "세모귀"}, role=cover["role"], source="").status_code == 200
+    job = approve_all(client, job_id)
+    card = next(c for c in job["preview"]["cards"] if c["spec"]["template"] == "character-04")
+    assert card["spec"]["fields"]["character_name"] == "세모귀"
+    assert "character_name" not in next(c for c in job["outline"]["cards"] if c["frame"] == card["spec"]["frame"])["fields"]
 
 
 def test_cards_are_kept_in_frame_order(client):
