@@ -20,7 +20,7 @@ from .provider import FRAMES
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 FORMAT = 3
 ENABLED_TYPES = {"character", "goods", "collab", "popup"}  # 템플릿을 쓰는 유형. 테스트에서 비워 기존 방식을 검사할 수 있습니다
-FIELD_TYPES = {"text", "multiline", "list", "items", "pairs", "flag", "choice"}  # choice: 정해진 선택지 중 하나 (예: 친구/가족)
+FIELD_TYPES = {"text", "multiline", "list", "items", "pairs", "flag", "choice"}  # choice: 정해진 선택지 중 하나
 ITEM_FIELD_TYPES = {"text", "multiline"}
 ELEMENT_TYPES = {"header", "footer", "rect", "circle", "line", "text", "image", "rows", "chips", "pill", "bullets", "check", "asset", "star", "stack", "columns",
                  "profile"}
@@ -65,7 +65,7 @@ def _path_ok(path: str, fields: dict[str, dict]) -> bool:
 
 
 def _conditions(expr) -> list[str]:
-    """조건은 문자열 하나 또는 목록(모두 만족)입니다. 'friends.0'은 값이 있을 때, 'category=family'는 그 값일 때,
+    """조건은 문자열 하나 또는 목록(모두 만족)입니다. 'friends.0'은 값이 있을 때, 'category=x'는 그 값일 때,
     '!next_name'은 값이 비어 있을 때."""
     if not expr:
         return []
@@ -102,7 +102,7 @@ def condition_met(tpl: dict, values: dict, expr) -> bool:
 
 
 def field_active(tpl: dict, field: dict, values: dict) -> bool:
-    """카드에 보이는 필드인지 (예: 카테고리가 가족이면 친구 목록은 보관만 하고 그리지 않음)."""
+    """카드에 보이는 필드인지 (예: 조건이 맞지 않는 목록은 보관만 하고 그리지 않음)."""
     return condition_met(tpl, values, field.get("if"))
 
 
@@ -427,7 +427,7 @@ def issues_of(job: dict, cards: list[dict]) -> dict:
         return issues
     # 유연한 구성: 비거나 겹치는 카드는 알리기만 하고 승인을 막지 않습니다 (사실 확인 문제가 아니기 때문)
     repeated = repeated_values(cards)
-    # 캐릭터 소개(AI): 친구·가족 가로형 카드가 없으면 이유와 바꾸는 방법을 알리고, 친구와 가족이 섞였으면 알립니다
+    # 캐릭터 소개(AI): 친구 가로형 카드가 없으면 이유와 바꾸는 방법을 알립니다
     friends_id = PEOPLE_TEMPLATE
     people = research.people_of((job.get("research") or {}).get("items")) if job["contentType"] == "character" else {}
     if (job["contentType"] == "character" and job.get("mode") == "ai" and friends_id in TEMPLATES
@@ -437,13 +437,10 @@ def issues_of(job: dict, cards: list[dict]) -> dict:
         if target is not None:
             issues[target["frame"]]["warnings"].append(
                 (f"조사에서 {enough[0][0]} 캐릭터 {len(enough[0][1])}명({', '.join(p['name'] for p in enough[0][1])})이 확인됐어요. " if enough else
-                 "출처로 확인된 친구·가족 캐릭터가 각각 2명 미만이라 캐릭터별 사진·TMI 가로형 카드 대신 자유 구성으로 만들었어요. 캐릭터를 지어내지 않았어요. ")
-                + "'카드 구성'에서 '친구와 TMI'를 고르면 친구 또는 가족 캐릭터 2~4명의 이름·관계·TMI를 직접 입력할 수 있어요")
+                 "출처로 확인된 크루원이 2명 미만이라 캐릭터별 사진·TMI 가로형 카드 대신 자유 구성으로 만들었어요. 캐릭터를 지어내지 않았어요. ")
+                + "'카드 구성'에서 '크루와 TMI'를 고르면 크루원 2~4명의 이름·관계·TMI를 직접 입력할 수 있어요")
     for card in cards[1:]:
         if card.get("template") == friends_id:
-            mixed = mixed_people(card, people)
-            if mixed:
-                issues[card["frame"]]["warnings"].append(mixed)
             issues[card["frame"]]["warnings"] += tmi_notes(card, job.get("mode") == "ai")
     for card in cards[1:]:
         notes = issues[card["frame"]]["warnings"]
@@ -458,29 +455,12 @@ def issues_of(job: dict, cards: list[dict]) -> dict:
     return issues
 
 
-PEOPLE_TEMPLATE = "character-04"  # 친구·가족 가로형 카드
-CATEGORY_LABELS = {"friends": "친구", "family": "가족"}
-
-
-def mixed_people(card: dict, people: dict) -> str:
-    """카드에 보이는 목록에 다른 카테고리(친구↔가족)로 조사된 캐릭터가 섞였으면 안내 문구를 돌려줍니다."""
-    tpl = TEMPLATES.get(card.get("template"))
-    if not tpl or not people:
-        return ""
-    for field in tpl["fields"]:
-        if field.get("type") != "items" or field["key"] not in CATEGORY_LABELS or not field_active(tpl, field, card["fields"]):
-            continue
-        other = "family" if field["key"] == "friends" else "friends"
-        names = {p["name"] for p in people.get(other, [])}
-        wrong = [i["name"] for i in card["fields"].get(field["key"]) or [] if i.get("name") in names]
-        if wrong:
-            return (f"{CATEGORY_LABELS[other]} 캐릭터로 조사된 {', '.join(wrong)}이(가) {CATEGORY_LABELS[field['key']]} 카드에 들어 있어요. "
-                    f"친구와 가족은 한 카드에 섞지 않아요. 카테고리를 바꾸거나 해당 캐릭터를 지워 주세요")
-    return ""
+PEOPLE_TEMPLATE = "character-04"  # 친구 가로형 카드 (가족 카드는 2026-11-23에 없앰)
+CATEGORY_LABELS = {"friends": "친구"}
 
 
 def tmi_notes(card: dict, ai: bool) -> list[str]:
-    """카드에 보이는 친구·가족 목록의 TMI 안내: 비어 있는 캐릭터, 관계만 반복했거나 다른 캐릭터와 같은 TMI (승인은 막지 않음)."""
+    """카드에 보이는 친구 목록의 TMI 안내: 비어 있는 캐릭터, 관계만 반복했거나 다른 캐릭터와 같은 TMI (승인은 막지 않음)."""
     tpl = TEMPLATES.get(card.get("template"))
     notes = []
     for field in (tpl or {}).get("fields", []):
@@ -510,7 +490,7 @@ def _missing_required(tpl: dict, fields: dict) -> list[dict]:
 
 
 def _fit_choice(tpl: dict, fields: dict) -> dict | None:
-    """선택 필드(예: 친구/가족)를 다른 값으로 바꾸면 필수 항목이 채워지는 경우 그 값으로 바꾼 필드를 돌려줍니다."""
+    """선택 필드를 다른 값으로 바꾸면 필수 항목이 채워지는 경우 그 값으로 바꾼 필드를 돌려줍니다."""
     for field in tpl["fields"]:
         if field["type"] != "choice":
             continue
@@ -637,7 +617,7 @@ def fit_template(job: dict, card: dict) -> dict:
         return card
     if not _missing_required(tpl, card["fields"]):
         return card
-    # 고른 카테고리의 인원이 부족해도 다른 카테고리(예: 가족)가 채워져 있으면 그쪽으로 바꿉니다 (자료를 섞지 않음)
+    # 선택 필드가 있는 템플릿이면, 다른 선택지로 바꿔 필수 항목이 채워질 때 그쪽으로 바꿉니다 (자료를 섞지 않음)
     switched = _fit_choice(tpl, card["fields"])
     if switched is not None:
         return {**card, "fields": switched}
@@ -695,7 +675,7 @@ def slots_of(job: dict, frame: str) -> list[dict]:
 
 
 def identify_slots(tpl: dict) -> list[dict]:
-    """사진 속 캐릭터 이름을 확인해 항목(friends, family)과 잇는 이미지 자리.
+    """사진 속 캐릭터 이름을 확인해 항목(friends)과 잇는 이미지 자리.
 
     항목과 사진은 자리 번호로 잇습니다: 항목의 slotPrefix + 번호(friend_image_1 …)가 그 번호째 항목의 사진입니다.
     """
@@ -894,7 +874,7 @@ def ai_flexible_rules(content_type: str) -> str:
         need = f" 필수: {', '.join(required)}가 확인될 때만 고른다." if required and not tid.endswith(f"-{FREE}") else ""
         minimum = [f"{f['label']} {f['minItems']}개" for f in tpl["fields"] if f.get("minItems")]
         if minimum and not tid.endswith(f"-{FREE}"):
-            # 카테고리별 목록(친구/가족)은 그중 하나만 채워져도 됩니다
+            # 조건(if)이 붙은 목록끼리는 그중 하나만 채워져도 됩니다
             joined = " 또는 ".join(minimum) if all(f.get("if") for f in tpl["fields"] if f.get("minItems")) else ", ".join(minimum)
             need += f" 확인된 {joined} 이상일 때만 고르고, 부족하면 자유 구성을 쓴다."
         lines.append(f"- {tid} ({tpl['label']}): {purpose}{need}")

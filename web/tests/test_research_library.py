@@ -1,4 +1,4 @@
-"""조사 자료 보관함(저장된 자료 사용 / 새로 조사하기)과 친구·가족 카테고리 테스트. Claude와 외부 사이트에 접속하지 않습니다."""
+"""조사 자료 보관함(저장된 자료 사용 / 새로 조사하기)과 친구 캐릭터 조사 테스트. Claude와 외부 사이트에 접속하지 않습니다."""
 
 import json
 
@@ -14,8 +14,7 @@ PEOPLE_ITEMS = [
     {"key": "official_name", "value": "짱구", "quote": "짱구", "sourceIds": ["s1"]},
     {"key": "personality", "value": "마이페이스", "quote": "마이페이스", "sourceIds": ["s1"]},
     {"key": "friends", "value": "철수(유치원 친구), 유리(유치원 친구), 훈이(유치원 친구), 맹구(유치원 친구)", "quote": "친구들", "sourceIds": ["s1"]},
-    {"key": "family", "value": "히로시(아빠), 미사에(엄마), 히마와리(여동생), 시로(반려견)", "quote": "가족", "sourceIds": ["s1"]},
-    {"key": "tmi", "value": "철수: 공부를 잘해요 / 시로: 짱구가 데려온 강아지예요", "quote": "tmi", "sourceIds": ["s1"]},
+    {"key": "tmi", "value": "철수: 공부를 잘해요", "quote": "tmi", "sourceIds": ["s1"]},
 ]
 
 
@@ -29,7 +28,7 @@ FRIEND_TMI = [
 
 
 class PeopleFake:
-    """조사 결과에 친구·가족 항목을 넣어 주는 가짜 AI. card4에 넣을 card-04 값을 정할 수 있습니다."""
+    """조사 결과에 친구 항목을 넣어 주는 가짜 AI. card4에 넣을 card-04 값을 정할 수 있습니다."""
 
     def __init__(self, base, card4=None, rewrite4=None, items=None, people=None, people_error=None):
         self.base, self.card4, self.rewrite4, self.kinds = base, card4, rewrite4, []
@@ -104,19 +103,20 @@ def approve_review(client, job_id):
     return wait(client, job_id, "waiting_outline", "waiting_material")
 
 
-# ---------- 조사 항목: 친구와 가족 분리 ----------
-def test_people_are_split_into_friends_and_family():
+# ---------- 조사 항목: 친구 ----------
+def test_people_are_read_from_the_friends_item():
     items = [{**i, "state": "verified", "strict": False} for i in PEOPLE_ITEMS]
     people = research.people_of(items)
     assert [p["name"] for p in people["friends"]] == ["철수", "유리", "훈이", "맹구"]
-    assert [p["name"] for p in people["family"]] == ["히로시", "미사에", "히마와리", "시로"]
-    assert people["family"][3]["relation"] == "반려견"  # 반려동물은 가족
-    assert people["friends"][0]["tmi"] == "공부를 잘해요" and people["family"][3]["tmi"] == "짱구가 데려온 강아지예요"
+    assert people["friends"][0]["tmi"] == "공부를 잘해요"
     assert people["friends"][1]["tmi"] == ""  # 그 캐릭터 이름으로 적힌 TMI만 붙입니다
     unverified = [{**i, "state": "unverified", "strict": False} for i in PEOPLE_ITEMS]
-    assert research.people_of(unverified) == {"friends": [], "family": []}
+    assert research.people_of(unverified) == {"friends": []}
     keys = research.keys_of("character")
-    assert {"official_name", "personality", "friends", "family", "tmi"} <= set(keys)
+    assert {"official_name", "personality", "friends", "tmi"} <= set(keys) and "family" not in keys
+    # 가족 카드를 없애기 전에 저장된 자료(family 항목)는 읽지 않습니다
+    old = items + [{"key": "family", "value": "히로시(아빠), 미사에(엄마)", "quote": "가족", "sourceIds": ["s1"], "state": "verified", "strict": False}]
+    assert set(research.people_of(old)) == {"friends"}
 
 
 # ---------- 보관함 ----------
@@ -129,10 +129,10 @@ def test_new_research_is_saved_as_a_version_with_date_and_sources(client, people
     assert info["source"] == "new" and info["number"] == 1 and info["researchedAt"]
     versions = library(client)
     assert len(versions) == 1 and versions[0]["id"] == info["id"] and versions[0]["sourceCount"] >= 1
-    assert versions[0]["people"]["friends"] == ["철수", "유리", "훈이", "맹구"] and versions[0]["people"]["family"][-1] == "시로"
+    assert versions[0]["people"]["friends"] == ["철수", "유리", "훈이", "맹구"]
     detail = client.get(f"/api/research-library/{info['id']}").json()
     assert detail["researchedAt"] == info["researchedAt"] and detail["sources"][0]["url"].startswith("https://")
-    assert {i["key"] for i in detail["research"]["items"]} >= {"friends", "family", "tmi"}
+    assert {i["key"] for i in detail["research"]["items"]} >= {"friends", "tmi"}
     # 같은 주제의 다른 표기도 같은 주제로 봅니다 (공백·대소문자 무시)
     assert len(library(client, topic=" 짱 구 ")) == 1
 
@@ -156,7 +156,7 @@ def test_saved_research_is_supplemented_reviewed_and_saved_as_new_version(client
     assert research["basedOn"]["id"] == version_id and research["supplement"]["base"]["number"] == 1 and not research["supplement"].get("failed")
     by_key = {i["key"]: i for i in research["items"]}
     assert by_key["personality"]["value"] == "마이페이스" and "personality" in research["supplement"]["confirmed"]
-    assert job["research"]["people"]["family"][0]["name"] == "히로시"
+    assert job["research"]["people"]["friends"][0]["name"] == "철수"
     assert job["outline"] is None and len(library(client)) == 1  # 검토 전에는 새 버전을 만들지 않음
     # 3) 승인하면 통합 자료를 새 버전으로 저장하고 그 자료로 구성안을 씁니다
     people_fake.kinds.clear()
@@ -218,81 +218,21 @@ def test_user_notes_are_added_to_saved_research_as_user_material(client, people_
     assert not any(s["id"] == research.USER_NOTES_ID for s in stored["research"]["sources"])  # 저장된 자료는 바뀌지 않음
 
 
-# ---------- 친구·가족 카테고리 ----------
+# ---------- 가족 카드 제거 (2026-11-23) ----------
 FRIENDS = [{"name": "철수", "relation": "유치원 친구", "tmi": "공부를 잘해요"}, {"name": "유리", "relation": "유치원 친구", "tmi": ""}]
-FAMILY = [{"name": "히로시", "relation": "아빠", "tmi": ""}, {"name": "미사에", "relation": "엄마", "tmi": ""}, {"name": "시로", "relation": "반려견", "tmi": ""}]
 
 
-def test_category_switch_keeps_both_lists_and_their_images(client):
-    job_id = start(client)
-    wait(client, job_id, "waiting_outline")
-    job = edit(client, job_id, "card-04", {"category": "friends", "friends": FRIENDS, "family": FAMILY}, role="친구").json()
-    card = job["outline"]["cards"][3]
-    assert card["fields"]["category"] == "friends" and not job["outline"]["issues"]["card-04"]["errors"]
-    # 가족으로 바꿔도 친구 목록은 지워지지 않습니다
-    job = edit(client, job_id, "card-04", {"category": "family", "friends": FRIENDS, "family": FAMILY}, role="가족").json()
-    card = job["outline"]["cards"][3]
-    assert card["fields"]["category"] == "family" and card["fields"]["friends"] == FRIENDS and card["fields"]["family"] == FAMILY
-    assert not job["outline"]["issues"]["card-04"]["errors"]
+def test_old_cards_with_family_category_keep_only_friends(client):
+    """가족 카드를 없애기 전에 만든 카드(category·family 값이 남음)도 친구 목록만으로 그려집니다."""
     tpl = templates.TEMPLATES["character-04"]
-    shown = [s["key"] for s in templates.active_slots(job, "card-04")]
-    assert shown == ["family_image_1", "family_image_2", "family_image_3"]  # 가족 이미지 자리만 보입니다
-    assert templates.condition_met(tpl, card["fields"], "category=family") and not templates.condition_met(tpl, card["fields"], "category=friends")
-    job = approve_all(client, job_id)
-    spec = job["preview"]["cards"][3]["spec"]
-    assert spec["template"] == "character-04" and spec["fields"]["category"] == "family" and len(spec["fields"]["family"]) == 3
-    assert spec["fields"]["friends"] == FRIENDS
-
-
-def test_hidden_list_is_not_required(client):
-    job_id = start(client)
-    wait(client, job_id, "waiting_outline")
-    job = edit(client, job_id, "card-04", {"category": "family", "friends": [], "family": FAMILY}).json()
-    assert not job["outline"]["issues"]["card-04"]["errors"]
-    r = edit(client, job_id, "card-04", {"category": "friends", "friends": FRIENDS[:1], "family": FAMILY})
-    card = r.json()["outline"]["cards"][3]
-    # 친구가 1명뿐이면 지어내지 않고, 채워진 가족 카테고리로 바꿉니다
-    assert card["template"] == "character-04" and card["fields"]["category"] == "family"
-
-
-def test_old_cards_without_category_show_friends(client):
-    tpl = templates.TEMPLATES["character-04"]
-    old = {"friends": FRIENDS}
-    assert templates.condition_met(tpl, old, "category=friends")
+    assert [f["key"] for f in tpl["fields"]] == ["friends"] and not any("family" in s["key"] for s in tpl["images"])
+    old = {"category": "family", "friends": FRIENDS, "family": [{"name": "히로시", "relation": "아빠", "tmi": ""}]}
     assert not templates.check_card({"role": "친구", "fields": old, "source": "출처: 공식"}, tpl)["errors"]
-    assert templates.clean_fields(tpl, old)["category"] == "friends"
+    assert set(templates.clean_fields(tpl, old)) == {"friends"}
 
 
-def test_mixed_friends_and_family_are_flagged_and_rewritten(client, fake, monkeypatch):
-    mixed = {"category": "friends", "friends": [FRIENDS[0], {"name": "히로시", "relation": "아빠", "tmi": ""}], "family": []}
-    fixed = {"category": "family", "friends": FRIENDS, "family": FAMILY}
-    spy = PeopleFake(fake, card4=mixed, rewrite4=fixed)
-    monkeypatch.setattr(claude_cli, "run", spy)
-    job_id, _ = start_ai(client)
-    job = wait(client, job_id, "waiting_outline")
-    assert ("rewrite", ()) in spy.kinds  # 섞인 카드는 한 번 다시 쓰게 합니다
-    card = job["outline"]["cards"][3]
-    # 조사로 확인된 가족(히마와리)은 4명까지 더해 채웁니다
-    assert card["fields"]["category"] == "family" and [p["name"] for p in card["fields"]["family"]] == ["히로시", "미사에", "시로", "히마와리"]
-    assert not any("섞지 않아요" in w for w in job["outline"]["issues"]["card-04"]["warnings"])
-    # 사용자가 섞어 넣으면 경고합니다
-    job = edit(client, job_id, "card-04", mixed, role="친구").json()
-    assert any("가족 캐릭터로 조사된 히로시" in w for w in job["outline"]["issues"]["card-04"]["warnings"])
-
-
-def test_ai_picks_family_when_only_family_is_confirmed(client, fake, monkeypatch):
-    only_family = [i for i in PEOPLE_ITEMS if i["key"] != "friends"]
-    spy = PeopleFake(fake, card4={"category": "friends", "friends": [], "family": FAMILY}, items=only_family)
-    monkeypatch.setattr(claude_cli, "run", spy)
-    job_id, _ = start_ai(client)
-    job = wait(client, job_id, "waiting_outline")
-    card = job["outline"]["cards"][3]
-    assert card["template"] == "character-04" and card["fields"]["category"] == "family"
-    assert job["research"]["people"]["friends"] == []
-
-
-# ---------- 캐릭터별 2차 조사 (친구·가족 TMI) ----------
-EMPTY_FRIENDS = {"category": "friends", "friends": [{"name": n, "relation": "방범대 멤버", "tmi": ""} for n in ("철수", "유리", "훈이", "맹구")], "family": []}
+# ---------- 캐릭터별 2차 조사 (친구 TMI) ----------
+EMPTY_FRIENDS = {"friends": [{"name": n, "relation": "방범대 멤버", "tmi": ""} for n in ("철수", "유리", "훈이", "맹구")]}
 
 
 def test_tmi_problem_rules():
@@ -314,7 +254,7 @@ def test_second_stage_finds_tmi_per_character_and_fills_the_card(client, fake, m
     assert kinds.index("research") < kinds.index("people")  # 1차 조사에서 확인된 캐릭터로 2차 조사
     assert ("people", ("WebSearch", "WebFetch")) in spy.kinds
     prompt = spy.prompts["people"]
-    assert "철수 (친구, 유치원 친구)" in prompt and "시로 (가족, 반려견)" in prompt  # 친구·가족 각각을 조사
+    assert "철수 (친구, 유치원 친구)" in prompt and "가족" not in prompt.split("조사할 캐릭터:")[1].split("추가로")[0]  # 친구만 조사
     detail = job["research"]["peopleResearch"]
     assert [p["name"] for p in detail["people"]] == ["철수", "유리", "훈이", "맹구"] and detail["queries"][0] == "짱구 등장인물"
     assert all(p["sourceIds"] == ["p1"] and p["quote"] for p in detail["people"])
@@ -347,7 +287,7 @@ def test_second_stage_rejects_relation_repeats_duplicates_and_unread_sources(cli
     assert [p["name"] for p in detail["people"]] == ["유리"]
     reasons = {r["name"]: r["reason"] for r in detail["rejected"]}
     assert reasons == {"철수": "관계·소속만 반복", "훈이": "다른 캐릭터와 같은 내용", "맹구": "읽은 페이지에서 확인되지 않음"}
-    assert set(detail["missing"]) == {"철수", "훈이", "맹구", "히로시", "미사에", "히마와리", "시로"}
+    assert set(detail["missing"]) == {"철수", "훈이", "맹구"}
     assert any("출처에서 TMI를 찾지 못한 캐릭터" in m for m in job["research"]["missing"])
     # 카드: AI가 관계만 반복해 쓴 TMI는 지우고, 확인된 TMI만 넣습니다 (없는 내용은 만들지 않음)
     tmis = {f["name"]: f["tmi"] for f in job["outline"]["cards"][3]["fields"]["friends"]}
@@ -358,13 +298,15 @@ def test_second_stage_rejects_relation_repeats_duplicates_and_unread_sources(cli
 
 def test_second_stage_discovers_friends_missing_from_first_research(client, fake, monkeypatch):
     """1차 조사에서 친구 이름을 못 찾았으면 2차 조사가 등장인물 페이지에서 친구를 찾고 TMI까지 채웁니다 (출처가 있는 캐릭터만)."""
-    only_family = [i for i in PEOPLE_ITEMS if i["key"] != "friends"]
+    no_friends = [i for i in PEOPLE_ITEMS if i["key"] != "friends"]
     found = [{**p, "category": "friends", "relation": "유치원 친구"} for p in FRIEND_TMI] + [
         {"name": "떡잎마을 방범대", "category": "friends", "relation": "친구 모임", "tmi": "", "quote": "", "sourceIds": ["p1"]},
         {"name": "수지", "category": "friends", "relation": "친구", "tmi": "", "quote": "", "sourceIds": ["p9"]},  # 읽지 않은 출처
     ]
-    items = only_family + [{"key": "relations", "value": "떡잎마을 방범대", "quote": "방범대", "sourceIds": ["s1"]}]
-    spy = PeopleFake(fake, card4={"category": "family", "friends": [], "family": FAMILY}, items=items, people=found)
+    items = no_friends + [{"key": "relations", "value": "떡잎마을 방범대", "quote": "방범대", "sourceIds": ["s1"]}]
+    # 가족 카드가 없어져 AI 카드에는 친구 2명만 적혀 있다고 둡니다 (나머지는 조사 결과로 채움)
+    two = {"friends": [{"name": "철수", "relation": "유치원 친구", "tmi": ""}, {"name": "유리", "relation": "유치원 친구", "tmi": ""}]}
+    spy = PeopleFake(fake, card4=two, items=items, people=found)
     monkeypatch.setattr(claude_cli, "run", spy)
     job_id, _ = start_ai(client)
     job = wait(client, job_id, "waiting_outline")
@@ -377,7 +319,6 @@ def test_second_stage_discovers_friends_missing_from_first_research(client, fake
     assert [p["name"] for p in people["friends"]] == ["철수", "유리", "훈이", "맹구"] and people["friends"][3]["tmi"] == FRIEND_TMI[3]["tmi"]
     card = job["outline"]["cards"][3]["fields"]
     assert [f["tmi"] for f in card["friends"]] == [p["tmi"] for p in FRIEND_TMI]  # 카드의 친구 목록도 조사 결과로 채움
-    assert card["category"] == "family" and [f["name"] for f in card["family"]] == ["히로시", "미사에", "시로", "히마와리"]
 
 
 def test_categories_with_two_people_still_look_for_more(client, fake, monkeypatch):
@@ -386,7 +327,7 @@ def test_categories_with_two_people_still_look_for_more(client, fake, monkeypatc
     more = [{"name": "철수", "category": "friends", "relation": "친구", "tmi": "", "quote": "", "sourceIds": ["p1"]},
             {"name": "유리", "category": "friends", "relation": "친구", "tmi": "", "quote": "", "sourceIds": ["p1"]},
             {"name": "수지", "category": "friends", "relation": "친구", "tmi": "", "quote": "", "sourceIds": ["p1"]}]  # 4명을 넘는 인원은 받지 않음
-    spy = PeopleFake(fake, card4={"category": "friends", "friends": [{"name": "맹구", "relation": "친구", "tmi": ""}, {"name": "훈이", "relation": "친구", "tmi": ""}], "family": []},
+    spy = PeopleFake(fake, card4={"friends": [{"name": "맹구", "relation": "친구", "tmi": ""}, {"name": "훈이", "relation": "친구", "tmi": ""}]},
                      items=two_friends, people=more)
     monkeypatch.setattr(claude_cli, "run", spy)
     job_id, _ = start_ai(client)
@@ -423,7 +364,7 @@ def test_second_round_searches_only_characters_still_missing(client, fake, monke
     assert "따로 검색" in rounds[1] and "- 훈이" in rounds[1] and "- 철수" not in rounds[1] and "- 유리" not in rounds[1]
     detail = job["research"]["peopleResearch"]
     assert detail["rounds"] == 2 and [p["name"] for p in detail["people"]] == ["철수", "유리"]
-    assert "훈이" in detail["missing"] and "시로" in detail["missing"]
+    assert "훈이" in detail["missing"]
     assert sum(1 for k, _ in spy.kinds if k == "people") == 2
 
 
@@ -566,8 +507,8 @@ def test_merge_rules_keep_saved_values_and_flag_conflicts():
     assert items["birthday"]["value"] == "5월 5일" and items["birthday"]["supplement"] == "added"
     assert "수지" in items["friends"]["value"] and items["friends"]["previousValue"].startswith("철수") and items["friends"]["supplement"] == "extended"
     assert items["series"]["sourceIds"] == ["s1"]  # 같은 주소의 새 출처(s2)는 기존 출처 s1로 연결
-    # 추가 조사에 없는 기존 값(가족·TMI)은 그대로
-    assert items["family"]["value"].startswith("히로시") and items["tmi"]["value"]
+    # 추가 조사에 없는 기존 값(TMI)은 그대로
+    assert items["tmi"]["value"]
     assert merged["queries"] == ["옛 검색", "새 검색"] and {f["text"] for f in merged["facts"]} == {"기존 사실", "새 사실"}
     assert merged["supplement"]["conflicts"] == ["personality"] and "birthday" in merged["supplement"]["added"]
 

@@ -2,7 +2,7 @@
   "id": "character-04-v1",
   "contentType": "character",
   "kind": "body",
-  "label": "친구와 TMI (이전 형식)",
+  "label": "크루와 TMI (이전 형식)",
   "reference": "reference/캐릭터 소개 · 04 친구들·TMI.png",
   "fonts": {
     "display": "Jua",
@@ -17,10 +17,11 @@
     "white": "#FFFFFF",
     "paper": "#FFF8F0"
   },
+  "inherit": ["character_name"],
   "fields": [
     {
       "key": "friends",
-      "label": "친구 캐릭터",
+      "label": "크루",
       "type": "items",
       "maxItems": 3,
       "fields": [
@@ -52,19 +53,19 @@
   "images": [
     {
       "key": "friend_image_1",
-      "label": "친구 1 이미지",
+      "label": "크루 1 이미지",
       "required": false,
       "shape": "circle"
     },
     {
       "key": "friend_image_2",
-      "label": "친구 2 이미지",
+      "label": "크루 2 이미지",
       "required": false,
       "shape": "circle"
     },
     {
       "key": "friend_image_3",
-      "label": "친구 3 이미지",
+      "label": "크루 3 이미지",
       "required": false,
       "shape": "circle"
     }
@@ -77,7 +78,7 @@
     },
     {
       "type": "text",
-      "text": "친구들 & TMI",
+      "text": "{character_name} 크루 & TMI",
       "box": {
         "x": 72,
         "y": 178,

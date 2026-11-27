@@ -138,10 +138,6 @@ class CardImageBody(Strict):
     variant: Literal["original", "cutout"] = "original"
 
 
-class IdentityBody(Strict):
-    name: str = Field(max_length=100)
-
-
 class SlotAdjustBody(Strict):
     scale: float = Field(ge=jobs.SCALE_RANGE[0], le=jobs.SCALE_RANGE[1])
     dx: float = Field(ge=jobs.OFFSET_RANGE[0], le=jobs.OFFSET_RANGE[1])
@@ -179,6 +175,10 @@ class MaterialBody(Strict):
     def has_content(self) -> bool:
         texts = [self.extra, self.name, self.price, self.features, self.seller, self.pasted] + [b.text for b in self.sources]
         return any(t.strip() for t in texts) or any(b.url for b in self.sources)
+
+
+class FriendPickBody(Strict):
+    names: list[str] = Field(min_length=1, max_length=4)  # 고른 순서 = 카드 순서 (2~4명, 이름 8자 이내는 서버가 검사)
 
 
 class RedesignBody(Strict):
@@ -504,6 +504,20 @@ async def approve_research(job_id: str):
     return _call(jobs.approve_research, job_id)
 
 
+@app.post("/api/jobs/{job_id}/friends/pick")
+async def pick_friends(job_id: str, body: FriendPickBody):
+    """card-04 친구를 고릅니다. 고른 친구만 조사하고 구성안을 씁니다 (구성안 단계면 card-04만 다시 씀)."""
+    if any(len(n) > 40 for n in body.names):
+        raise HTTPException(422, "크루 이름이 너무 길어요")
+    return _call(jobs.pick_friends, job_id, body.names)
+
+
+@app.post("/api/jobs/{job_id}/friends/recommend")
+async def recommend_friends(job_id: str):
+    """'후보 다시 추천': 누를 때만 AI를 부릅니다."""
+    return _call(jobs.recommend_friends_again, job_id)
+
+
 @app.post("/api/jobs/{job_id}/research/supplement-retry")
 async def retry_supplement(job_id: str):
     return _call(jobs.retry_supplement, job_id)
@@ -658,12 +672,6 @@ async def upload_slot_image(job_id: str, frame: str, slot: str, image: UploadFil
 @app.put("/api/jobs/{job_id}/cards/{frame}/slots/{slot}/adjust")
 async def adjust_slot_image(job_id: str, frame: str, slot: str, body: SlotAdjustBody):
     return _call(jobs.adjust_slot_image, job_id, frame, slot, body.scale, body.dx, body.dy)
-
-
-@app.put("/api/jobs/{job_id}/cards/{frame}/slots/{slot}/identity")
-async def confirm_slot_identity(job_id: str, frame: str, slot: str, body: IdentityBody):
-    """친구 칸 사진의 캐릭터 이름을 확정합니다. 친구 문구는 확정한 이름으로만 씁니다."""
-    return _call(jobs.confirm_identity, job_id, frame, slot, body.name)
 
 
 @app.post("/api/jobs/{job_id}/cards/{frame}/slots/{slot}/restore")

@@ -14,7 +14,8 @@
   ];
   const AI_TASK_TEXT = {
     outline: "AI가 문구를 다시 쓰고 있어요. 저장된 조사 결과만 쓰고 검색은 다시 하지 않아요.",
-    friends: "AI가 확정한 친구에 맞춰 친구 카드를 다시 쓰고 있어요. 자료에 없는 친구만 짧게 찾아봐요.",
+    friends: "AI가 고른 크루를 조사하고 크루 카드만 다시 쓰고 있어요. TMI를 이미 찾은 캐릭터는 다시 찾지 않아요.",
+    friends_pick: "AI가 크루 후보를 다시 추천하고 있어요. 후보는 조사 자료만 보고 고르고, 미리보기용 공식 프로필 페이지만 검색해요. 1~2분 걸릴 수 있어요.",
     compose: "AI가 입력한 자료로 구성안을 쓰고 있어요. 사이트에는 접속하지 않아요.",
     design: "AI가 카드 5장을 다시 디자인하고 있어요. 1~3분 걸릴 수 있어요.",
     redesign: "AI가 이 카드만 다시 디자인하고 있어요. 1분 안팎 걸려요. 다른 카드는 그대로예요.",
@@ -26,13 +27,14 @@
     running: "예시 작업을 진행하고 있어요. 실제 조사나 AI 생성은 하지 않아요.",
     waiting_outline: "구성안을 확인하고 있어요. 승인해야 다음 단계로 넘어가요.",
     waiting_material: "자료가 더 필요해요. 아래에 직접 입력하면 이어서 진행해요.",
+    waiting_friends: "카드 4장에 넣을 크루원을 2~4명 골라 주세요. 고른 크루만 조사해서 구성안을 써요.",
     waiting_research: "저장된 자료와 추가 조사 결과를 합쳤어요. 내용을 확인·수정한 뒤 '이 자료로 구성안 만들기'를 눌러 주세요.",
     waiting_preview: "카드 디자인을 확인하고 있어요. 승인해야 PNG를 받을 수 있어요.",
     done: "완료됐어요. 5단계에서 샘플 PNG를 받을 수 있어요.",
     failed: "제작이 멈췄어요.",
     interrupted: "작업이 중단됐어요.",
   };
-  const STEP_TEXT = { pending: "대기", active: "진행 중", done: "완료", failed: "실패", waiting: "승인 대기", material: "자료 입력 대기", skipped: "자동 조사 안 함", review: "자료 검토 대기" };
+  const STEP_TEXT = { pending: "대기", active: "진행 중", done: "완료", failed: "실패", waiting: "승인 대기", material: "자료 입력 대기", skipped: "자동 조사 안 함", review: "자료 검토 대기", friends: "크루 고르기 대기" };
   const MATERIAL_LABELS = {
     goods: { name: "상품명", price: "가격", seller: "판매처", features: "특징" },
     popup: { name: "행사명", price: "입장료·가격", seller: "장소", features: "기간·예약 방법 등" },
@@ -48,7 +50,7 @@
       example: "예: 치이카와 코인 실린더 / ¥440(세금 포함) / 전 8종 랜덤 / 치이카와 마켓 / 11월 20일 발매" },
     collab: { guide: "콜라보 상대, 기간, 장소·판매처, 메뉴·상품, 특전과 받는 조건을 알려 주세요.",
       example: "예: 치이카와 × ○○카페 / 12.1 ~ 12.31 / 전국 매장 / 음료 1잔당 코스터 1장 랜덤 증정" },
-    character: { guide: "캐릭터 이름, 등장 작품, 성격·특징, 친구·가족, 공식 프로필처럼 확인한 내용을 알려 주세요.",
+    character: { guide: "캐릭터 이름, 등장 작품, 성격·특징, 친구, 공식 프로필처럼 확인한 내용을 알려 주세요.",
       example: "예: 하치와레는 치이카와의 친구예요. 밝고 긍정적이고 노래를 좋아해요." },
   };
   const NOTE_KINDS = [["", "출처 종류 선택 안 함"], ["official", "공식 출처"], ["namuwiki", "나무위키"], ["other", "기타"]];
@@ -246,11 +248,11 @@
       el("li", { dataset: { origin: f.origin || "ai" } }, f.text, roundTag(f.round))));
   }
 
-  // 캐릭터 소개: 친구·가족 캐릭터별로 찾은 TMI와 근거 문장·출처, 찾지 못한 캐릭터, 쓰지 않은 내용과 이유
+  // 캐릭터 소개: 친구 캐릭터별로 찾은 TMI와 근거 문장·출처, 찾지 못한 캐릭터, 쓰지 않은 내용과 이유
   function renderPeople(research) {
     const people = research.people || {};
     const detail = research.peopleResearch || null;
-    const groups = [["friends", "친구"], ["family", "가족"]].filter(([key]) => (people[key] || []).length);
+    const groups = [["friends", "크루"]].filter(([key]) => (people[key] || []).length);
     $("research-people-wrap").hidden = !groups.length;
     if (!groups.length) return;
     const found = groups.reduce((n, [key]) => n + people[key].filter((p) => p.tmi).length, 0);
@@ -624,6 +626,187 @@
     return `${fetch.url}: 읽기 실패 (오류 내용: ${fetch.detail || "기록되지 않았어요"})`;
   }
 
+  // ---------- card-04 친구 고르기 ----------
+  // 고른 순서 = 카드 순서 = 사진 칸 번호. 고르기 전 목록(pickDraft)은 화면에만 두고, 버튼을 누를 때 서버로 보냅니다
+  const PICK_MIN = 2, PICK_MAX = 4, PICK_NAME_MAX = 8;
+  let pickDraft = null;
+  let pickDraftJob = null;
+  let repickOpen = false;
+
+  const pickNames = () => {
+    if (!pickDraft || pickDraftJob !== job.id) {
+      pickDraftJob = job.id;
+      pickDraft = [...(((job.friendPick || {}).chosen) || [])];
+    }
+    return pickDraft;
+  };
+
+  function friendPickPanel(mode) {
+    const pick = job.friendPick || { candidates: [] };
+    const chosen = pickNames();
+    const redraw = () => renderFriendPick();
+    const isChosen = (name) => chosen.includes(name);
+    const toggle = (name) => {
+      const i = chosen.indexOf(name);
+      if (i >= 0) chosen.splice(i, 1);
+      else if (chosen.length < PICK_MAX) chosen.push(name);
+      redraw();
+    };
+    const error = el("p", { class: "error", role: "alert", hidden: true });
+    const say = (text) => { error.textContent = text; error.hidden = !text; };
+
+    const candidates = el("ul", { class: "pick-candidates" }, ...(pick.candidates || []).map((c) => {
+      const order = chosen.indexOf(c.name);
+      const sources = (job.research ? (c.sourceIds || []).map((id) => job.research.sources.find((s) => s.id === id)).filter(Boolean) : []);
+      return el("li", { class: `pick-candidate${order >= 0 ? " is-picked" : ""}`, dataset: { candidate: c.name } },
+        pickPreview(c, pick),
+        el("div", { class: "pick-main" },
+          el("button", { class: "pick-toggle", type: "button", "aria-pressed": String(order >= 0), disabled: order < 0 && chosen.length >= PICK_MAX,
+            onclick: () => toggle(c.name) },
+            el("span", { class: "pick-order", textContent: order >= 0 ? String(order + 1) : "+" }),
+            el("b", { textContent: c.name }), c.relation ? el("span", { class: "hint", textContent: ` · ${c.relation}` }) : ""),
+          el("p", { class: "pick-reason", textContent: c.reason || "" }),
+          sources.length ? el("div", { class: "card-links" }, el("span", { class: "hint", textContent: "출처 " }), ...sources.map(sourceLink))
+            : job.mode === "ai" ? "" : el("small", { class: "hint", textContent: "예시 후보 (출처 없음)" })));
+    }));
+
+    const manual = el("input", { type: "text", maxLength: PICK_NAME_MAX, placeholder: "목록에 없는 크루 이름", "aria-label": "직접 넣을 크루 이름" });
+    const addManual = () => {
+      const name = manual.value.replace(/\s+/g, " ").trim();
+      if (!name) return;
+      if (isChosen(name)) return say("이미 크루에 있어요.");
+      if (chosen.length >= PICK_MAX) return say(`크루원은 ${PICK_MAX}명까지 고를 수 있어요.`);
+      chosen.push(name);
+      manual.value = "";
+      redraw();
+    };
+    manual.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addManual(); } });
+
+    const move = (i, d) => { const j = i + d; [chosen[i], chosen[j]] = [chosen[j], chosen[i]]; redraw(); };
+    const picked = el("ol", { class: "pick-chosen" }, ...chosen.map((name, i) =>
+      el("li", { dataset: { chosen: name } },
+        el("span", { class: "pick-order", textContent: String(i + 1) }), el("b", { textContent: name }),
+        el("small", { class: "hint", textContent: ` · ${i + 1}번 사진` }),
+        el("span", { class: "pick-moves" },
+          el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "↑", disabled: i === 0, "aria-label": `${name} 위로`, onclick: () => move(i, -1) }),
+          el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "↓", disabled: i === chosen.length - 1, "aria-label": `${name} 아래로`, onclick: () => move(i, 1) }),
+          el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "빼기", "aria-label": `${name} 빼기`, onclick: () => toggle(name) })))));
+
+    const ready = chosen.length >= PICK_MIN && chosen.length <= PICK_MAX;
+    const submit = el("button", { class: "btn btn-primary", type: "button", disabled: !ready, dataset: { pickSubmit: mode },
+      textContent: mode === "repick" ? "이 크루로 크루 카드 다시 쓰기" : "이 크루로 구성안 만들기",
+      onclick: async () => {
+        if (mode === "repick" && job.outline.approved && !confirm("구성안 승인이 해제돼요. 크루 카드를 다시 쓸까요?")) return;
+        await action("friends/pick", jsonInit("POST", { names: chosen }));
+        if (!$("action-error").hidden) return;
+        repickOpen = false;
+        renderOutline();
+        renderFriendPick();
+      } });
+    const again = el("button", { class: "btn btn-ghost", type: "button", dataset: { pickRecommend: "1" },
+      onclick: () => action("friends/recommend") }, "후보 다시 추천 ", el("span", { class: "btn-tag demo-only", textContent: "데모" }));
+    const close = mode === "repick" ? el("button", { class: "btn btn-ghost", type: "button", textContent: "닫기",
+      onclick: () => { repickOpen = false; pickDraft = null; renderOutline(); } }) : "";
+
+    return lockDisabled(el("div", { class: "friend-pick", dataset: { friendPick: mode } },
+      el("p", { class: "panel-note", textContent: "카드 4장(크루 & TMI)에 넣을 크루원을 2~4명 골라 주세요. 고른 순서대로 카드에 들어가고, N번째로 고른 캐릭터가 N번 사진 칸이에요. 추천 이유는 고를 때만 보여 주고 카드 문구에는 쓰지 않아요." }),
+      pick.error ? el("p", { class: "notice", textContent: pick.error }) : "",
+      (pick.candidates || []).length ? candidates : el("p", { class: "hint", textContent: "추천할 크루를 찾지 못했어요. 아래에 직접 적어 주세요." }),
+      el("div", { class: "pick-manual" }, manual, el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "직접 넣기", onclick: addManual })),
+      el("h3", { class: "pick-title", textContent: `고른 크루 (${chosen.length}/${PICK_MAX})` }),
+      chosen.length ? picked : el("p", { class: "hint", textContent: "아직 고른 크루가 없어요." }),
+      error,
+      el("div", { class: "actions" }, submit, again, close),
+      el("small", { class: "hint", textContent: job.mode === "ai"
+        ? "고른 크루만 공식 출처를 먼저 조사해요. TMI를 이미 찾은 캐릭터는 다시 찾지 않고, 출처에서 찾지 못한 TMI는 비워 둬요. '후보 다시 추천'은 누를 때만 AI를 불러요 (추천 + 공식 프로필 검색, Pro 사용 한도 차감). 미리보기 사진은 공식 페이지의 이미지를 그대로 띄우는 것이고 저장하거나 카드에 넣지 않아요. '사진 보기'는 네이버 이미지 검색 결과라 다른 캐릭터나 팬아트가 섞일 수 있어요."
+        : "데모에서는 조사 없이 고른 크루 이름으로 예시 카드를 만들어요." })));
+  }
+
+  // 크루 후보 미리보기 (서버 app/friend_preview.py). 공식 페이지의 대표 이미지 주소를 브라우저가 바로 띄웁니다(저장·카드 반영 안 함).
+  // 사진이 없거나 못 불러오면 '사진 보기': "후보 이름 + 작품명" 네이버 이미지 검색을 새 탭으로 엽니다 (2026-11-24).
+  // 검색 주소만 만들고, 서버는 검색 사이트에 요청하지 않으며 이미지를 가져오거나 저장하지 않습니다
+  const IMAGE_SEARCH = "https://search.naver.com/search.naver?where=image&query=";
+  const squash = (text) => String(text || "").replace(/\s+/g, "");
+
+  // 작품명: 조사 항목 '작품·시리즈명'(series)에서 괄호 속 원제와 『』「」를 뺀 이름. 없으면 주제
+  function workName() {
+    const series = ((job.research && job.research.items) || []).find((i) => i.key === "series" && i.value);
+    const raw = series ? series.value : job.topic || "";
+    return raw.replace(/[(（][^)）]*[)）]/g, " ").replace(/[『』「」《》]/g, " ").split(/[,·/]/)[0].replace(/\s+/g, " ").trim();
+  }
+
+  function imageSearchQuery(name) {
+    const work = job.mode === "ai" ? workName() : ""; // 데모의 예시 후보는 작품이 정해져 있지 않아 이름만 씁니다
+    if (!work || squash(work).includes(squash(name))) return work || name;
+    return `${name} ${work}`;
+  }
+
+  function photoSearchButton(name) {
+    const query = imageSearchQuery(name);
+    return el("a", { class: "btn btn-ghost btn-small pick-link", href: IMAGE_SEARCH + encodeURIComponent(query), target: "_blank",
+      rel: "noopener noreferrer", title: `네이버 이미지 검색: ${query} (새 탭)`, dataset: { photoSearch: query }, textContent: "사진 보기" });
+  }
+
+  function pickPreview(c, pick) {
+    const box = el("div", { class: "pick-preview", dataset: { preview: c.name } });
+    const fallback = () => box.replaceChildren(photoSearchButton(c.name));
+    if (job.mode !== "ai") {
+      box.append(el("span", { class: "pick-thumb is-empty", "aria-hidden": "true", textContent: (c.name || "?").slice(0, 1) }),
+        el("small", { class: "hint", textContent: "미리보기 없음 (데모)" }), photoSearchButton(c.name));
+      return box;
+    }
+    const preview = c.preview;
+    if (preview && /^https?:\/\//.test(preview.imageUrl)) {
+      // referrer 없이, 화면에 보일 때만 불러옵니다 (src보다 먼저 정해야 첫 요청에 적용됨)
+      const img = el("img", { class: "pick-thumb", referrerPolicy: "no-referrer", loading: "lazy", decoding: "async",
+        alt: `${c.name} (공식 이미지)`, src: preview.imageUrl });
+      img.addEventListener("error", fallback, { once: true });
+      box.append(img, el("small", { class: "hint", textContent: `공식 · ${preview.site}` }));
+      return box;
+    }
+    if (!("preview" in c) && pick.previewPending) {
+      box.append(el("span", { class: "pick-thumb is-empty", "aria-hidden": "true", textContent: "…" }), el("small", { class: "hint", textContent: "미리보기 찾는 중" }),
+        photoSearchButton(c.name));
+      return box;
+    }
+    fallback();
+    return box;
+  }
+
+  // 작업 중(setBusy)이 끝나도 꺼 둬야 하는 버튼(인원이 모자란 제출, 맨 위의 ↑ 등)은 data-locked로 표시합니다
+  function lockDisabled(node) {
+    node.querySelectorAll("button:disabled").forEach((b) => { b.dataset.locked = "1"; });
+    return node;
+  }
+
+  function renderFriendPick() {
+    const open = job && job.state === "waiting_friends" && viewStep === 2;
+    $("friend-pick").hidden = !open;
+    if (open) $("friend-pick-body").replaceChildren(friendPickPanel("pick"));
+    if (repickOpen) {
+      const slot = document.querySelector('[data-repick-slot="card-04"]');
+      if (slot) slot.replaceChildren(friendPickPanel("repick"));
+    }
+  }
+
+  // card-04의 '친구 다시 고르기'와 '새로 넣은 친구 조사하기'
+  function friendCardControls(card) {
+    if (!isTemplateJob() || card.frame !== "card-04" || card.template !== "character-04" || job.contentType !== "character") return "";
+    const canEdit = job.state === "waiting_outline" && !job.aiTask;
+    const listed = ((card.fields || {}).friends || []).map((f) => String(f.name || "").trim()).filter(Boolean);
+    const chosen = (job.friendPick || {}).chosen || [];
+    const added = listed.filter((n) => !chosen.includes(n));
+    const buttons = [el("button", { class: "btn btn-ghost btn-small", type: "button", disabled: !canEdit, dataset: { repick: card.frame },
+      onclick: () => { repickOpen = !repickOpen; pickDraft = null; pickDraftJob = null; renderOutline(); } }, repickOpen ? "크루 다시 고르기 닫기" : "크루 다시 고르기")];
+    if (job.mode === "ai" && added.length && listed.length >= PICK_MIN && listed.length <= PICK_MAX) {
+      buttons.push(el("button", { class: "btn btn-ghost btn-small", type: "button", disabled: !canEdit, dataset: { researchAdded: card.frame },
+        title: `직접 넣은 크루(${added.join(", ")})를 조사하고 크루 카드를 다시 써요`,
+        onclick: () => action("friends/pick", jsonInit("POST", { names: listed })) }, `새로 넣은 크루 조사하기 (${added.join(", ")})`));
+    }
+    return lockDisabled(el("div", { class: "friend-card-controls" }, el("div", { class: "outline-buttons is-row" }, ...buttons),
+      el("div", { dataset: { repickSlot: card.frame } })));
+  }
+
   function renderMaterial() {
     const noOutline = !job.outline;
     const open = job.mode === "ai" && viewStep === 2 && !(job.outline && job.outline.approved) &&
@@ -890,7 +1073,7 @@
     if (job.state === "done") return 5;
     if (job.state === "waiting_preview") return 4;
     if (job.state === "waiting_outline") return 3;
-    if (job.state === "waiting_material" || job.state === "waiting_research") return 2;
+    if (job.state === "waiting_material" || job.state === "waiting_research" || job.state === "waiting_friends") return 2;
     if (job.preview && job.preview.approved) return 5;
     if (job.outline && job.outline.approved) return 4;
     return job.outline ? 3 : 2;
@@ -929,6 +1112,7 @@
     if (job.state === "running") return "진행이 끝나면 넘어갈 수 있어요.";
     if (job.state === "waiting_material") return "자료를 입력하면 구성안 단계로 넘어가요.";
     if (job.state === "waiting_research") return "조사 자료를 확인하고 '이 자료로 구성안 만들기'를 누르면 구성안 단계로 넘어가요.";
+    if (job.state === "waiting_friends") return "크루원을 2~4명 고르면 구성안 단계로 넘어가요.";
     if (viewStep === 3) return "구성안을 승인하면 다음 단계로 갈 수 있어요.";
     if (viewStep === 4) return "디자인을 최종 승인하면 PNG를 받을 수 있어요.";
     return "";
@@ -1248,7 +1432,8 @@
     if (job.state !== "draft" && (first || limit > lastMaxStep || viewStep > limit)) goToStep(limit, !first);
     lastMaxStep = limit;
     await renderJob();
-    if (job.state === "running" || job.aiTask || visibleAssets().some(isProcessing) || identifying()) pollTimer = setTimeout(poll, POLL_MS);
+    const previewing = (job.friendPick || {}).previewPending; // 크루 후보 미리보기를 찾는 중이면 결과가 올 때까지 확인합니다
+    if (job.state === "running" || job.aiTask || visibleAssets().some(isProcessing) || identifying() || previewing) pollTimer = setTimeout(poll, POLL_MS);
   }
 
   async function poll() {
@@ -1310,6 +1495,7 @@
     if (step.key === "outline" && job.state === "waiting_outline") return "waiting";
     if (step.key === "outline" && job.state === "waiting_material") return "material";
     if (step.key === "research" && job.state === "waiting_research") return "review";
+    if (step.key === "outline" && job.state === "waiting_friends") return "friends";
     if (step.key === "layout" && job.state === "waiting_preview") return "waiting";
     return step.status;
   }
@@ -1321,6 +1507,8 @@
       ? { research: job.researchBase && !(job.researchStage || {}).done
           ? "AI가 저장된 자료를 바탕으로 부족한 내용을 추가 조사하고 있어요. 2~5분 걸릴 수 있어요. 기존 자료는 그대로 남아요."
           : "AI가 웹에서 자료를 찾고 구성안을 쓰고 있어요. 2~5분 걸릴 수 있어요.",
+        outline: job.friendPick && job.friendPick.chosen && !job.outline
+          ? `고른 크루(${job.friendPick.chosen.join(", ")})를 조사하고 구성안을 쓰고 있어요. 1~4분 걸릴 수 있어요.` : undefined,
         layout: isTemplateJob() ? "템플릿에 승인된 문구와 이미지를 넣고 있어요." : "AI가 카드 5장을 디자인하고 있어요. 1~3분 걸릴 수 있어요." }[activeKey] || "진행하고 있어요."
       : STATUS_TEXT[job.state] || "";
     const canRetry = job.mode === "ai" && ["failed", "interrupted"].includes(job.state);
@@ -1558,30 +1746,27 @@
       file, source, button, error);
   }
 
-  // 친구 칸: 사진 속 캐릭터 이름을 보여 주고 사용자가 고쳐서 확정합니다. 친구 문구는 확정한 이름으로만 써요
+  // 친구 칸: 사진 속 캐릭터를 AI가 알아본 결과를 보여 줍니다. 이름은 고른 친구 그대로이고, 달라 보이면 경고만 해요 (서버 friends.photo_notes와 같은 기준)
+  const sameCharacter = (a, b) => {
+    const x = String(a || "").replace(/\s+/g, ""), y = String(b || "").replace(/\s+/g, "");
+    return Boolean(x && y) && (x.includes(y) || y.includes(x));
+  };
   function identityPanel(frame, slot) {
     const record = identityOf(frame, slot.key);
-    const status = record ? record.status : "manual";
     const field = templateFor(frame).fields.find((f) => f.key === slot.identify);
-    const nameMax = field.fields.find((s) => s.key === field.linkedName).max;
+    const n = Number((slot.key.match(/(\d+)$/) || [])[1] || 0) - 1;
+    const card = ((job.outline && job.outline.cards) || []).find((c) => c.frame === frame);
+    const item = (((card && card.fields) || {})[field.key] || [])[n] || {};
+    const name = String(item[field.linkedName] || "").trim();
+    const status = record ? record.status : "manual";
     let note;
-    if (status === "processing") note = el("small", { class: "cutout-status" }, el("span", { class: "spinner", "aria-hidden": "true" }), "사진 속 캐릭터 이름을 확인하고 있어요. 기다리지 않고 직접 입력해도 돼요.");
-    else if (status === "suggested" && record.suggested) note = el("small", { class: "hint", textContent: `AI 인식: ${record.suggested} (확신도 ${record.confidence})${record.evidence ? ` · 근거: ${record.evidence}` : ""}. 맞으면 확정하고, 다르면 고쳐서 확정해 주세요.` });
-    else if (status === "suggested") note = el("small", { class: "hint", textContent: `AI가 이름을 확신하지 못했어요${record.candidates.length ? ` (후보: ${record.candidates.join(", ")})` : ""}. 이름을 직접 입력해 주세요.` });
-    else if (status === "failed") note = el("small", { class: "cutout-error", textContent: record.error });
-    else if (status === "confirmed") note = el("small", { class: "hint", textContent: `확정: ${record.name}. 이 칸의 문구는 이 이름으로만 써요.` });
-    else note = el("small", { class: "hint", textContent: "사진 속 캐릭터 이름을 입력해 확정해 주세요." });
-    const input = el("input", {
-      type: "text", maxLength: nameMax, placeholder: "캐릭터 이름", "aria-label": `${frame} ${slot.label} 캐릭터 이름`,
-      value: status === "confirmed" ? record.name : (record && record.suggested) || "", dataset: { identityName: `${frame}:${slot.key}` },
-    });
-    const button = el("button", {
-      class: "btn btn-primary btn-small", type: "button", textContent: status === "confirmed" ? "이름 바꾸기" : "이 이름으로 확정",
-      dataset: { identityConfirm: `${frame}:${slot.key}` },
-      onclick: () => slotAction(`cards/${frame}/slots/${slot.key}/identity`, jsonInit("PUT", { name: input.value })),
-    });
-    return el("div", { class: "slot-identity", dataset: { identity: `${frame}:${slot.key}` } },
-      el("label", { class: "tile-image" }, el("span", { textContent: `캐릭터 이름 (${nameMax}자 이내)` }), input), button, note);
+    if (status === "processing") note = el("small", { class: "cutout-status" }, el("span", { class: "spinner", "aria-hidden": "true" }), "사진 속 캐릭터를 확인하고 있어요. 기다리지 않아도 돼요.");
+    else if (status === "suggested" && record.suggested && ["높음", "중간"].includes(record.confidence) && name && !sameCharacter(record.suggested, name))
+      note = el("small", { class: "photo-mismatch", textContent: `⚠ 이 사진은 ${record.suggested}처럼 보여요 (고른 크루: ${name}). 맞는 사진이면 그대로 둬도 돼요.` });
+    else if (status === "suggested" && record.suggested && name && sameCharacter(record.suggested, name)) note = el("small", { class: "hint", textContent: `✓ ${name} 사진으로 보여요.` });
+    else if (status === "failed") note = el("small", { class: "hint", textContent: record.error || "사진 속 캐릭터를 확인하지 못했어요." });
+    else note = el("small", { class: "hint", textContent: name ? `${n + 1}번째 크루(${name})의 사진이에요.` : `${n + 1}번째 크루의 사진이에요.` });
+    return el("div", { class: "slot-identity", dataset: { identity: `${frame}:${slot.key}` } }, note);
   }
 
   function slotPanel(frame, slot, context) {
@@ -1589,7 +1774,7 @@
     const asset = current && job.assets.find((a) => a.id === current.assetId);
     const suggestion = !current && suggestionOf(frame, slot.key);
     const key = JSON.stringify([current && currentSlot(frame, slot.key), suggestion, asset, permittedAssets().map((a) => [a.id, a.name, a.useVariant, hasCutout(a)]),
-      options.cutout.available, job.state, slot.identify ? identityOf(frame, slot.key) : null]);
+      options.cutout.available, job.state, slot.identify ? [identityOf(frame, slot.key), JSON.stringify(((job.outline && job.outline.cards) || []).find((c) => c.frame === frame) || {})] : null]);
     const cacheKey = `${context}:${frame}:${slot.key}`;
     const cached = slotPanels.get(cacheKey);
     if (cached && cached.key === key) return cached.node;
@@ -1683,11 +1868,11 @@
 
   function templateControl(field, value, frame) {
     if (field.type === "choice") {
-      // 예: 친구/가족. 바꾸면 그 카테고리 목록이 보이고, 다른 목록은 지우지 않고 보관합니다 (templateEditor가 처리)
+      // 선택 필드: 바꾸면 그 선택지의 목록이 보이고, 다른 목록은 지우지 않고 보관합니다 (templateEditor가 처리)
       const select = el("select", { name: `field-${field.key}`, dataset: { choice: field.key }, "aria-label": field.label });
       for (const option of field.options) select.append(el("option", { value: option.value, textContent: option.label, selected: (value || field.default) === option.value }));
       return el("label", { class: "edit-field" }, el("span", { textContent: field.label }), select,
-        el("small", { class: "hint", textContent: "바꿔도 입력한 친구·가족 정보는 따로 보관돼요. 비어 있는 쪽으로 바꾸면 조사 자료에서 불러와요." }));
+        el("small", { class: "hint", textContent: "바꿔도 입력한 정보는 따로 보관돼요. 비어 있는 쪽으로 바꾸면 조사 자료에서 불러와요." }));
     }
     if (field.type === "flag") {
       const box = el("input", { type: "checkbox", name: `field-${field.key}`, checked: Boolean(value) });
@@ -1726,7 +1911,7 @@
   }
 
   // 개수를 늘리고 줄일 수 있는 항목 (예: 친구 캐릭터 2~4명, 프로필 항목 0~3개). 항목마다 저장 전 번호(orig)를 기억해 이미지가 그 항목을 따라가게 합니다
-  // editor: "list"인 필드(프로필 항목)는 0개부터 쓸 수 있고 단위(unit)를 따로 정합니다. 친구·가족은 지금처럼 '명' 단위입니다
+  // editor: "list"인 필드(프로필 항목)는 0개부터 쓸 수 있고 단위(unit)를 따로 정합니다. 친구는 지금처럼 '명' 단위입니다
   function itemsEditor(field, value, frame) {
     const minItems = field.minItems || 0;
     const unit = field.unit || "명";
@@ -1754,15 +1939,11 @@
       list.replaceChildren(...rows.map((row, i) => {
         const box = el("div", { class: "item-row", dataset: { item: `${field.key}-${i}` } }, el("b", { textContent: `${i + 1}` }),
           el("input", { type: "hidden", name: `field-${field.key}-${i}-orig`, value: String(row.orig) }));
-        // 사진에서 이름을 확정한 항목은 이름을 사진 칸에서만 바꿉니다 (여기서 고쳐도 서버가 확정한 이름으로 되돌려요)
-        const record = frame && field.linkedName && field.slotPrefix && row.orig >= 0 ? identityOf(frame, `${field.slotPrefix}${row.orig + 1}`) : null;
-        const locked = record && record.status === "confirmed";
         for (const sub of field.fields) {
-          const lock = locked && sub.key === field.linkedName;
           const input = sub.type === "multiline"
             ? el("textarea", { value: row.item[sub.key] || "", rows: 3, name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.placeholder || sub.default || "" })
-            : el("input", { type: "text", value: row.item[sub.key] || "", name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.placeholder || sub.default || "", readOnly: lock });
-          box.append(editField(lock ? `${sub.label} · 사진 칸에서 확정` : `${sub.label}${sub.required ? " (필수)" : ""}`, input, sub.max));
+            : el("input", { type: "text", value: row.item[sub.key] || "", name: `field-${field.key}-${i}-${sub.key}`, placeholder: sub.placeholder || sub.default || "" });
+          box.append(editField(`${sub.label}${sub.required ? " (필수)" : ""}`, input, sub.max));
         }
         box.append(el("button", { class: "btn btn-ghost btn-small item-remove", type: "button", textContent: "삭제", disabled: rows.length <= minItems,
           dataset: { itemRemove: `${field.key}-${i}` }, "aria-label": `${field.label} ${i + 1} 삭제`,
@@ -1782,7 +1963,7 @@
     return group;
   }
 
-  // 카테고리(친구/가족) 선택에 따라 보이는 목록을 바꿉니다. 숨긴 목록도 폼에 남겨 저장하므로 입력한 정보가 사라지지 않습니다
+  // 선택 필드 값에 따라 보이는 목록을 바꿉니다 (지금 기본 템플릿에는 선택 필드가 없음). 숨긴 목록도 폼에 남겨 저장하므로 입력한 정보가 사라지지 않습니다
   function bindChoices(form, tpl) {
     const sync = (fromUser) => {
       const values = Object.fromEntries([...form.querySelectorAll("[data-choice]")].map((s) => [s.dataset.choice, s.value]));
@@ -1981,6 +2162,7 @@
               ? [el("div", { class: "card-links" }, ...sourcesOf(card).map(sourceLink))]
               : []),
             ...notes,
+            friendCardControls(card),
             slotControls(card.frame),
             el("div", { class: "outline-buttons is-row" },
               el("button", { class: "btn btn-ghost btn-small", type: "button", textContent: "내용 수정", disabled: !canEdit, dataset: { edit: card.frame },
@@ -1991,6 +2173,7 @@
       );
     }
     $("outline-version").textContent = `${job.outline.version}번째 구성안`;
+    if (repickOpen) renderFriendPick();
     const partial = job.research && (job.research.partial || (job.researchStage || {}).forced);
     gapBox($("outline-gap"), partial ? job.researchGap : null, "자료가 부족한 상태로 작성한 구성안이에요",
       partial ? "찾지 못한 정보는 비워 뒀어요. 필요하면 카드에서 직접 채우거나, 자료를 보완해 구성안을 다시 만들어 주세요." : "");
@@ -2452,9 +2635,11 @@
     if (job) {
       renderResearch();
       renderMaterial();
+      renderFriendPick();
     } else {
       $("research").hidden = true;
       $("material").hidden = true;
+      $("friend-pick").hidden = true;
     }
     renderDetail();
   }
@@ -2671,14 +2856,14 @@
     detail.replaceChildren(libraryDetail(library.details.get(chosen.id)));
   }
 
-  // 저장된 자료 확인: 항목별 값과 확인 상태, 친구·가족, 출처와 조사일
+  // 저장된 자료 확인: 항목별 값과 확인 상태, 친구, 출처와 조사일
   function libraryDetail(version) {
     const items = (version.research.items || []).filter((i) => i.value);
     const people = version.people || {};
     const list = el("ul", { class: "library-items" }, ...items.map((item) =>
       el("li", { dataset: { state: item.state } }, `${item.label}: ${item.value}`)));
     const details = version.peopleDetails || {};
-    const groups = Object.entries({ friends: "친구", family: "가족" }).filter(([k]) => (people[k] || []).length)
+    const groups = Object.entries({ friends: "크루" }).filter(([k]) => (people[k] || []).length)
       .flatMap(([k, label]) => (details[k] || people[k].map((name) => ({ name }))).map((p) =>
         el("li", {}, el("b", { textContent: `${label} ${p.name}` }), p.relation ? ` (${p.relation})` : "", ` · TMI: ${p.tmi || "찾지 못함"}`)));
     const sources = el("ul", { class: "library-sources" }, ...version.sources.map((s) =>

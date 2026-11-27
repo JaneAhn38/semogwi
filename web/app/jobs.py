@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from . import claude_cli, cutout, detail_images, friends, research as research_items, research_library, research_merge, site_policy, templates
+from . import claude_cli, cutout, detail_images, friend_pick, friend_preview, friends, research as research_items, research_library, research_merge, site_policy, templates
 from .ai_provider import card_source_state, get_ai_provider, material_text, policy_stop_research, separates_research
 from .claude_cli import AIError
 from .layout import ImageElement, LayoutError, TextElement, validate_layout
@@ -238,7 +238,7 @@ def load(job_id: str) -> dict | None:
     for frame, records in (job.get("slotIdentities") or {}).items():
         for slot, record in records.items():
             if record["status"] == "processing" and _identity_key(job_id, frame, slot) not in _identify_tasks:
-                record.update(status="failed", error="서버가 다시 시작되어 이름 확인이 중단됐어요. 이름을 직접 입력해 주세요.")
+                record.update(status="failed", error="서버가 다시 시작되어 사진 확인이 중단됐어요. 카드는 고른 크루 이름 그대로 만들어요.")
                 changed = True
     if changed:
         save(job)
@@ -437,6 +437,9 @@ async def _ai_supplement(job_id: str) -> None:
     _record_calls(job, result["calls"])
     site_policy.record_failures(result["research"].get("fetchFailures", []))
     job["research"] = result["research"]
+    for key in ("friendCandidates", "friendResearch"):  # 저장된 자료의 친구 후보는 보완 조사 뒤에도 그대로 씁니다
+        if base.get(key) and not job["research"].get(key):
+            job["research"][key] = base[key]
     if result.get("extraction") is not None:
         job["detailExtraction"] = result["extraction"]
     if job["contentType"] == "character" and job["research"].get("items"):
@@ -524,6 +527,217 @@ def approve_research(job_id: str) -> dict:
     save(job)
     _start(job_id, _ai_research_then_compose(job_id, job, get_ai_provider(), compose_only=True))
     return job
+
+
+# ---------- 캐릭터 소개 card-04 친구 고르기 ----------
+# 조사가 끝나면 AI가 친구 후보를 최대 4명 추천하고 waiting_friends에서 멈춥니다. 사용자가 2~4명을 고르면(직접 입력 가능)
+# 고른 친구만 조사해 새 조사 버전으로 저장하고 구성안을 씁니다. 구성안 단계에서는 card-04만 다시 고를 수 있습니다.
+async def _offer_friends(job_id: str, provider) -> None:
+    job = _read(job_id)
+    research = job.get("research") or {}
+    candidates = friend_pick.saved_candidates(research)  # 저장된 자료에 후보가 있으면 다시 추천하지 않습니다
+    error = None
+    if candidates is None:
+        candidates, error, calls = await asyncio.to_thread(_recommend, provider, job, research)
+        job = _read(job_id)
+        _record_calls(job, calls)
+    research = job.get("research") or {}
+    friend_pick.offer(job, candidates, error)
+    look = any("preview" not in c for c in candidates)
+    job["friendPick"]["previewPending"] = look
+    _store_research(job)  # 새로 조사한 자료는 후보와 함께 보관함에 먼저 남깁니다
+    _set_step(job, "research", "done")
+    _set_step(job, "outline", "pending")
+    job.update(state=friend_pick.WAITING, error=None)
+    save(job)
+    if look:
+        await _find_previews(job_id, provider, job, candidates, research)  # 후보는 먼저 보여 주고 사진은 뒤이어 채웁니다
+
+
+def _previews(provider, job: dict, candidates: list[dict], research: dict) -> tuple[list, list, list]:
+    """크루 후보 미리보기 (app/friend_preview.py): 전용 페이지가 없는 후보는 AI가 공식 프로필 페이지를 찾고(AI 1회),
+    서버가 그 페이지에서 사진 주소만 고릅니다. 결과: (후보, AI 호출 기록, 사이트 접속 실패)"""
+    calls = []
+    if hasattr(provider, "find_profiles"):
+        candidates, calls = friend_preview.add_profiles(candidates, research, lambda names: provider.find_profiles(job, names))
+    try:
+        candidates, failures = friend_preview.attach(candidates, research)
+    except Exception:
+        candidates, failures = [{"preview": None, **c} for c in candidates], []
+    return candidates, calls, failures
+
+
+async def _find_previews(job_id: str, provider, job: dict, candidates: list[dict], research: dict) -> None:
+    try:
+        found, calls, failures = await asyncio.to_thread(_previews, provider, job, candidates, research)
+    except Exception:
+        found, calls, failures = [{"preview": None, **c} for c in candidates], [], []
+    job = _read(job_id)
+    _record_calls(job, calls)
+    site_policy.record_failures(failures)
+    friend_preview.merge(job, found)
+    save(job)
+
+
+def _recommend(provider, job: dict, research: dict) -> tuple[list, str | None, list]:
+    """후보 추천. 실패하거나 모자라면 조사 자료의 친구로 채우고 안내합니다 (제작을 멈추지 않음)."""
+    try:
+        result = provider.recommend_friends(job, research)
+    except AIError as e:
+        return friend_pick.from_research(job, research), f"AI가 크루 후보를 추천하지 못했어요 ({e.message}). 조사 자료에 나온 캐릭터를 보여 드려요", []
+    found = result["candidates"]
+    note = None if len(found) >= friend_pick.MIN_PICK else "추천할 크루가 부족해 조사 자료에 나온 캐릭터를 더했어요. 목록에 없으면 직접 적어 주세요"
+    return friend_pick.from_research(job, research, found) if note else found, note, result["calls"]
+
+
+def recommend_friends_again(job_id: str) -> dict:
+    """'후보 다시 추천' (누를 때만 AI를 부릅니다). 고른 친구는 그대로 둡니다."""
+    job = _require(job_id, friend_pick.WAITING, "waiting_outline")
+    if not friend_pick.applies(job) or (job.get("outline") or {}).get("approved"):
+        raise JobConflict("지금은 크루 후보를 다시 추천할 수 없어요")
+    if not _is_ai(job):
+        friend_pick.offer(job, [dict(c) for c in friend_pick.DEMO_CANDIDATES])
+        save(job)
+        return job
+    state = claude_cli.status()
+    if not state["available"]:
+        raise JobConflict(state["reason"])
+
+    def work(snapshot):
+        provider = get_ai_provider()
+        candidates, error, calls = _recommend(provider, snapshot, snapshot.get("research") or {})
+        candidates, more, failures = _previews(provider, snapshot, candidates, snapshot.get("research") or {})  # 미리보기 (프로필 검색 AI 1회)
+        return {"candidates": candidates, "error": error, "calls": calls + more, "failures": failures}
+
+    def apply(current, result):
+        site_policy.record_failures(result.get("failures") or [])
+        friend_pick.offer(current, result["candidates"], result["error"])
+        current["friendPick"]["previewPending"] = False
+
+    return _start_ai_task(job, "friends_pick", friend_pick.FRAME, work, apply)
+
+
+def pick_friends(job_id: str, names: list[str]) -> dict:
+    """친구를 고릅니다 (2~4명, 순서 = 카드 순서). 친구 고르기 단계면 조사 뒤 구성안을 쓰고, 구성안 단계면 card-04만 다시 씁니다."""
+    job = _require(job_id, friend_pick.WAITING, "waiting_outline")
+    if not friend_pick.applies(job):
+        raise JobConflict("이 작업에는 크루 카드가 없어요")
+    if job.get("researchDraft"):
+        raise JobConflict(DRAFT_PENDING)
+    try:
+        names = friend_pick.check_names(names)
+    except ValueError as e:
+        raise JobConflict(str(e)) from None
+    if job["state"] == "waiting_outline":
+        return _repick_friends(job, names)
+    friend_pick.choose(job, names)
+    _set_step(job, "outline", "active")
+    job.update(state="running", error=None)
+    save(job)
+    if not _is_ai(job):
+        _start(job_id, _demo_pick_then_outline(job_id))
+        return job
+    _start(job_id, _ai_pick_then_compose(job_id))
+    return job
+
+
+def _save_friend_version(job: dict) -> None:
+    """고른 친구를 조사한 자료를 새 조사 버전으로 남깁니다 (이전 버전은 그대로)."""
+    previous = job.get("researchVersion")
+    try:
+        summary = research_library.save(job, job["research"])
+    except OSError:
+        return  # 보관함에 쓰지 못해도 제작은 계속합니다
+    based = {k: previous[k] for k in ("id", "number", "researchedAt") if k in previous} if previous else None
+    job["researchVersion"] = {"id": summary["id"], "number": summary["number"], "researchedAt": summary["researchedAt"],
+                              "source": "friends", "basedOn": based}
+
+
+def _research_picked(job: dict) -> dict:
+    """고른 친구를 조사합니다. 실패해도 지금 자료로 이어 갑니다. 결과: {research, calls, researched, error}"""
+    try:
+        result = get_ai_provider().research_friends(job, job.get("research") or {}, friend_pick.chosen(job))
+    except AIError as e:
+        return {"research": job.get("research") or {}, "calls": [], "researched": False, "error": e.message}
+    return {**result, "error": None}
+
+
+def _apply_picked_research(job: dict, result: dict) -> None:
+    _record_calls(job, result["calls"])
+    job["research"] = result["research"]
+    job["research"]["people"] = research_items.people_from(job["research"])
+    job["friendPick"]["researchError"] = result.get("error")
+    site_policy.record_failures(job["research"].get("fetchFailures", []))
+    if result["researched"]:
+        _save_friend_version(job)
+
+
+async def _ai_pick_then_compose(job_id: str) -> None:
+    job = _read(job_id)
+    result = await asyncio.to_thread(_research_picked, job)
+    job = _read(job_id)
+    _apply_picked_research(job, result)
+    save(job)
+    await _ai_research_then_compose(job_id, job, get_ai_provider(), compose_only=True)
+
+
+def _repick_friends(job: dict, names: list[str]) -> dict:
+    """구성안 단계의 '친구 다시 고르기': 새로 고른 친구를 조사하고 card-04만 다시 씁니다."""
+    if job["outline"].get("approved"):
+        _revoke_outline(job)
+    previous = friend_pick.chosen(job) or friends.listed_names(job, friend_pick.FRAME)
+    friend_pick.choose(job, names)
+    friends.remember(job, [n for n in previous if n not in names])  # 빠진 친구는 이후 문구에 다시 나오면 막습니다
+    if not _is_ai(job):
+        card = _outline_card(job, friend_pick.FRAME)
+        by_frame = {friend_pick.FRAME: card}
+        friend_pick.apply(job, by_frame, job.get("research") or {})
+        card.update(edited=False)
+        _remap_after_pick(job)
+        job["outline"]["issues"] = _issues(job)
+        save(job)
+        return job
+    state = claude_cli.status()
+    if not state["available"]:
+        raise JobConflict(state["reason"])
+
+    def work(snapshot):
+        found = _research_picked(snapshot)
+        trial = json.loads(json.dumps(snapshot))
+        trial["research"] = found["research"]
+        card = _outline_card(trial, friend_pick.FRAME)
+        friend_pick.apply(trial, {friend_pick.FRAME: card}, found["research"])
+        written = get_ai_provider().write_friends(trial, friend_pick.FRAME, look_up=False)
+        rewritten = {**written["card"], "template": friend_pick.TEMPLATE}
+        friend_pick.apply(trial, {friend_pick.FRAME: rewritten}, found["research"])  # TMI는 조사로 확인한 것만, 관계는 AI 값도 받음
+        return {**found, "card": {k: rewritten[k] for k in ("role", "fields", "source", "sourceIds")}, "calls": found["calls"] + written["calls"],
+                "research": written["research"] or found["research"]}
+
+    def apply(current, result):
+        _apply_picked_research(current, result)
+        card = _outline_card(current, friend_pick.FRAME)
+        card.update(result["card"], template=friend_pick.TEMPLATE, edited=False, regenCount=card["regenCount"] + 1)
+        for key in ("checkMarks", "userFields", "cleared", "convertedFrom"):
+            card.pop(key, None)
+        _remap_after_pick(current)
+        _revoke_outline(current)
+        current["outline"]["issues"] = _issues(current)
+        if current.get("preview"):
+            _refresh_template_preview(current)
+
+    def on_fail(current):
+        current["outline"]["issues"] = _issues(current)
+
+    save(job)
+    return _start_ai_task(job, "friends", friend_pick.FRAME, work, apply, on_fail)
+
+
+def _remap_after_pick(job: dict) -> None:
+    """다시 고르면 친구가 바뀌므로 친구 칸 사진은 그 자리(N번 사진 = N번째 친구)에 그대로 두고 확인 기록만 맞춥니다.
+
+    고른 인원보다 뒤 칸의 사진은 카드에 보이지 않습니다 (templates.active_slots)."""
+    _ensure_slot_images(job)
+    friends.sync(job)
 
 
 # ---------- 조사 결과 화면의 '추가 조사' ----------
@@ -1136,6 +1350,12 @@ def _make_outline(job: dict) -> None:
     if templates.is_template_job(job):
         old = {c["frame"]: c for c in (job.get("outline") or {}).get("cards", [])}
         made = [templates.keep_user_fields(old.get(frame), templates.demo_card(job, frame, version - 1)) for frame in FRAMES]
+        if friend_pick.chosen(job):
+            by_frame = {c["frame"]: c for c in made}
+            friend_pick.apply(job, by_frame, job.get("research") or {})
+            card = by_frame.get(friend_pick.FRAME)
+            if card and not job.get("research"):
+                card["source"] = templates.DEMO_SOURCE
     else:
         made = get_provider().create_outline(job)
     cards = [{**c, "edited": False, "regenCount": 0} for c in made]
@@ -1221,6 +1441,9 @@ async def _ai_research_then_compose(job_id: str, job: dict, provider, compose_on
         _set_step(job, "research", "done")
         _set_step(job, "outline", "active")
         save(job)  # 조사 결과를 먼저 저장합니다 (화면에서 바로 볼 수 있고, 구성안 실패 시에도 남음)
+    if friend_pick.needed(job):
+        await _offer_friends(job_id, provider)  # 캐릭터 소개: 친구 후보를 추천하고 사용자가 고를 때까지 멈춥니다
+        return
     stage = job.get("researchStage") or {}
     try:
         result = await asyncio.to_thread(provider.compose_from_research, job, job["research"], job.get("detailExtraction"), stage.get("coreOnly", False),
@@ -1242,7 +1465,7 @@ def _apply_outline_result(job: dict, result: dict) -> None:
     _set_step(job, "research", "done")
     job["error"] = None
     if job["contentType"] == "character" and job["research"].get("items"):
-        # 친구·가족을 카테고리별로 나눠 둡니다 (구성안 편집에서 카테고리를 바꿀 때 불러옴)
+        # 조사에서 확인한 친구 목록 (화면의 조사 결과·자료 보관함에 보여 줌)
         job["research"]["people"] = research_items.people_from(job["research"])
     if result["status"] == "need_material":
         # 조사는 끝났습니다. 다시 검색하지 않고 '현재 자료로 구성안 작성'이나 자료 보완을 고를 수 있게 기록만 남깁니다
@@ -1538,6 +1761,18 @@ def _start_ai_task(job: dict, kind: str, frame: str | None, work, apply, on_fail
 
 async def _build_outline(job_id: str) -> None:
     await _step(job_id, "research")
+    job = _read(job_id)
+    if friend_pick.needed(job):
+        # 데모: 조사 없이 예시 후보 4명으로 친구 고르기 화면을 보여 줍니다
+        friend_pick.offer(job, [dict(c) for c in friend_pick.DEMO_CANDIDATES])
+        job["state"] = friend_pick.WAITING
+        save(job)
+        return
+    await _step(job_id, "outline", _make_outline)
+    _finish(job_id, "waiting_outline")
+
+
+async def _demo_pick_then_outline(job_id: str) -> None:
     await _step(job_id, "outline", _make_outline)
     _finish(job_id, "waiting_outline")
 
@@ -1574,6 +1809,7 @@ def _start_outline_rewrite(job: dict, frames: list[str], new_version: bool) -> d
         return get_ai_provider().rewrite_outline(snapshot, frames)
 
     def apply(current, result):
+        kept = friends.photo_lists(current)  # 사진을 넣은 친구 칸은 친구 목록(이름·순서)을 그대로 둡니다 (N번 사진 = N번째 친구)
         for card in current["outline"]["cards"]:
             if card["frame"] in result["cards"]:
                 # 사용자만 입력하는 칸(다음 캐릭터 이름·힌트·공개 문구·회차)은 다시 써도 그대로 둡니다
@@ -1582,6 +1818,9 @@ def _start_outline_rewrite(job: dict, frames: list[str], new_version: bool) -> d
                     card.pop(key, None)  # 새로 쓴 문구는 다시 확인합니다
         if new_version:
             current["outline"]["version"] += 1
+        for frame, before in kept.items():
+            if frame in result["cards"]:
+                friends.keep_people(current, frame, before)
         friends.sync(current)
         if set(frames) == set(FRAMES):
             current["outline"].pop("researchUpdated", None)  # 통합된 자료로 구성안을 다시 썼으므로 안내를 거둡니다
@@ -1676,7 +1915,7 @@ def edit_outline_card(job_id: str, frame: str, values: dict) -> dict:
     card.update(values, edited=True)
     card.pop("checkMarks", None)  # 예전 '확인 필요' 표시는 더 쓰지 않습니다
     card.pop("cleared", None)
-    friends.sync(job)  # 사진으로 확정한 친구 이름은 친구 칸에서만 바꿉니다
+    friends.sync(job)  # 옮겨진 사진의 확인 기록을 맞춥니다 (친구 이름은 사용자가 고친 그대로)
     job["outline"]["issues"] = _issues(job)
     _revoke_outline(job)
     save(job)
@@ -2280,10 +2519,9 @@ def _on_slots_changed(job: dict, changed: dict[str, list[str]]) -> tuple[list, l
         if identify:
             touched.append(frame)
             pending += _reset_identities(job, frame, identify)
-    rewrite = []
+    rewrite = []  # 사진은 친구 이름을 바꾸지 않아 다시 쓸 카드가 없습니다 (친구 다시 고르기에서 씀)
     if touched and job.get("outline"):
-        if friends.sync(job):
-            rewrite = [f for f in touched if _is_ai(job) and friends.ready(job, f)]
+        friends.sync(job)
         if job["outline"]["approved"]:
             _revoke_outline(job)
         job["outline"]["issues"] = _issues(job)
@@ -2308,7 +2546,7 @@ def _identity_key(job_id: str, frame: str, slot: str) -> str:
 
 
 def _new_identity(asset_id: str, ai: bool) -> dict:
-    return {"assetId": asset_id, "status": "processing" if ai else "manual", "name": "", "suggested": "",
+    return {"assetId": asset_id, "status": "processing" if ai else "manual", "suggested": "",
             "confidence": "", "candidates": [], "evidence": "", "error": None}
 
 
@@ -2345,7 +2583,7 @@ def _start_identify(job_id: str, pending: list) -> None:
 
 
 async def _run_identify(job_id: str, frame: str, slot: str, asset_id: str) -> None:
-    """구성안 화면을 막지 않고 사진 한 장의 캐릭터 이름 후보를 확인합니다. 결과는 제안일 뿐, 사용자가 확정해야 씁니다."""
+    """구성안 화면을 막지 않고 사진 한 장의 캐릭터를 알아봅니다. 고른 친구와 달라 보이면 경고만 합니다 (이름은 바꾸지 않음)."""
     job = _read(job_id)
     asset = next(a for a in job["assets"] if a["id"] == asset_id)
     path = uploads_dir(job_id) / f"{asset_id}{asset['ext']}"  # 누끼가 아니라 원본으로 확인합니다
@@ -2353,15 +2591,15 @@ async def _run_identify(job_id: str, frame: str, slot: str, asset_id: str) -> No
     try:
         result = await asyncio.to_thread(get_ai_provider().identify_character, path, job["topic"])
     except AIError as e:
-        error = f"{e.message} 이름을 직접 입력해 주세요."
+        error = f"사진 속 캐릭터를 확인하지 못했어요 ({e.message}). 카드는 고른 크루 이름 그대로 만들어요."
     except Exception:
-        error = "이름 확인 중 오류가 났어요. 이름을 직접 입력해 주세요."
+        error = "사진 속 캐릭터를 확인하지 못했어요. 카드는 고른 크루 이름 그대로 만들어요."
     job = _read(job_id)
     # 확인하는 동안 친구 순서를 바꿨을 수 있어 자리 이름이 아니라 사진으로 기록을 찾습니다
     records = ((job.get("slotIdentities") or {}).get(frame) or {}).values()
     record = next((r for r in records if r.get("assetId") == asset_id), None)
     if not record or record["status"] != "processing":
-        return  # 그사이 사진을 바꿨거나 사용자가 먼저 이름을 확정했습니다
+        return  # 그사이 사진을 바꿨습니다
     if error:
         record.update(status="failed", error=error)
     else:
@@ -2372,45 +2610,8 @@ async def _run_identify(job_id: str, frame: str, slot: str, asset_id: str) -> No
     save(job)
 
 
-def confirm_identity(job_id: str, frame: str, slot: str, name: str) -> dict:
-    """친구 칸 사진의 캐릭터 이름을 확정합니다. 친구 항목의 이름과 순서는 이 값으로 정해집니다."""
-    job = _require(job_id, "waiting_outline", "waiting_preview", "done")
-    _check_slot(job, frame, slot)
-    if not friends.is_identify_slot(job, frame, slot):
-        raise JobConflict("이 자리는 캐릭터 이름을 확인하는 친구 칸이 아니에요")
-    _ensure_slot_images(job)
-    image = job["slotImages"][frame].get(slot)
-    if not image:
-        raise JobConflict("먼저 이 칸에 사진을 넣어 주세요")
-    job.setdefault("slotIdentities", {}).setdefault(frame, {})
-    friends.rekey(job, frame)
-    name = " ".join(name.split())
-    limit = friends.name_max(job, frame)
-    if not name:
-        raise JobConflict("캐릭터 이름을 입력해 주세요")
-    if len(name) > limit:
-        raise JobConflict(f"이름은 {limit}자 이내로 입력해 주세요 (현재 {len(name)}자)")
-    if name in [n for key, n in friends.confirmed(job, frame) if key != slot]:
-        raise JobConflict("다른 친구 칸에서 이미 확정한 이름이에요")
-    record = friends.identity(job, frame, slot) or _new_identity(image["assetId"], False)
-    if record["status"] == "confirmed" and record["name"] == name:
-        return job
-    was_ready = friends.ready(job, frame)
-    job["slotIdentities"][frame][slot] = {**record, "status": "confirmed", "name": name, "error": None}
-    changed = friends.sync(job)
-    _revoke_outline(job)
-    # 확정 전에도 AI가 제안한 이름이 항목에 들어가 있어 목록이 안 바뀔 수 있습니다. 마지막 칸을 확정한 순간에도 다시 씁니다
-    if (changed or not was_ready) and _is_ai(job) and friends.ready(job, frame):
-        return _start_friends_rewrite(job, frame)
-    job["outline"]["issues"] = _issues(job)
-    if job.get("preview"):
-        _refresh_template_preview(job)
-    save(job)
-    return job
-
-
 def _start_friends_rewrite(job: dict, frame: str) -> dict:
-    """확정한 친구로 그 카드의 관계·TMI를 다시 씁니다. 실패해도 확정한 이름은 그대로 둡니다."""
+    """카드의 친구 목록(이름·순서)에 맞춰 그 카드의 관계·TMI를 다시 씁니다. 실패해도 친구 목록은 그대로 둡니다."""
     job["outline"]["issues"] = _issues(job)
 
     def work(snapshot):

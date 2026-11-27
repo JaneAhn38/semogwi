@@ -101,9 +101,9 @@ def test_coverage_marks_partial_lists_for_review_without_counting():
 
 
 def test_relation_word_alone_is_not_a_character():
-    # 실제 조사에서 '봉미선(엄마), 신짱아(동생), 흰둥이(반려견), 아빠'처럼 이름 없이 관계만 적힌 적이 있습니다
-    item = {"key": "family", "value": "봉미선(엄마), 신짱아(동생), 흰둥이(반려견), 아빠", "state": "secondary", "strict": False}
-    assert [p["name"] for p in research.people_of([item])["family"]] == ["봉미선", "신짱아", "흰둥이"]
+    # 실제 조사에서 '봉미선(엄마), 신짱아(동생), 아빠'처럼 이름 없이 관계만 적힌 적이 있습니다 (친구 목록에도 같은 규칙)
+    item = {"key": "friends", "value": "철수(친구), 유리(친구), 친구", "state": "secondary", "strict": False}
+    assert [p["name"] for p in research.people_of([item])["friends"]] == ["철수", "유리"]
 
 
 def test_people_partial_coverage_is_reviewed():

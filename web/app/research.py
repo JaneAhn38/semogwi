@@ -50,14 +50,12 @@ SPECS = {
         {"key": "favorite", "label": "좋아하는 것", "importance": "normal", "many": True, "hint": "공식 설정의 좋아하는 것·취미"},
         {"key": "friends", "label": "친구 캐릭터", "importance": "high", "many": True,
          "hint": "중심 캐릭터의 친구를 한 명씩 최대 4명. 가족은 넣지 않는다. '이름(관계), 이름(관계)'처럼 한 value에 쉼표로 나열한다. "
+                 "이름은 한국에서 쓰는 이름으로 쓰고(외국어 자료도 같음, 확인 못 하면 원래 이름), 원래 이름은 '훈이(마사오, 유치원 친구)'처럼 괄호 안에만 적는다. "
                  "공식 캐릭터 소개나 등장인물 목록 페이지에서 확인한다. " + PEOPLE_RULE},
-        {"key": "family", "label": "가족 캐릭터(반려동물 포함)", "importance": "high", "many": True,
-         "hint": "부모·형제·반려동물 등 가족을 한 명씩 최대 4명. 친구는 넣지 않는다. 반려동물은 가족에 넣고 관계에 '반려견'처럼 쓴다. "
-                 "'이름(관계), 이름(관계)'처럼 한 value에 쉼표로 나열한다"},
         {"key": "relations", "label": "관계 설명", "importance": "normal",
          "hint": "친구 모임·소속처럼 개별 캐릭터가 아닌 관계 정보 (예: 유치원 친구 모임 이름)"},
         {"key": "tmi", "label": "캐릭터별 TMI", "importance": "high", "many": True,
-         "hint": "친구·가족 캐릭터별로 확인된 짧은 사실. '이름: 내용 / 이름: 내용'처럼 한 value에 적는다. 캐릭터마다 60자 이내"},
+         "hint": "친구 캐릭터별로 확인된 짧은 사실. '이름: 내용 / 이름: 내용'처럼 한 value에 적는다. 캐릭터마다 60자 이내"},
         {"key": "official_account", "label": "공식 계정", "importance": "normal", "hint": "공식 SNS 계정 이름이나 주소"},
         {"key": "profile_extra", "label": "기타 공식 프로필", "importance": "normal", "many": True,
          "hint": "작품이 공식으로 밝힌 프로필 중 생일·좋아하는 것 외의 항목 (예: 도감 번호, 타입, 분류, 키, 소속). "
@@ -143,22 +141,79 @@ EMPTY_STATES = {"not_searched", "not_found", "failed", "blocked", "missing"}  # 
 OUTCOMES = ("found", "not_found", "not_searched")  # AI가 항목마다 적는 조사 결과
 COVERAGES = ("complete", "partial", "unknown")  # AI가 적는 충분성: 출처에 나온 것을 모두 담았는지
 
-PEOPLE_KEYS = ("friends", "family")  # 친구와 가족은 서로 다른 카테고리로 저장합니다 (반려동물은 가족)
+PEOPLE_KEYS = ("friends",)  # card-04는 친구만 다룹니다 (2026-11-23 가족 카드 제거. 예전 자료의 family 항목은 읽지 않음)
 
 
 _RELATION_ONLY = re.compile(r"^(아빠|엄마|아버지|어머니|부모님?|동생|여동생|남동생|형|누나|언니|오빠|할아버지|할머니|친구|가족|반려견|반려묘|반려동물)$")
 
 
+_OPEN, _CLOSE = "(（[［", ")）]］"
+# 괄호 속 설명 중 관계로 볼 말 (예: '유치원 친구', '라이벌'). 나머지(예: 일본판 이름 '마사오')는 다른 이름(aliases)으로 둡니다
+_RELATION_DESC = re.compile(r"(친구|동료|라이벌|단짝|짝꿍|절친|이웃|선배|후배|동창|같은 ?반|룸메이트|파트너|짝사랑|첫사랑|선생님|담임|멤버|팀원|동생|사촌|"
+                            r"진화|천적|주인|애완|반려|관계|사이|상대|콤비|가족)")
+
+
+def _split_top(value: str, seps: str = ",，、") -> list[str]:
+    """괄호 밖의 구분자(쉼표·'、'·' 및 ')에서만 나눕니다. 괄호 안 쉼표는 자르지 않습니다 (예: '훈이(마사오, 유치원 친구)')."""
+    parts, buf, depth, i = [], "", 0, 0
+    text = value or ""
+    while i < len(text):
+        ch = text[i]
+        if ch in _OPEN:
+            depth += 1
+        elif ch in _CLOSE and depth:
+            depth -= 1
+        if depth == 0 and (ch in seps or text.startswith(" 및 ", i)):
+            parts.append(buf)
+            buf = ""
+            i += 3 if ch == " " else 1
+            continue
+        buf += ch
+        i += 1
+    parts.append(buf)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def split_person(part: str) -> dict:
+    """'이름(설명)' 하나를 나눕니다. 괄호 밖 = 이름, 괄호 안 = 설명.
+    설명 중 관계 말로 끝나는 부분은 relation, 나머지는 aliases(다른 이름·원어 표기)로 둡니다. 이름 칸에는 괄호를 남기지 않습니다."""
+    name, notes, depth, buf = "", [], 0, ""
+    for ch in part:
+        if ch in _OPEN:
+            if depth == 0:
+                name += " "
+            else:
+                buf += ch
+            depth += 1
+        elif ch in _CLOSE and depth:
+            depth -= 1
+            if depth == 0:
+                notes.append(buf)
+                buf = ""
+            else:
+                buf += ch
+        elif depth:
+            buf += ch
+        else:
+            name += ch
+    if buf:
+        notes.append(buf)  # 닫히지 않은 괄호
+    relation, aliases = "", []
+    for note in notes:
+        for piece in _split_top(note, ",，、/"):
+            if not relation and (_RELATION_DESC.search(piece) or _RELATION_ONLY.match(piece)):
+                relation = piece
+            elif piece not in aliases:
+                aliases.append(piece)
+    return {"name": " ".join(name.split()), "relation": relation, "aliases": aliases}
+
+
 def _split_people(value: str) -> list[dict]:
     people = []
-    for part in re.split(r"[,，、]|\s및\s", value or ""):
-        part = part.strip()
-        if not part:
-            continue
-        match = re.match(r"^(.*?)\s*\((.*?)\)\s*$", part)
-        name, relation = (match.group(1).strip(), match.group(2).strip()) if match else (part, "")
-        if name and not _RELATION_ONLY.match(name):  # 이름 없이 관계만 적힌 경우(예: '아빠')는 캐릭터로 세지 않습니다
-            people.append({"name": name, "relation": relation})
+    for part in _split_top(value):
+        person = split_person(part)
+        if person["name"] and not _RELATION_ONLY.match(person["name"]):  # 이름 없이 관계만 적힌 경우(예: '아빠')는 캐릭터로 세지 않습니다
+            people.append(person)
     return people
 
 
@@ -175,7 +230,7 @@ def _tmi_by_name(items: list[dict]) -> dict[str, str]:
 
 
 def people_of(items: list[dict] | None) -> dict[str, list[dict]]:
-    """조사에서 근거로 확인된 친구·가족 캐릭터. {"friends": [{name, relation, tmi, sourceIds}], "family": [...]}
+    """조사에서 근거로 확인된 친구 캐릭터. {"friends": [{name, relation, tmi, sourceIds}]}
 
     확인되지 않은 항목(근거 없음·검색 목록만·충돌)은 쓰지 않습니다. TMI는 그 캐릭터 이름으로 적힌 것만 붙입니다.
     """
@@ -187,9 +242,23 @@ def people_of(items: list[dict] | None) -> dict[str, list[dict]]:
         if not item or not item.get("value") or not _usable(item):
             result[key] = []
             continue
-        result[key] = [{**p, "tmi": tmi.get(p["name"], "")[:60], "sourceIds": list(item.get("sourceIds", []))}
-                       for p in _split_people(item["value"])][:4]
+        people = []
+        for p in _split_people(item["value"]):
+            if any(_norm(p["name"]) == _norm(q["name"]) for q in people):
+                continue
+            found = next((tmi[n] for n in [p["name"], *p["aliases"]] if n in tmi), "")  # TMI가 다른 이름(예: 마사오)으로 적혀 있어도 붙입니다
+            people.append({**p, "tmi": found[:60], "sourceIds": list(item.get("sourceIds", []))})
+        result[key] = people[:4]
     return result
+
+
+def resolve_name(name: str, people: list[dict]) -> str:
+    """다른 이름(괄호 속 원어·일본판 이름 등)으로 적힌 캐릭터를 한국 이름으로 바꿉니다. 모르면 그대로 둡니다 (예: 마사오 → 훈이)."""
+    key = _norm(name)
+    for p in people:
+        if key == _norm(p["name"]) or any(key == _norm(a) for a in p.get("aliases") or []):
+            return p["name"]
+    return name
 
 
 TMI_MAX = 60
@@ -228,13 +297,13 @@ _RELATION_END = re.compile(r"(멤버|소속|일원|구성원|친구|가족|동�
 
 
 def people_from(research: dict | None) -> dict[str, list[dict]]:
-    """조사 결과의 친구·가족. 캐릭터별 조사(peopleResearch)에서 확인한 TMI·근거·출처가 있으면 그것을 씁니다.
+    """조사 결과의 친구. 캐릭터별 조사(peopleResearch)에서 확인한 TMI·근거·출처가 있으면 그것을 씁니다.
 
-    {"friends"|"family": [{name, relation, tmi, quote, sourceIds, state}]}
+    {"friends": [{name, relation, tmi, quote, sourceIds, state}]}
     """
     research = research or {}
     base = people_of(research.get("items"))
-    details = {(p["category"], p["name"]): p for p in (research.get("peopleResearch") or {}).get("people", []) if p.get("tmi")}
+    details = {(p.get("category", "friends"), p["name"]): p for p in (research.get("peopleResearch") or {}).get("people", []) if p.get("tmi")}
     for key in PEOPLE_KEYS:
         for person in base[key]:
             found = details.get((key, person["name"]))

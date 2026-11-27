@@ -185,6 +185,7 @@ input[aria-invalid="true"] { border-color: var(--pink-deep); }
 .cutout-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .cutout-status { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .86rem; font-weight: 700; }
 .cutout-error { margin: 0; padding: 8px 10px; color: #8c1d40; font-size: .86rem; font-weight: 700; background: #ffe9ef; border-radius: 10px; }
+.photo-mismatch { display: block; margin: 0; padding: 8px 10px; color: #7a4b00; font-size: .86rem; font-weight: 700; background: #fff4d6; border-radius: 10px; }
 .spinner { flex: none; width: 16px; height: 16px; border: 3px solid var(--pink-soft); border-top-color: var(--pink-deep); border-radius: 50%; animation: spin .9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .use-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 0; padding: 0; border: 0; }
@@ -503,3 +504,27 @@ body.format-template .legacy-only, body:not(.format-template) .template-only { d
 .material-source input, .material-source textarea { width: 100%; padding: 8px 12px; color: var(--ink); font: 400 .95rem/1.5 var(--font-body); background: var(--cream); border: 2px solid var(--line); border-radius: 12px; resize: vertical; }
 .field-source { color: var(--ink-soft); font-size: .8rem; }
 .hint.field-source { margin: -4px 0 8px; }
+
+/* card-04 친구 고르기 */
+.friend-pick { display: grid; gap: 12px; }
+.pick-candidates, .pick-chosen { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.pick-candidate { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; border: 1px solid var(--line, #e6dfe8); border-radius: 12px; background: #fff; }
+.pick-main { flex: 1 1 auto; min-width: 0; }
+.pick-preview { display: flex; flex: none; flex-direction: column; align-items: center; gap: 4px; width: 84px; text-align: center; }
+.pick-preview .hint { font-size: .72rem; line-height: 1.3; overflow-wrap: anywhere; }
+.pick-thumb { display: grid; place-items: center; width: 56px; height: 56px; object-fit: contain; background: var(--paper, #fff8f0); border: 1px solid var(--line, #e6dfe8); border-radius: 50%; }
+.pick-thumb.is-empty { color: var(--muted, #8a8494); font-weight: 700; background: #f1edf2; }
+.pick-link { white-space: normal; font-size: .76rem; line-height: 1.3; }
+.pick-candidate.is-picked { border-color: var(--pink-deep, #d9577f); background: #fff5f8; }
+.pick-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 0; color: inherit; font: inherit; text-align: left; background: none; border: 0; cursor: pointer; }
+.pick-toggle:disabled { cursor: not-allowed; opacity: .55; }
+.pick-order { display: inline-grid; flex: none; place-items: center; width: 24px; height: 24px; color: #fff; font-size: .8rem; font-weight: 700; background: var(--pink-deep, #d9577f); border-radius: 50%; }
+.pick-candidate:not(.is-picked) .pick-order { color: var(--pink-deep, #d9577f); background: var(--pink-soft, #fbe3ea); }
+.pick-reason { margin: 4px 0 0 32px; font-size: .88rem; line-height: 1.5; }
+.pick-candidate .card-links { margin-left: 32px; }
+.pick-manual { display: flex; flex-wrap: wrap; gap: 8px; }
+.pick-manual input { flex: 1 1 160px; min-width: 0; }
+.pick-title { margin: 4px 0 0; font-size: 1rem; }
+.pick-chosen li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pick-moves { display: inline-flex; gap: 4px; margin-left: auto; }
+.friend-card-controls { display: grid; gap: 10px; margin-top: 8px; }
